@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Shiroha Quiz - v22.8 UI 命名更新版</title>
+  <title>Shiroha Quiz - v22.9 策略与题库名称修复版</title>
   <link rel="icon" type="image/png" href="./app-icon.png" />
   <link rel="apple-touch-icon" href="./app-icon.png" />
   <link rel="stylesheet" href="./styles.css" />
@@ -41,7 +41,7 @@
         <div class="hero-card">
           <div>
             <p class="kicker">当前版本</p>
-            <h2>v22.8：Shiroha Quiz 命名更新版。</h2>
+            <h2>v22.9：策略与题库名称修复版。</h2>
             <p>本版将项目界面命名统一为 Shiroha Quiz，并保留前序导入修复逻辑：标准题库优先稳定解析；检测到答案解析区时，按分区、题号和答案命中率进行回填。</p>
           </div>
           <div class="hero-stats">
@@ -63,7 +63,7 @@
           <div class="form-grid">
             <label>题库名称<input id="import-bank-name" placeholder="例如：安全培训题库" /></label>
             <label>识别模式<select id="import-mode"><option value="auto">自动识别</option><option value="wenjuanxing">问卷星/考试星</option><option value="normal">普通题库</option><option value="json">JSON</option></select></label>
-            <label>解析策略<select id="import-strategy"><option value="auto" selected>自动推荐</option><option value="standard">标准逐行解析</option><option value="volume">分卷分区解析</option><option value="compact">紧凑格式解析</option></select></label>
+            <label>解析策略<select id="import-strategy"><option value="auto" selected>自动推荐</option><option value="standard">标准逐行解析</option><option value="volume">分卷分区三层解析</option><option value="compact">紧凑格式解析</option></select></label>
             <label>上传文件<input id="import-file" type="file" accept=".txt,.json,.csv,.docx,.doc,.pdf" /></label>
           </div>
           <textarea id="import-text" placeholder="把题库文本粘贴到这里，或上传 Word .docx / 文字型 PDF 后自动提取文本。支持：A、选项(正确答案)、答案：D、答案：A/B/C、解析：……"></textarea>

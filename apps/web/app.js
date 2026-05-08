@@ -30,7 +30,7 @@ function now(){return new Date().toISOString()}
 function activeBank(){return state.banks.find(b=>b.id===state.activeBankId)||state.banks[0]||{questions:[]}}
 function bindNav(){ $$('.nav').forEach(btn=>btn.onclick=()=>{ $$('.nav').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); $$('.view').forEach(v=>v.classList.remove('active')); $('#'+btn.dataset.view).classList.add('active'); $('#page-title').textContent=btn.textContent; renderAll(); });}
 function bindEvents(){
-$('#active-bank-select').onchange=e=>{state.activeBankId=e.target.value;saveSilent();renderAll()};$('#save-all-btn').onclick=saveState;
+$('#active-bank-select').onchange=e=>{state.activeBankId=e.target.value;saveSilent();renderAll()};const importNameInput=$('#import-bank-name');if(importNameInput)importNameInput.addEventListener('input',()=>{importNameInput.dataset.autoName='0'});$('#save-all-btn').onclick=saveState;
 $('#load-sample-btn').onclick=loadSample;$('#import-file').onchange=readImportFile;$('#parse-import-btn').onclick=parseImport;$('#confirm-import-btn').onclick=confirmImport;const dualConfirmBtn=$('#dual-confirm-import-btn');if(dualConfirmBtn)dualConfirmBtn.onclick=confirmImport;$('#clear-import-btn').onclick=()=>{$('#import-text').value='';importCache=[];importSelected.clear();importDiagnostics=null;renderImportPreview([])};
 $('#dual-question-file').onchange=e=>readDualFile(e,'question');$('#dual-answer-file').onchange=e=>readDualFile(e,'answer');$('#parse-dual-import-btn').onclick=parseDualImport;$('#clear-dual-import-btn').onclick=()=>{$('#dual-question-text').value='';$('#dual-answer-text').value='';importCache=[];importSelected.clear();importDiagnostics=null;renderImportPreview([])};$('#dual-load-sample-btn').onclick=loadDualSample;$('#revalidate-import-btn').onclick=()=>renderImportPreview(importCache);
 $('#edit-close-btn').onclick=closeEditModal;$('#edit-save-btn').onclick=saveEditQuestion;$('#edit-delete-btn').onclick=deleteEditQuestion;const pf=$('#import-preview-filter');if(pf)pf.onchange=e=>{importPreviewFilter=e.target.value;renderImportPreview(importCache)};const bid=$('#batch-delete-import-btn');if(bid)bid.onclick=batchDeleteImportSelected;const cis=$('#clear-import-selection-btn');if(cis)cis.onclick=()=>{importSelected.clear();renderImportPreview(importCache)};
@@ -38,6 +38,24 @@ $('#dedupe-btn').onclick=dedupeActiveBank;$('#rename-bank-btn').onclick=renameAc
 $('#start-exam-btn').onclick=startExam;$('#submit-exam-btn').onclick=()=>submitExam(false);$('#clear-wrong-btn').onclick=()=>{if(confirm('确定清空当前题库错题本？')){state.wrongBook[activeBank().id]=[];saveSilent();renderAll()}};
 $('#clear-records-btn').onclick=()=>{if(confirm('确定清空全部刷题记录？')){state.records=[];saveSilent();renderAll()}};$('#export-records-btn').onclick=exportRecords;$('#record-mode-filter').onchange=renderRecords;$('#record-limit').onchange=renderRecords;$('#record-refresh-btn').onclick=renderRecords;$('#wrong-status-filter').onchange=renderWrongBook;$('#wrong-sort-mode').onchange=renderWrongBook;$('#practice-wrong-btn').onclick=startWrongPractice;$('#export-json-btn').onclick=exportCurrentBank;$('#export-all-btn').onclick=exportAll;$('#reset-data-btn').onclick=resetData;
 }
+
+function cleanImportBankNameFromFile(fileName){
+  return String(fileName||'').replace(/\.[^.]+$/,'').trim()||'导入题库';
+}
+function setImportBankNameFromFile(fileName){
+  const inp=$('#import-bank-name');
+  if(!inp)return;
+  const next=cleanImportBankNameFromFile(fileName);
+  const current=inp.value.trim();
+  const lastAuto=inp.dataset.autoNameValue||'';
+  const canOverwrite=!current || inp.dataset.autoName==='1' || current===lastAuto;
+  if(canOverwrite){
+    inp.value=next;
+    inp.dataset.autoName='1';
+    inp.dataset.autoNameValue=next;
+  }
+}
+
 function saveSilent(){localStorage.setItem(KEY,JSON.stringify(state))}
 function renderAll(){renderStats();renderBankSelect();renderMergeSelect();renderBankList();renderBankPreview();renderWrongBook();renderRecords();renderBankInputs();}
 function renderStats(){const b=activeBank();$('#stat-total').textContent=b.questions.length;$('#stat-wrong').textContent=(state.wrongBook[b.id]||[]).length;$('#stat-records').textContent=state.records.length;}
@@ -200,7 +218,7 @@ D、高速通过积水路段`}
 async function readImportFile(e){
   const file=e.target.files[0];
   if(!file)return;
-  if(!$('#import-bank-name').value)$('#import-bank-name').value=file.name.replace(/\.[^.]+$/,'');
+  setImportBankNameFromFile(file.name);
   try{
     toast('正在读取文件，请稍候……','warn');
     const text=await readFileToText(file);
@@ -218,7 +236,7 @@ async function readDualFile(e,kind){
     const text=await readFileToText(file);
     if(kind==='question'){
       $('#dual-question-text').value=text;
-      if(!$('#import-bank-name').value)$('#import-bank-name').value=file.name.replace(/\.[^.]+$/,'');
+      setImportBankNameFromFile(file.name);
     }else{
       $('#dual-answer-text').value=text;
     }
@@ -1177,7 +1195,7 @@ function parseTextQuestions(text,strategy='auto'){
     const warnOk=hard.length<=Math.max(2,Math.ceil(candidate.questions.length*0.02));
     return {qtyOk,warnOk,typeOk,hardCount:hard.length,warnings};
   };
-  const strategyLabel={auto:'自动推荐',standard:'标准逐行解析',volume:'分卷分区解析',compact:'紧凑格式解析'}[strategy]||'自动推荐';
+  const strategyLabel={auto:'自动推荐',standard:'标准逐行解析',volume:'分卷分区三层解析',compact:'紧凑格式解析'}[strategy]||'自动推荐';
   if(strategy==='standard'){
     addCandidate('标准试卷段落解析',()=>parseStructuredExamText(original));
     addCandidate('标准逐行解析',()=>parseTextQuestionsBase(original));
