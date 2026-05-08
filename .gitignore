@@ -20,3 +20,14 @@ apps/android/build/
 
 .idea/
 .vscode/
+
+# 临时文件与备份
+_compare_original_zip/
+_head_app.js
+*_before_*.js
+
+# 编译产物
+apps/shiroha-quiz-*.zip
+
+# 项目管理文档
+Shiroha Quiz 仓库优化修改清单.md
