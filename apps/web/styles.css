@@ -3274,3 +3274,72 @@ button{
   }
 }
 /* SHIROHA_V28_4_11_MOBILE_PERF_END */
+
+/* v28.0-web-home-layout-fix: compress desktop homepage hero whitespace.
+   Scope: Web desktop/tablet homepage only. No App/WebView-specific logic. */
+@media (min-width: 901px){
+  #dashboard .hero-card{
+    grid-template-columns:minmax(0,1.12fr) minmax(360px,.88fr) !important;
+    align-items:stretch !important;
+    gap:22px !important;
+    padding:24px 28px !important;
+    min-height:0 !important;
+  }
+  #dashboard .hero-card > div:first-child{
+    display:flex !important;
+    flex-direction:column !important;
+    justify-content:center !important;
+    min-height:220px !important;
+    padding:10px 4px !important;
+  }
+  #dashboard .hero-card h2{
+    max-width:780px;
+    font-size:clamp(26px,2.15vw,34px) !important;
+    line-height:1.22 !important;
+    margin-bottom:12px !important;
+  }
+  #dashboard .hero-card p{
+    max-width:820px;
+    margin:0 !important;
+    line-height:1.72 !important;
+  }
+  #dashboard .hero-stats-app{
+    display:grid !important;
+    grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+    align-content:start !important;
+    gap:12px !important;
+  }
+  #dashboard .hero-visual-card{
+    grid-column:1 / -1 !important;
+    min-height:132px !important;
+    padding:14px 18px !important;
+    align-items:center !important;
+    justify-content:flex-end !important;
+  }
+  #dashboard .hero-mascot-main{
+    width:min(13vw,160px) !important;
+    max-width:160px !important;
+  }
+  #dashboard .hero-stats-app > div:not(.hero-visual-card){
+    min-height:92px !important;
+    padding:16px 18px !important;
+    display:flex !important;
+    flex-direction:column !important;
+    justify-content:center !important;
+  }
+  #dashboard .hero-stats-app b{
+    font-size:clamp(26px,2vw,34px) !important;
+    line-height:1.05 !important;
+  }
+  #dashboard .dashboard-quick-actions{
+    margin:12px 0 16px !important;
+  }
+}
+@media (min-width: 1180px){
+  #dashboard .hero-card{
+    grid-template-columns:minmax(0,1.2fr) minmax(430px,.8fr) !important;
+  }
+  #dashboard .hero-visual-card{
+    min-height:128px !important;
+  }
+}

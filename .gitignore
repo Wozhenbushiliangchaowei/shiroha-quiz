@@ -42,6 +42,16 @@ apps/android/app/src/main.zip
 # Local build scripts
 build-release.cmd
 build-release.ps1
+build-release-native.cmd
+build-release-native.ps1
+
+# Local convenience scripts
+open-web.bat
+open-app-web.bat
+
+# Temporary archives
+apps/web.zip
+*.zip
 
 # Local images / chat exports
 微信图片_*.jpg
