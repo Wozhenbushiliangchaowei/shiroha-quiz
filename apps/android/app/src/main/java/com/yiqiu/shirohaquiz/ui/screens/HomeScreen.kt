@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoStories
 import androidx.compose.material.icons.rounded.CloudUpload
@@ -16,9 +18,11 @@ import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
+import com.yiqiu.shirohaquiz.state.QuizRepository
 import com.yiqiu.shirohaquiz.ui.components.ActionPillButton
 import com.yiqiu.shirohaquiz.ui.components.GlassCard
 import com.yiqiu.shirohaquiz.ui.components.MetricGlassCard
@@ -27,7 +31,15 @@ import com.yiqiu.shirohaquiz.ui.components.ShortcutGlassCard
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaSpacing
 
 @Composable
-fun HomeScreen() {
+fun HomeScreen(
+    onGoImport: () -> Unit,
+    onGoPractice: () -> Unit
+) {
+    val context = LocalContext.current
+    val activeBank = QuizRepository.activeBank()
+    val bankCount = QuizRepository.banks.size
+    val questionCount = activeBank?.questions?.size ?: 0
+
     Column(
         modifier = Modifier
             .verticalScroll(rememberScrollState())
@@ -36,60 +48,110 @@ fun HomeScreen() {
     ) {
         ShirohaHeader(
             kicker = "Shiroha Quiz",
-            title = "通用刷题器",
-            subtitle = "导入、练习、考试三条主线，用轻盈卡片承载复杂能力。"
+            title = "原生刷题首页",
+            subtitle = "这条线只服务原生安卓。现在已经接通原生导入预览，下一步是让导入后的题库进入练习和考试流程。"
         )
 
         GlassCard {
             Text(
-                text = "当前题库",
+                text = "当前原生题库",
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Bold
             )
             Spacer(Modifier.height(12.dp))
             Text(
-                text = "C1 科目一示例库",
+                text = activeBank?.name ?: "尚未导入题库",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "393 题 · 可删除 · 可替换 · 可导入新题库",
+                text = if (questionCount > 0) {
+                    "当前题库共 $questionCount 题，可以直接切到“练习”页查看真实预览。"
+                } else {
+                    "当前还没有真实导入题目。先到“导入”页导入一份标准文本题库。"
+                },
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ActionPillButton(Icons.Rounded.PlayArrow, "开始刷题")
-                ActionPillButton(Icons.Rounded.CloudUpload, "导入题库", primary = false)
+                ActionPillButton(Icons.Rounded.CloudUpload, "去导入", primary = true, onClick = onGoImport)
+                ActionPillButton(Icons.Rounded.PlayArrow, "进入练习", primary = false, onClick = onGoPractice)
+            }
+        }
+
+        GlassCard {
+            Text(
+                text = "题库列表",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(12.dp))
+            QuizRepository.banks.forEach { bank ->
+                val isActive = bank.id == activeBank?.id
+                Text(
+                    text = bank.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "${bank.questions.size} 题${if (isActive) " · 当前活动题库" else ""}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ActionPillButton(
+                        icon = Icons.Rounded.Done,
+                        text = if (isActive) "当前题库" else "切换到此题库",
+                        primary = isActive,
+                        onClick = {
+                            if (!isActive) QuizRepository.setActiveBank(context, bank.id)
+                        }
+                    )
+                    ActionPillButton(
+                        icon = Icons.Rounded.DeleteOutline,
+                        text = "删除",
+                        primary = false,
+                        onClick = {
+                            if (bank.id != "demo-bank") {
+                                QuizRepository.deleteBank(context, bank.id)
+                            }
+                        }
+                    )
+                }
+                Spacer(Modifier.height(18.dp))
             }
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             MetricGlassCard(
-                label = "错题待复习",
-                value = "41",
-                desc = "优先回收薄弱点",
+                label = "题库数量",
+                value = bankCount.toString(),
+                desc = "原生侧当前挂载的题库",
                 modifier = Modifier.weight(1f)
             )
             MetricGlassCard(
-                label = "最近成绩",
-                value = "87%",
-                desc = "考试模式稳定输出",
+                label = "当前题量",
+                value = questionCount.toString(),
+                desc = "活动题库中的题目数",
                 modifier = Modifier.weight(1f)
             )
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             ShortcutGlassCard(
-                title = "顺序练习",
+                title = "标准文本导入",
                 icon = Icons.Rounded.AutoStories,
-                desc = "按章节推进",
+                desc = "先覆盖最常见题库格式",
                 modifier = Modifier.weight(1f)
             )
             ShortcutGlassCard(
-                title = "开始考试",
+                title = "考试流程预留",
                 icon = Icons.Rounded.Schedule,
-                desc = "切入专注模式",
+                desc = "后续接入真实得分与计时",
                 modifier = Modifier.weight(1f)
             )
         }

@@ -17,10 +17,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.FileOpen
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -38,7 +38,9 @@ import androidx.compose.ui.unit.dp
 import com.yiqiu.shirohaquiz.importer.model.ImportResult
 import com.yiqiu.shirohaquiz.importer.model.Question
 import com.yiqiu.shirohaquiz.importer.model.QuestionType
+import com.yiqiu.shirohaquiz.importer.model.WarningLevel
 import com.yiqiu.shirohaquiz.importer.parser.QuizImportParser
+import com.yiqiu.shirohaquiz.state.QuizRepository
 import com.yiqiu.shirohaquiz.ui.components.ActionPillButton
 import com.yiqiu.shirohaquiz.ui.components.GlassCard
 import com.yiqiu.shirohaquiz.ui.components.NoticeCard
@@ -50,18 +52,24 @@ import java.nio.charset.Charset
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ImportScreen() {
+fun ImportScreen(
+    onImportSaved: () -> Unit
+) {
     val context = LocalContext.current
     var rawText by rememberSaveable { mutableStateOf(sampleImportText()) }
+    var answerText by rememberSaveable { mutableStateOf(sampleAnswerText()) }
     var selectedFileName by rememberSaveable { mutableStateOf("未选择文件") }
+    var selectedAnswerFileName by rememberSaveable { mutableStateOf("未选择答案文件") }
     var importResult by remember { mutableStateOf<ImportResult?>(null) }
-    var statusText by rememberSaveable { mutableStateOf("当前先接入原生标准题库导入。推荐先导入 txt / json / csv 这类文本文件。") }
+    var statusText by rememberSaveable {
+        mutableStateOf("当前先接入原生标准题库导入。推荐先导入 txt / json / csv 这类文本文件。")
+    }
     var isStatusWarn by rememberSaveable { mutableStateOf(false) }
+    var useDualImport by rememberSaveable { mutableStateOf(false) }
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        val fileName = queryFileName(context, uri)
-        selectedFileName = fileName
+        selectedFileName = queryFileName(context, uri)
         val text = readTextSafely(context, uri)
         if (text == null) {
             importResult = null
@@ -70,7 +78,22 @@ fun ImportScreen() {
         } else {
             rawText = text
             importResult = null
-            statusText = "已读取文件：$fileName，可以直接开始原生解析。"
+            statusText = "已读取文件：$selectedFileName，可以直接开始原生解析。"
+            isStatusWarn = false
+        }
+    }
+
+    val answerFilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        selectedAnswerFileName = queryFileName(context, uri)
+        val text = readTextSafely(context, uri)
+        if (text == null) {
+            statusText = "答案文件暂时还不能稳定读取，请优先使用 txt。"
+            isStatusWarn = true
+        } else {
+            answerText = text
+            importResult = null
+            statusText = "已读取答案文件：$selectedAnswerFileName。"
             isStatusWarn = false
         }
     }
@@ -94,12 +117,15 @@ fun ImportScreen() {
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(Modifier.height(12.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatusChip("标准文本导入", selected = true)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                StatusChip("标准文本导入", selected = !useDualImport)
                 StatusChip("原生结果预览", selected = true)
                 StatusChip("文件选择", selected = true)
                 StatusChip("答案区解析", selected = false)
-                StatusChip("双文件导入", selected = false)
+                StatusChip("双文件导入", selected = useDualImport)
             }
             Spacer(Modifier.height(14.dp))
             NoticeCard(statusText)
@@ -136,6 +162,7 @@ fun ImportScreen() {
                     text = "填入示例",
                     primary = false,
                     onClick = {
+                        useDualImport = false
                         selectedFileName = "示例题库"
                         rawText = sampleImportText()
                         importResult = null
@@ -144,11 +171,34 @@ fun ImportScreen() {
                     }
                 )
             }
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ActionPillButton(
+                    icon = Icons.Rounded.AutoAwesome,
+                    text = if (useDualImport) "当前：双文件导入" else "切换到双文件导入",
+                    primary = useDualImport,
+                    onClick = {
+                        useDualImport = true
+                        importResult = null
+                        statusText = "已切换到原生双文件导入模式。"
+                    }
+                )
+                ActionPillButton(
+                    icon = Icons.Rounded.Description,
+                    text = if (!useDualImport) "当前：标准导入" else "切回标准导入",
+                    primary = !useDualImport,
+                    onClick = {
+                        useDualImport = false
+                        importResult = null
+                        statusText = "已切换到原生标准导入模式。"
+                    }
+                )
+            }
         }
 
         GlassCard {
             Text(
-                text = "原始文本",
+                text = if (useDualImport) "题目文本" else "原始文本",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold
             )
@@ -166,21 +216,64 @@ fun ImportScreen() {
                 textStyle = MaterialTheme.typography.bodyMedium,
                 placeholder = { Text("把标准题库文本粘贴到这里，或通过上方选择文件导入。") }
             )
+            if (useDualImport) {
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    text = "答案文本",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = answerText,
+                    onValueChange = {
+                        answerText = it
+                        importResult = null
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp),
+                    minLines = 8,
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    placeholder = { Text("粘贴答案文本，或通过下方按钮选择答案文件。") }
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = "当前答案文件：$selectedAnswerFileName",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(10.dp))
+                ActionPillButton(
+                    icon = Icons.Rounded.FileOpen,
+                    text = "选择答案文件",
+                    primary = false,
+                    onClick = { answerFilePicker.launch(arrayOf("*/*")) }
+                )
+            }
             Spacer(Modifier.height(14.dp))
             ActionPillButton(
                 icon = Icons.Rounded.PlayArrow,
-                text = "开始原生解析",
+                text = if (useDualImport) "开始双文件解析" else "开始原生解析",
                 primary = true,
                 onClick = {
-                    if (rawText.isBlank()) {
-                        statusText = "请先提供题库文本，再开始原生解析。"
+                    if (rawText.isBlank() || (useDualImport && answerText.isBlank())) {
+                        statusText = if (useDualImport) {
+                            "请同时提供题目文本和答案文本，再开始双文件解析。"
+                        } else {
+                            "请先提供题库文本，再开始原生解析。"
+                        }
                         isStatusWarn = true
                     } else {
-                        importResult = QuizImportParser.parseStandardText(rawText)
+                        importResult = if (useDualImport) {
+                            QuizImportParser.parseDualText(rawText, answerText)
+                        } else {
+                            QuizImportParser.parseStandardText(rawText)
+                        }
                         val result = importResult
-                        val hardCount = result?.issues?.count { it.isHardError } ?: 0
-                        val softCount = result?.issues?.count { !it.isHardError } ?: 0
-                        statusText = "已完成原生解析：${result?.questions?.size ?: 0} 题，硬错误 $hardCount 条，可确认提示 $softCount 条。"
+                        val hardCount = result?.warnings?.count { it.level == WarningLevel.ERROR } ?: 0
+                        val softCount = result?.warnings?.count { it.level == WarningLevel.WARNING } ?: 0
+                        statusText = "已完成${if (useDualImport) "双文件" else "原生"}解析：${result?.questions?.size ?: 0} 题，硬错误 $hardCount 条，可确认提示 $softCount 条。"
                         isStatusWarn = hardCount > 0
                     }
                 }
@@ -189,6 +282,34 @@ fun ImportScreen() {
 
         importResult?.let { result ->
             NativeImportSummary(result)
+            GlassCard {
+                Text(
+                    text = "写入原生题库",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = "确认无误后，将当前解析结果写入原生题库状态，首页和练习页会直接使用这批数据。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(14.dp))
+                ActionPillButton(
+                    icon = Icons.Rounded.PlayArrow,
+                    text = "保存为当前题库",
+                    primary = true,
+                    onClick = {
+                        val bankName = selectedFileName
+                            .substringBeforeLast('.')
+                            .ifBlank { "导入题库" }
+                        QuizRepository.importBank(context, bankName, result.questions)
+                        statusText = "已写入原生题库：$bankName，共 ${result.questions.size} 题。现在可以切到首页或练习页查看。"
+                        isStatusWarn = false
+                        onImportSaved()
+                    }
+                )
+            }
             NativeImportPreview(result.questions)
         }
     }
@@ -197,8 +318,8 @@ fun ImportScreen() {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun NativeImportSummary(result: ImportResult) {
-    val hardCount = result.issues.count { it.isHardError }
-    val softCount = result.issues.count { !it.isHardError }
+    val hardCount = result.warnings.count { it.level == WarningLevel.ERROR }
+    val softCount = result.warnings.count { it.level == WarningLevel.WARNING }
 
     GlassCard {
         Text(
@@ -207,16 +328,19 @@ private fun NativeImportSummary(result: ImportResult) {
             fontWeight = FontWeight.SemiBold
         )
         Spacer(Modifier.height(12.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             StatusChip("策略：${result.strategyName}", selected = true)
             StatusChip("识别题数：${result.questions.size}", selected = true)
             StatusChip("硬错误：$hardCount", selected = hardCount == 0)
             StatusChip("提示：$softCount", selected = softCount == 0)
         }
-        if (result.issues.isNotEmpty()) {
+        if (result.warnings.isNotEmpty()) {
             Spacer(Modifier.height(14.dp))
-            result.issues.take(6).forEach { issue ->
-                NoticeCard("第${issue.questionNumber}题：${issue.message}")
+            result.warnings.take(6).forEach { warning ->
+                NoticeCard("第${warning.questionNumber ?: "-"}题：${warning.message}")
                 Spacer(Modifier.height(8.dp))
             }
         }
@@ -332,4 +456,10 @@ A. 对
 B. 错
 答案：对
 解析：这是常见的安全生产基础判断题。
+""".trimIndent()
+
+private fun sampleAnswerText(): String = """
+1. A
+2. AB
+3. 对
 """.trimIndent()
