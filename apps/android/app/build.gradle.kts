@@ -4,15 +4,15 @@ plugins {
 }
 
 android {
-    namespace = "com.codex.shirohaquiz"
+    namespace = "com.yiqiu.shirohaquiz"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.codex.shirohaquiz"
+        applicationId = "com.yiqiu.shirohaquiz"
         minSdk = 26
         targetSdk = 34
-        versionCode = 8
-        versionName = "0.3.0-alpha"
+        versionCode = 9
+        versionName = "0.3.1-alpha"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -55,7 +55,7 @@ android {
 val exportNamedDebugApk by tasks.registering(Copy::class) {
     from(layout.buildDirectory.file("outputs/apk/debug/app-debug.apk"))
     into(layout.buildDirectory.dir("outputs/shiroha-quiz"))
-    rename { "Shiroha-Quiz-v0.3.0-alpha-debug.apk" }
+    rename { "Shiroha-Quiz-v0.3.1-alpha-debug.apk" }
 }
 
 afterEvaluate {
