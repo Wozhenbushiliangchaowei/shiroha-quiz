@@ -120,23 +120,10 @@ shiroha-quiz/
 
 ## Web 端运行方式
 
-安装依赖：
+`apps/web/` 为纯静态页面，无需安装依赖或构建：
 
-```bash
-pnpm install
-```
-
-启动开发环境：
-
-```bash
-pnpm dev
-```
-
-如果只运行 Web 端：
-
-```bash
-pnpm --filter web dev
-```
+- 直接用浏览器打开 `apps/web/index.html`
+- 或使用任意静态文件服务（如 `npx serve apps/web`）
 
 ## Web 端说明
 
