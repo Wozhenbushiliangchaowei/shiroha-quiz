@@ -39,5 +39,9 @@ apps/shiroha-quiz-*.zip
 shiroha_quiz_*.zip
 apps/android/app/src/main.zip
 
+# Local build scripts
+build-release.cmd
+build-release.ps1
+
 # Local images / chat exports
 微信图片_*.jpg
