@@ -20,8 +20,8 @@
 
         <View
             android:id="@+id/launch_glow"
-            android:layout_width="360dp"
-            android:layout_height="360dp"
+            android:layout_width="260dp"
+            android:layout_height="260dp"
             android:layout_gravity="center"
             android:background="@drawable/launch_glow_bg" />
 
@@ -32,7 +32,7 @@
             android:layout_gravity="center"
             android:orientation="vertical"
             android:gravity="center_horizontal"
-            android:elevation="10dp"
+            android:elevation="4dp"
             android:paddingLeft="24dp"
             android:paddingTop="24dp"
             android:paddingRight="24dp"

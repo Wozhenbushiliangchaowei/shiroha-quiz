@@ -58,7 +58,14 @@ function upgradeState(){
 function saveState(){localStorage.setItem(KEY,serializeState());toast('已保存到浏览器本地。','ok')}
 function now(){return new Date().toISOString()}
 function activeBank(){return state.banks.find(b=>b.id===state.activeBankId)||state.banks[0]||{questions:[]}}
-function bindNav(){ $$('.nav').forEach(btn=>btn.onclick=()=>{ $$('.nav').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); $$('.view').forEach(v=>v.classList.remove('active')); $('#'+btn.dataset.view).classList.add('active'); $('#page-title').textContent=btn.textContent; renderAll(); });}
+function bindNav(){ $$('.nav').forEach(btn=>btn.onclick=()=>{
+  const target=btn.dataset.view;
+  const view=target&&$('#'+target);
+  if(!view||view.classList.contains('active'))return;
+  $$('.nav').forEach(b=>b.classList.toggle('active',b===btn));
+  $$('.view').forEach(v=>v.classList.toggle('active',v===view));
+  const title=$('#page-title');if(title)title.textContent=btn.textContent;
+});}
 function bindEvents(){
 $('#active-bank-select').onchange=e=>{state.activeBankId=e.target.value;saveSilent();renderAll()};const importNameInput=$('#import-bank-name');if(importNameInput)importNameInput.addEventListener('input',()=>{importNameInput.dataset.autoName='0'});$('#save-all-btn').onclick=saveState;
 $('#load-sample-btn').onclick=loadSample;$('#import-file').onchange=readImportFile;$('#parse-import-btn').onclick=parseImport;$('#confirm-import-btn').onclick=confirmImport;const dualConfirmBtn=$('#dual-confirm-import-btn');if(dualConfirmBtn)dualConfirmBtn.onclick=confirmImport;$('#clear-import-btn').onclick=()=>{$('#import-text').value='';importCache=[];importSelected.clear();importDiagnostics=null;renderImportPreview([])};
