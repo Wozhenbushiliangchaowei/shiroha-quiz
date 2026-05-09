@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Shiroha Quiz - v25.1 质量修复测试版</title>
+  <title>Shiroha Quiz - v28 WebView 与复习增强测试版</title>
   <link rel="icon" type="image/png" href="./app-icon.png" />
   <link rel="apple-touch-icon" href="./app-icon.png" />
   <link rel="stylesheet" href="./styles.css" />
@@ -51,7 +51,7 @@
         <div class="hero-card">
           <div>
             <p class="kicker">当前版本</p>
-            <h2>v25.1：质量修复测试版。</h2>
+            <h2>v28：WebView 与复习增强测试版。</h2>
             <p>本版在保留移动端布局修复与页面素材规则的基础上，为 App 壳加入轻量开屏动画和页面素材动效。</p>
           </div>
           <div class="hero-stats hero-stats-app">
@@ -63,6 +63,7 @@
             <div><b id="stat-records">0</b><span>记录数</span></div>
           </div>
         </div>
+        <div class="actions dashboard-quick-actions"><button id="load-built-in-bank-btn" class="primary" type="button">加载内置 C1 题库</button><button id="load-built-in-bank-btn-banks" class="ghost" type="button">在题库管理中加载</button></div>
         <div class="grid3">
           <div class="card"><h3>智能导入</h3><p>支持常见 TXT 排版、Word .docx 题库、文字型 PDF 文本层导入、问卷星式“正确答案”标记、题后“答案：D”、JSON 里的 A/B/C/D 字段、填空题/简答题参考答案，以及题目文件与答案文件分离导入。</p></div>
           <div class="card"><h3>考试模式</h3><p>支持考试名称、题量、限时、题型分值、及格线、自动交卷，交卷后生成得分、正确率、题型统计和明细报告。</p></div>
@@ -178,7 +179,7 @@ C. 判断题
           </div>
           <div class="form-grid">
             <label>题型<select id="practice-type"><option value="all">全部</option><option value="single">单选</option><option value="multiple">多选</option><option value="multi">多选兼容</option><option value="judge">判断</option><option value="blank">填空</option><option value="short">简答</option></select></label>
-            <label>来源<select id="practice-source"><option value="all">全部题目</option><option value="wrong">仅错题本</option></select></label>
+            <label>来源<select id="practice-source"><option value="all">全部题目</option><option value="wrong">仅错题本</option><option value="favorite">仅收藏题</option></select></label>
             <label>顺序<select id="practice-order"><option value="sequence">顺序</option><option value="random">随机</option></select></label>
             <label>题量<select id="practice-limit"><option value="20">20题</option><option value="50">50题</option><option value="100">100题</option><option value="half">题库一半</option><option value="all">全部题库</option></select></label>
           </div>

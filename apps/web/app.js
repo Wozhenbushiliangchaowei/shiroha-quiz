@@ -1,5 +1,5 @@
 (function(){
-const APP_VERSION='v25.1';
+const APP_VERSION='v28';
 const CURRENT_SCHEMA_VERSION=1;
 const KEY='shiroha_quiz_state';
 const LEGACY_KEYS=['uquiz_state_v8_c1'];
@@ -101,19 +101,38 @@ function renderBankList(){
   const validIds=new Set(state.banks.map(b=>b.id));
   exportBankSelectedV23=new Set([...exportBankSelectedV23].filter(id=>validIds.has(id)));
   box.innerHTML=banks.map(b=>{
-    const stats=countTypes(b.questions);const active=b.id===state.activeBankId;
-    return `<div class="bank-item ${active?'active-bank':''}">
-      <label class="bank-bulk-check-v23" title="选择后可批量导出"><input type="checkbox" data-bank-bulk-v23="${esc(b.id)}" ${exportBankSelectedV23.has(b.id)?'checked':''}></label>
-      <div><b>${esc(b.name)}${active?'<span class="source-badge">当前</span>':''}</b><p class="muted">${b.questions.length}题｜单选${stats.single}｜多选${stats.multiple+stats.multi}｜判断${stats.judge}｜填空${stats.blank}｜简答${stats.short}｜创建 ${fmt(b.createdAt||now())}</p></div>
-      <div class="row-actions"><button class="ghost" data-openbank="${esc(b.id)}">设为当前</button><button class="ghost" data-copybank="${esc(b.id)}">复制</button><button class="ghost" data-exportbank="${esc(b.id)}">导出</button>${b.id==='default-c1'?'':`<button class="ghost danger" data-delbank="${esc(b.id)}">删除</button>`}</div>
-    </div>`
+    const stats=countTypes(b.questions);const active=b.id===state.activeBankId;const checked=exportBankSelectedV23.has(b.id);
+    return `<article class="bank-item bank-item-compact-v28 ${active?'active-bank':''} ${checked?'selected-bank-v28':''}">
+      <label class="bank-bulk-check-v23 bank-card-check-v28" title="选择后可批量导出"><input type="checkbox" data-bank-bulk-v23="${esc(b.id)}" ${checked?'checked':''}></label>
+      <div class="bank-card-main-v28">
+        <div class="bank-card-title-v28"><b>${esc(b.name)}</b>${active?'<span class="source-badge">当前</span>':''}</div>
+        <p class="muted bank-card-meta-v28">${b.questions.length}题｜单选${stats.single}｜多选${stats.multiple+stats.multi}｜判断${stats.judge}｜填空${stats.blank}｜简答${stats.short}｜创建 ${fmt(b.createdAt||now())}</p>
+      </div>
+      <details class="bank-more-menu-v28">
+        <summary aria-label="更多题库操作">更多</summary>
+        <div class="bank-more-panel-v28">
+          ${active?'':`<button class="ghost" data-openbank="${esc(b.id)}" type="button">设为当前</button>`}
+          <button class="ghost" data-copybank="${esc(b.id)}" type="button">复制</button>
+          <button class="ghost" data-exportbank="${esc(b.id)}" type="button">导出该题库</button>
+          ${b.id==='default-c1'?'':`<button class="ghost danger" data-delbank="${esc(b.id)}" type="button">删除</button>`}
+        </div>
+      </details>
+    </article>`
   }).join('')||'<p class="muted">暂无题库。</p>';
-  $$('[data-bank-bulk-v23]').forEach(x=>x.onchange=()=>{if(x.checked)exportBankSelectedV23.add(x.dataset.bankBulkV23);else exportBankSelectedV23.delete(x.dataset.bankBulkV23);renderExportBankSummaryV23()});
+  $$('[data-bank-bulk-v23]').forEach(x=>x.onchange=()=>{if(x.checked)exportBankSelectedV23.add(x.dataset.bankBulkV23);else exportBankSelectedV23.delete(x.dataset.bankBulkV23);renderBankList()});
   $$('[data-openbank]').forEach(x=>x.onclick=()=>{state.activeBankId=x.dataset.openbank;saveSilent();renderAll()});
   $$('[data-copybank]').forEach(x=>x.onclick=()=>duplicateBankById(x.dataset.copybank));
   $$('[data-exportbank]').forEach(x=>x.onclick=()=>exportBankById(x.dataset.exportbank));
-  $$('[data-delbank]').forEach(x=>x.onclick=()=>{if(confirm('删除该题库？')){state.banks=state.banks.filter(b=>b.id!==x.dataset.delbank);delete state.wrongBook[x.dataset.delbank];exportBankSelectedV23.delete(x.dataset.delbank);state.activeBankId=state.banks[0]?.id||'';saveSilent();renderAll()}});
+  $$('[data-delbank]').forEach(x=>x.onclick=()=>{if(confirm('确定删除该题库？删除后不可恢复，请先确认已完成备份。')){state.banks=state.banks.filter(b=>b.id!==x.dataset.delbank);delete state.wrongBook[x.dataset.delbank];if(state.favorites)delete state.favorites[x.dataset.delbank];exportBankSelectedV23.delete(x.dataset.delbank);state.activeBankId=state.banks[0]?.id||'';saveSilent();renderAll()}});
+  renderBankToolbarV28();
   renderExportBankSummaryV23();
+}
+function renderBankToolbarV28(){
+  const sel=$('#bank-current-select-v28');
+  if(!sel)return;
+  const old=state.activeBankId;
+  sel.innerHTML=state.banks.map(b=>`<option value="${esc(b.id)}">${esc(b.name)}（${b.questions.length}题）</option>`).join('')||'<option value="">暂无题库</option>';
+  sel.value=old||state.activeBankId||'';
 }
 function renderBankPreview(){const qs=activeBank().questions.slice(0,300);$('#bank-preview tbody').innerHTML=qs.map((q,i)=>`<tr><td>${i+1}</td><td>${label(q.type)}</td><td>${esc(short(q.question,80))}</td><td>${esc((q.answer||q.answerKeys||[]).join(''))}</td><td>${esc(q.category||q.topic||'')}</td><td>${esc(q.score||'默认')}</td></tr>`).join('')}
 function countTypes(qs){return qs.reduce((a,q)=>{a[q.type]=(a[q.type]||0)+1;return a},{single:0,multiple:0,multi:0,judge:0,blank:0,short:0})}
@@ -2629,9 +2648,13 @@ function ensureBackupFileInputV23(){
 function ensureBankManageExportPanelV23(){
   if($('#bank-bulk-export-panel-v23'))return;
   const bankList=$('#bank-list');if(!bankList)return;
-  bankList.insertAdjacentHTML('beforebegin',`<div id="bank-bulk-export-panel-v23" class="data-tool-card-v23 bank-bulk-panel-v23">
-    <div class="section-head compact-head-v23"><div><h3>批量选择导出题库</h3><p class="muted">在下方题库列表左侧勾选一个或多个题库，然后导出合成 JSON；该 JSON 可在“导入题库”页或“设置/导出”页导入。</p></div></div>
-    <div class="actions wrap-v23">
+  bankList.insertAdjacentHTML('beforebegin',`<div id="bank-bulk-export-panel-v23" class="data-tool-card-v23 bank-bulk-panel-v23 bank-manage-toolbar-v28">
+    <div class="section-head compact-head-v23"><div><h3>当前题库与批量导出</h3><p class="muted">当前题库改为在上方统一选择；下方卡片只展示题库信息。需要批量导出时，勾选题库后使用这里的导出按钮。</p></div></div>
+    <div class="bank-current-bar-v28">
+      <label>当前题库<select id="bank-current-select-v28"></select></label>
+      <span class="muted">切换后会同步顶部当前题库，并刷新预览、练习和错题范围。</span>
+    </div>
+    <div class="actions wrap-v23 bank-toolbar-actions-v28">
       <label class="check-line-v23"><input id="export-bank-all-v23" type="checkbox">全选</label>
       <button class="ghost" id="export-bank-invert-v23" type="button">反选</button>
       <button class="ghost" id="export-bank-current-v23" type="button">仅选当前题库</button>
@@ -2640,11 +2663,13 @@ function ensureBankManageExportPanelV23(){
     </div>
     <div id="export-bank-summary-v23" class="notice warn">请选择需要导出的题库。</div>
   </div>`);
+  $('#bank-current-select-v28').onchange=e=>{if(e.target.value){state.activeBankId=e.target.value;saveSilent();renderAll()}};
   $('#export-bank-all-v23').onchange=e=>{exportBankSelectedV23=e.target.checked?new Set(state.banks.map(b=>b.id)):new Set();renderBankList()};
   $('#export-bank-invert-v23').onclick=()=>{const next=new Set();state.banks.forEach(b=>{if(!exportBankSelectedV23.has(b.id))next.add(b.id)});exportBankSelectedV23=next;renderBankList()};
   $('#export-bank-current-v23').onclick=()=>{exportBankSelectedV23=new Set([activeBank().id]);renderBankList()};
   $('#export-selected-banks-v23').onclick=exportSelectedBanksV23;
   $('#copy-selected-banks-v23').onclick=copySelectedBanksJsonV23;
+  renderBankToolbarV28();
 }
 function ensureImportBackupPanelV23(){
   if($('#import-backup-panel-v23'))return;
@@ -2783,6 +2808,218 @@ function mergeBackupBanksV23(normalized){
   state.activeBankId=state.banks[state.banks.length-normalized.banks.length]?.id||state.activeBankId;
 }
 /* SHIROHA_V23_DATA_TOOLS_PATCH_END */
+
+
+/* SHIROHA_V25_2_TO_V28_ENHANCEMENTS_START
+   v25.2: 内置题库按需加载
+   v26: 刷题体验增强
+   v27: 收藏题与错题本补强
+   v28: App WebView 导出兜底与移动端加固
+*/
+function init(){upgradeState();ensureDefaultBank();bindNav();bindEvents();bindV25ToV28Events();ensureV25ToV28Panels();renderBankSelect();renderAll();setupEnhancedDataToolsV23();}
+function defaultBank(){
+  const qb=window.questionBank||{meta:{title:'内置题库（按需加载）'},questions:[]};
+  const qs=Array.isArray(qb.questions)?qb.questions:[];
+  return {id:'default-c1',name:qs.length?(qb.meta?.title||'默认题库'):'内置题库（待加载）',createdAt:now(),updatedAt:now(),questions:qs.map(normalizeQuestion),builtInLazy:!qs.length};
+}
+function upgradeState(){
+  state.schemaVersion=CURRENT_SCHEMA_VERSION;
+  state.banks=Array.isArray(state.banks)?state.banks:[];
+  state.records=Array.isArray(state.records)?state.records:[];
+  state.wrongBook=state.wrongBook&&typeof state.wrongBook==='object'?state.wrongBook:{};
+  state.settings=state.settings&&typeof state.settings==='object'?state.settings:{};
+  state.favorites=state.favorites&&typeof state.favorites==='object'?state.favorites:{};
+  for(const b of state.banks){
+    b.questions=(b.questions||[]).map((q,i)=>({...normalizeQuestion(q,i),id:q.id||('q_'+Date.now()+'_'+i),number:q.number||i+1}));
+    b.updatedAt=b.updatedAt||b.createdAt||now();
+  }
+  for(const bid of Object.keys(state.wrongBook)){
+    const val=state.wrongBook[bid];
+    if(Array.isArray(val)){
+      state.wrongBook[bid]=val.map(x=>typeof x==='string'?{id:x,wrongCount:1,rightCount:0,lastWrongAt:'',lastCorrectAt:'',status:'未掌握'}:{id:x.id,wrongCount:Number(x.wrongCount||1),rightCount:Number(x.rightCount||0),lastWrongAt:x.lastWrongAt||'',lastCorrectAt:x.lastCorrectAt||'',status:x.status||'未掌握'}).filter(x=>x.id);
+    }else state.wrongBook[bid]=[];
+  }
+  for(const bid of Object.keys(state.favorites)){
+    state.favorites[bid]=Array.isArray(state.favorites[bid])?[...new Set(state.favorites[bid].filter(Boolean))]:[];
+  }
+}
+function serializeState(){return JSON.stringify({...state,schemaVersion:CURRENT_SCHEMA_VERSION,favorites:state.favorites||{}})}
+function renderAll(){renderStats();renderBankSelect();renderMergeSelect();renderBankList();renderBankPreview();renderWrongBook();renderRecords();renderFavoritePanelV27();renderBankInputs();renderBuiltInPanelV252();if(typeof renderExportBankSelectorV23==='function')renderExportBankSelectorV23();}
+function bindV25ToV28Events(){
+  ['#load-built-in-bank-btn','#load-built-in-bank-btn-banks'].forEach(sel=>{const btn=$(sel);if(btn)btn.onclick=()=>loadBuiltInBankV252();});
+}
+function ensureV25ToV28Panels(){
+  ensureBuiltInPanelV252();
+  ensureFavoritePanelV27();
+}
+function ensureBuiltInPanelV252(){
+  if($('#builtin-bank-panel-v252'))return;
+  const bankList=$('#bank-list');if(!bankList)return;
+  bankList.insertAdjacentHTML('beforebegin',`<div id="builtin-bank-panel-v252" class="builtin-bank-card-v252"><div class="section-head compact-head-v23"><div><h3>内置题库按需加载</h3><p class="muted">完整 C1 题库已从 question-bank.js 拆分到 data/c1-full.json，页面启动时不再同步加载完整题库。</p></div><button id="load-built-in-bank-btn-panel" class="primary" type="button">加载内置 C1 题库</button></div><div id="builtin-bank-status-v252" class="muted"></div></div>`);
+  $('#load-built-in-bank-btn-panel').onclick=()=>loadBuiltInBankV252();
+}
+function renderBuiltInPanelV252(){
+  const el=$('#builtin-bank-status-v252');if(!el)return;
+  const has=state.banks.some(b=>b.id==='default-c1'&&(b.questions||[]).length>0)||state.banks.some(b=>/C1驾照科目一/.test(b.name||''));
+  el.textContent=has?'内置 C1 题库已在本地题库列表中。':'尚未加载完整内置题库，可按需加载。';
+}
+async function fetchJsonLocalV252(url){
+  try{const res=await fetch(url,{cache:'no-store'});if(res.ok)return await res.json();throw new Error('HTTP '+res.status)}
+  catch(fetchError){
+    return await new Promise((resolve,reject)=>{try{const xhr=new XMLHttpRequest();xhr.open('GET',url,true);xhr.overrideMimeType('application/json;charset=utf-8');xhr.onload=()=>{try{if(xhr.status===0||xhr.status>=200&&xhr.status<300)resolve(JSON.parse(xhr.responseText));else reject(new Error('XHR '+xhr.status))}catch(e){reject(e)}};xhr.onerror=()=>reject(fetchError);xhr.send()}catch(e){reject(fetchError||e)}});
+  }
+}
+async function loadBuiltInBankV252(){
+  try{
+    const index=window.questionBankIndex||await fetchJsonLocalV252('data/banks-index.json');
+    const item=(index||[])[0];if(!item)throw new Error('未找到内置题库索引');
+    const data=await fetchJsonLocalV252(item.file||'data/c1-full.json');
+    const questions=(data.questions||[]).map((q,i)=>normalizeQuestion(q,i)).filter(q=>q.question);
+    if(!questions.length)throw new Error('内置题库为空');
+    const bank={id:'default-c1',name:data.meta?.title||item.name||'C1 驾照科目一模拟练习题库',createdAt:now(),updatedAt:now(),questions,builtInLazy:false};
+    const old=state.banks.findIndex(b=>b.id==='default-c1'||b.builtInLazy);
+    if(old>=0)state.banks[old]=bank;else state.banks.push(bank);
+    state.activeBankId=bank.id;saveSilent();renderAll();toast(`已加载内置题库：${bank.name}，共 ${bank.questions.length} 题。`,'ok');
+  }catch(e){warnDev('加载内置题库失败',e);toast('加载内置题库失败：'+e.message,'danger')}
+}
+function filteredQuestions(source,type,order,limit){
+  let qs=[...activeBank().questions];
+  if(source==='wrong'){const ids=new Set(getWrongEntries(activeBank().id).filter(e=>e.status!=='已掌握').map(e=>e.id));qs=qs.filter(q=>ids.has(q.id))}
+  if(source==='favorite'){const ids=new Set(getFavoriteIdsV27(activeBank().id));qs=qs.filter(q=>ids.has(q.id))}
+  if(type&&type!=='all'){const t=type==='multi'?'multiple':type;qs=qs.filter(q=>q.type===t)}
+  if(order==='random')qs=shuffle(qs);
+  if(limit==='half'){qs=qs.slice(0,Math.max(1,Math.ceil(qs.length/2)))}else if(limit&&limit!=='all'){qs=qs.slice(0,Number(limit))}
+  return qs;
+}
+function startPractice(){
+  const limit=$('#practice-limit').value;
+  practice={items:filteredQuestions($('#practice-source').value,$('#practice-type').value,$('#practice-order').value,limit),idx:0,answered:0,correct:0,wrong:0,start:Date.now(),details:[],answerState:{}};
+  if(!practice.items.length){$('#practice-card').innerHTML='<div class="empty">当前条件下没有题目。</div>';showNotice('无法开始练习','当前筛选条件下没有题目。','warn');return}
+  if((limit==='all'||limit==='half')&&practice.items.length>200){const msg=practice.items.length>500?`本轮将练习 ${practice.items.length} 道题，题量很大，手机 WebView 可能明显卡顿，建议减少题量或使用电脑端。是否继续？`:`本轮将练习 ${practice.items.length} 道题，手机 WebView 可能出现轻微卡顿，是否继续？`;if(!confirm(msg)){practice={items:[],idx:0,answered:0,correct:0,wrong:0,start:0,details:[],answerState:{}};return}}
+  enterPracticeFocus();showNotice('练习开始',`本轮共 ${practice.items.length} 道题。`,'ok');renderPracticeQuestion();
+}
+function renderPracticeQuestion(done=false){
+  $('#practice-progress').textContent=`${Math.min(practice.idx+1,practice.items.length)} / ${practice.items.length}`;
+  if(done||practice.idx>=practice.items.length){finishPractice();return}
+  const q=practice.items[practice.idx];const st=getPracticeAnswerStateV26(q.id);const fav=isFavoriteV27(q.id);
+  $('#practice-card').innerHTML=`<div class="practice-focus-head"><b>刷题练习</b><span>${practice.idx+1} / ${practice.items.length}</span><div class="practice-tools-v26"><button class="ghost mini-btn" id="p-favorite">${fav?'取消收藏':'收藏题目'}</button><button class="ghost mini-btn" id="p-exit">退出练习</button></div></div>`+questionHtml(q,false)+`<div class="actions"><button class="ghost" id="p-prev" ${practice.idx===0?'disabled':''}>上一题</button><button class="primary" id="p-submit" ${st.answered||st.revealed?'disabled':''}>提交答案</button><button class="ghost" id="p-reveal" ${st.answered||st.revealed?'disabled':''}>看答案</button><button class="ghost" id="p-next">${practice.idx>=practice.items.length-1?'完成练习':'下一题'}</button></div><div id="p-feedback"></div>${renderPracticeNavV26()}`;
+  bindOptionSelect('#practice-card',q);applyAnswerStateV26('#practice-card',q,st.chosen||[]);
+  if(st.answered||st.revealed)showAnsweredStateV26(q,st);
+  $('#p-exit').onclick=()=>{if(confirm('退出本轮练习？已作答部分会保存为一条记录。'))finishPractice(true)};
+  $('#p-favorite').onclick=()=>{toggleFavoriteV27(q.id);renderPracticeQuestion()};
+  $('#p-prev').onclick=()=>{if(practice.idx>0){practice.idx--;renderPracticeQuestion()}};
+  $('#p-submit').onclick=()=>submitPractice(q,false);
+  $('#p-reveal').onclick=()=>submitPractice(q,true);
+  $('#p-next').onclick=()=>{if(practice.idx>=practice.items.length-1)finishPractice();else{practice.idx++;renderPracticeQuestion()}};
+  $$('#practice-card [data-practice-jump]').forEach(btn=>btn.onclick=()=>{practice.idx=Number(btn.dataset.practiceJump);renderPracticeQuestion()});
+}
+function getPracticeAnswerStateV26(id){practice.answerState=practice.answerState||{};return practice.answerState[id]||{chosen:[],answered:false,revealed:false,correct:null};}
+function setPracticeAnswerStateV26(id,next){practice.answerState=practice.answerState||{};practice.answerState[id]={...getPracticeAnswerStateV26(id),...next};}
+function applyAnswerStateV26(root,q,chosen){
+  if(isTextType(q.type)){const el=$(root+' .text-answer');if(el)el.value=(chosen||[]).join('；');return}
+  $$(root+' input').forEach(input=>{input.checked=(chosen||[]).includes(input.value)});$$(root+' .option').forEach(o=>o.classList.toggle('selected',o.querySelector('input').checked));
+}
+function renderPracticeNavV26(){
+  const buttons=(practice.items||[]).map((q,i)=>{const st=getPracticeAnswerStateV26(q.id);const cls=[i===practice.idx?'current':'',st.answered?'done':'',st.correct===true?'ok':st.correct===false?'bad':'',isFavoriteV27(q.id)?'favorite':''].filter(Boolean).join(' ');return `<button type="button" class="${cls}" data-practice-jump="${i}" title="第${i+1}题">${i+1}</button>`}).join('');
+  return `<div class="practice-nav-v26"><b>答题卡</b><div class="practice-nav-grid-v26">${buttons}</div></div>`;
+}
+function submitPractice(q,reveal){
+  const chosen=collectAnswer('#practice-card',q);if(!chosen.length&&!reveal){$('#p-feedback').innerHTML='<div class="feedback warn">请先作答，再提交。</div>';return}
+  if(q.type==='short'){showSubjectiveFeedback(q,chosen,reveal);return}
+  const ok=!reveal&&sameAnswerForQuestion(q,chosen,q.answer);
+  if(!reveal)recordPracticeAnswer(q,chosen,ok);else setPracticeAnswerStateV26(q.id,{chosen,revealed:true,correct:null});
+  markOptions('#practice-card',q,chosen);showAnsweredStateV26(q,getPracticeAnswerStateV26(q.id));saveSilent();renderStats();
+}
+function showAnsweredStateV26(q,st){
+  markOptions('#practice-card',q,st.chosen||[]);
+  $('#p-feedback').innerHTML=`<div class="feedback ${st.revealed?'warn':st.correct?'ok':'bad'}">${st.revealed?'已显示参考答案':st.correct?'✓ 回答正确':'✕ 这题要再看一遍'}｜你的答案：${esc((st.chosen||[]).join('；')||'未作答')}｜参考答案：${esc(q.answer.join('；'))}${q.analysis?'<br>解析：'+esc(q.analysis):''}</div>`;
+  const sub=$('#p-submit'),rev=$('#p-reveal');if(sub)sub.disabled=true;if(rev)rev.disabled=true;
+}
+function showSubjectiveFeedback(q,chosen,reveal){
+  const user=chosen.join('；')||'未填写';
+  setPracticeAnswerStateV26(q.id,{chosen,revealed:!!reveal});
+  $('#p-feedback').innerHTML=`<div class="feedback warn">你的作答：${esc(user)}<br>参考答案：${esc(q.answer.join('；')||'未提供')}${q.analysis?'<br>解析：'+esc(q.analysis):''}<br><div class="actions"><button class="primary" id="p-self-right">判为正确</button><button class="danger" id="p-self-wrong">判为错误</button></div></div>`;
+  $('#p-submit').disabled=true;$('#p-reveal').disabled=true;
+  $('#p-self-right').onclick=()=>{recordPracticeAnswer(q,chosen,true);$('#p-self-right').disabled=true;$('#p-self-wrong').disabled=true;saveSilent();renderStats();renderPracticeQuestion()};
+  $('#p-self-wrong').onclick=()=>{recordPracticeAnswer(q,chosen,false);$('#p-self-right').disabled=true;$('#p-self-wrong').disabled=true;saveSilent();renderStats();renderPracticeQuestion()};
+}
+function recordPracticeAnswer(q,chosen,ok){
+  const current=getPracticeAnswerStateV26(q.id);if(current.answered)return;
+  practice.answered++;if(ok){practice.correct++;markRight(q.id)}else{practice.wrong++;addWrong(q.id)}
+  setPracticeAnswerStateV26(q.id,{chosen:[...chosen],answered:true,revealed:false,correct:!!ok,answeredAt:now()});
+  practice.details.push(makeAnswerDetail(q,chosen,ok,scoreOf(q),scoreOf(q)));
+}
+function getFavoriteIdsV27(bid=activeBank().id){state.favorites=state.favorites||{};return Array.isArray(state.favorites[bid])?state.favorites[bid]:[];}
+function setFavoriteIdsV27(ids,bid=activeBank().id){state.favorites=state.favorites||{};state.favorites[bid]=[...new Set((ids||[]).filter(Boolean))];}
+function isFavoriteV27(id,bid=activeBank().id){return getFavoriteIdsV27(bid).includes(id);}
+function toggleFavoriteV27(id,bid=activeBank().id){const ids=getFavoriteIdsV27(bid);if(ids.includes(id))setFavoriteIdsV27(ids.filter(x=>x!==id),bid);else setFavoriteIdsV27([...ids,id],bid);saveSilent();toast(ids.includes(id)?'已取消收藏。':'已收藏题目。','ok');}
+function ensureFavoritePanelV27(){
+  if($('#favorite-panel-v27'))return;const list=$('#wrongbook-list');if(!list)return;
+  list.insertAdjacentHTML('afterend',`<div id="favorite-panel-v27" class="favorite-panel-v27"><div class="section-head"><div><h3>收藏题复习</h3><p class="muted">收藏题独立保存，可在刷题练习来源中选择“仅收藏题”。</p></div><button id="practice-favorite-btn-v27" class="ghost" type="button">练习收藏题</button></div><div id="favorite-list-v27"></div></div>`);
+  $('#practice-favorite-btn-v27').onclick=()=>{switchPracticeSourceV27('favorite')};
+}
+function switchPracticeSourceV27(source){$$('.nav').forEach(b=>b.classList.remove('active'));document.querySelector('[data-view="practice"]').classList.add('active');$$('.view').forEach(v=>v.classList.remove('active'));$('#practice').classList.add('active');$('#page-title').textContent='刷题练习';$('#practice-source').value=source;$('#practice-order').value='random';$('#practice-limit').value='100';startPractice();}
+function renderFavoritePanelV27(){
+  const box=$('#favorite-list-v27');if(!box)return;const ids=new Set(getFavoriteIdsV27());const map=new Map(activeBank().questions.map(q=>[q.id,q]));const rows=[...ids].map(id=>map.get(id)).filter(Boolean);
+  box.innerHTML=rows.length?rows.map(q=>`<div class="favorite-item-v27"><div class="section-head"><div><b>${label(q.type)}｜${esc(short(q.question,80))}</b><p class="muted">答案：${esc((q.answer||[]).join(''))}${q.analysis?'｜解析：'+esc(short(q.analysis,80)):''}</p></div><button class="ghost mini-btn" data-unfav-v27="${esc(q.id)}">取消收藏</button></div></div>`).join(''):'<p class="muted">当前题库暂无收藏题。</p>';
+  $$('[data-unfav-v27]').forEach(btn=>btn.onclick=()=>{toggleFavoriteV27(btn.dataset.unfavV27);renderAll()});
+}
+function renderWrongBook(){
+  const bid=activeBank().id;let entries=getWrongEntries(bid);const filter=$('#wrong-status-filter')?.value||'active';if(filter==='active')entries=entries.filter(e=>e.status!=='已掌握');else if(filter!=='all')entries=entries.filter(e=>e.status===filter);const sort=$('#wrong-sort-mode')?.value||'lastWrong';if(sort==='wrongCount')entries.sort((a,b)=>b.wrongCount-a.wrongCount);else if(sort==='status')entries.sort((a,b)=>String(a.status).localeCompare(String(b.status),'zh-CN'));else entries.sort((a,b)=>String(b.lastWrongAt||'').localeCompare(String(a.lastWrongAt||'')));const map=new Map(activeBank().questions.map(q=>[q.id,q]));const rows=entries.map(e=>({e,q:map.get(e.id)})).filter(x=>x.q);$('#wrongbook-list').innerHTML=rows.length?rows.map(({e,q})=>`<div class="wrong-item"><div class="section-head"><div><b>${label(q.type)}｜${esc(short(q.question,80))}</b><p class="muted">答案：${esc(q.answer.join(''))}｜状态：${esc(e.status)}｜错误 ${e.wrongCount} 次｜做对 ${e.rightCount} 次${e.lastWrongAt?'｜最近错：'+fmt(e.lastWrongAt):''}${q.analysis?'｜解析：'+esc(short(q.analysis,80)):''}</p></div><div class="row-actions"><button class="ghost mini-btn" data-toggle-master-wrong="${esc(q.id)}">${e.status==='已掌握'?'取消掌握':'标记已掌握'}</button><button class="ghost mini-btn" data-fav-wrong="${esc(q.id)}">${isFavoriteV27(q.id)?'取消收藏':'收藏'}</button><button class="ghost danger mini-btn" data-remove-wrong="${esc(q.id)}">移出</button></div></div></div>`).join(''):'<p class="muted">当前条件下暂无错题。</p>';$$('[data-remove-wrong]').forEach(b=>b.onclick=()=>{if(confirm('确定将这道题移出错题本？')){removeWrong(b.dataset.removeWrong);saveSilent();renderAll()}});$$('[data-toggle-master-wrong]').forEach(b=>b.onclick=()=>{const arr=getWrongEntries();const e=arr.find(x=>x.id===b.dataset.toggleMasterWrong);if(e){if(e.status==='已掌握'){e.status='复习中';e.rightCount=Math.min(e.rightCount||0,1)}else{e.status='已掌握';e.lastCorrectAt=now();e.rightCount=Math.max(e.rightCount||0,2)}setWrongEntries(arr);saveSilent();renderAll()}});$$('[data-fav-wrong]').forEach(b=>b.onclick=()=>{toggleFavoriteV27(b.dataset.favWrong);renderAll()});
+}
+function buildBackupPayloadV23(banks,exportType='selected_banks',includeAll=false){
+  const bankIds=new Set((banks||[]).map(b=>b.id));
+  const wrongBook={};Object.keys(state.wrongBook||{}).forEach(id=>{if(includeAll||bankIds.has(id))wrongBook[id]=state.wrongBook[id]});
+  const favorites={};Object.keys(state.favorites||{}).forEach(id=>{if(includeAll||bankIds.has(id))favorites[id]=state.favorites[id]});
+  return {app:'Shiroha Quiz',schemaVersion:CURRENT_SCHEMA_VERSION,exportType,exportedAt:now(),banks:banks||[],wrongBook,favorites,records:includeAll?(state.records||[]):[],settings:includeAll?(state.settings||{}):{},activeBankId:includeAll?state.activeBankId:((banks&&banks[0]&&banks[0].id)||'')};
+}
+function normalizeBackupPayloadV23(data,fileName){
+  if(!data||typeof data!=='object')throw new Error('JSON 根节点不是对象');
+  let banks=[];let wrongBook={};let favorites={};let records=[];let settings={};let activeBankId='';
+  if(Array.isArray(data.banks)){banks=data.banks;wrongBook=data.wrongBook||{};favorites=data.favorites||{};records=Array.isArray(data.records)?data.records:[];settings=data.settings||{};activeBankId=data.activeBankId||''}
+  else if(Array.isArray(data.questions)){banks=[{id:data.id||('bank_'+Date.now()),name:data.name||cleanFileNameV23(fileName).replace(/\.json$/i,'')||'导入题库',createdAt:data.createdAt||now(),updatedAt:now(),questions:data.questions}]}
+  else if(Array.isArray(data)){banks=[{id:'bank_'+Date.now(),name:cleanFileNameV23(fileName).replace(/\.json$/i,'')||'导入题库',createdAt:now(),updatedAt:now(),questions:data}]}
+  else throw new Error('不是 Shiroha Quiz 备份，也不是单题库 JSON');
+  banks=banks.map((b,i)=>({id:String(b.id||('bank_import_'+Date.now()+'_'+i)),name:String(b.name||b.title||('导入题库_'+(i+1))),createdAt:b.createdAt||now(),updatedAt:now(),questions:(b.questions||[]).map((q,j)=>normalizeQuestion(q,j)).filter(q=>q.question)})).filter(b=>b.questions.length||b.name);
+  return {banks,wrongBook,favorites,records,settings,activeBankId};
+}
+function mergeBackupBanksV23(normalized){
+  const existingNames=new Set(state.banks.map(b=>b.name));const existingIds=new Set(state.banks.map(b=>b.id));
+  normalized.banks.forEach((bank,idx)=>{const oldId=bank.id;let name=bank.name||('导入题库_'+(idx+1));if(existingNames.has(name)){let n=1;const base=name+'_导入';while(existingNames.has(base+n))n++;name=base+n}let id=bank.id;if(existingIds.has(id))id='bank_import_'+Date.now()+'_'+idx;existingIds.add(id);existingNames.add(name);const next={...bank,id,name,createdAt:bank.createdAt||now(),updatedAt:now(),questions:(bank.questions||[]).map((q,i)=>({...normalizeQuestion(q,i),id:q.id||('q_'+Date.now()+'_'+idx+'_'+i),number:q.number||i+1}))};state.banks.push(next);if(normalized.wrongBook&&normalized.wrongBook[oldId])state.wrongBook[id]=normalized.wrongBook[oldId];if(normalized.favorites&&normalized.favorites[oldId])state.favorites[id]=normalized.favorites[oldId];});
+  state.activeBankId=state.banks[state.banks.length-normalized.banks.length]?.id||state.activeBankId;
+}
+function download(name,text){
+  const out=$('#export-output');if(out)out.value=text;
+  if(window.ShirohaAndroid&&typeof window.ShirohaAndroid.saveJsonFile==='function'){
+    try{const ok=window.ShirohaAndroid.saveJsonFile(String(name||'shiroha-quiz.json'),String(text||''));if(ok){toast('已调用系统保存文件。若未看到文件，请检查 Downloads 或使用复制备份文本。','ok');return}}catch(e){warnDev('Android 原生保存接口调用失败',e)}
+  }
+  const a=document.createElement('a');const url=URL.createObjectURL(new Blob([text],{type:'application/json;charset=utf-8'}));a.href=url;a.download=name;document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+function importBackupJsonFileV23(e){
+  const file=e.target.files&&e.target.files[0];if(!file)return;
+  (async()=>{
+    try{
+      const text=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||''));r.onerror=()=>reject(new Error('文件读取失败'));r.readAsText(file,'UTF-8')});
+      setBackupPreviewV23(text);
+      const data=JSON.parse(text);const normalized=normalizeBackupPayloadV23(data,file.name);
+      if(!normalized.banks.length){toast('没有在 JSON 中找到可导入的题库。','warn');return}
+      const mode=backupImportModeV23||'merge';
+      if(mode==='overwrite'){
+        if(!confirm(`覆盖恢复会清空当前本地数据，并导入 ${normalized.banks.length} 个题库。确定继续？`))return;
+        state.schemaVersion=CURRENT_SCHEMA_VERSION;state.banks=normalized.banks;state.activeBankId=normalized.activeBankId||state.banks[0]?.id||'';state.wrongBook=normalized.wrongBook||{};state.favorites=normalized.favorites||{};state.records=Array.isArray(normalized.records)?normalized.records:[];state.settings=normalized.settings&&typeof normalized.settings==='object'?normalized.settings:{};
+      }else{
+        mergeBackupBanksV23(normalized);
+      }
+      upgradeState();ensureDefaultBank();saveSilent();renderAll();setupEnhancedDataToolsV23();
+      const total=normalized.banks.reduce((n,b)=>n+(b.questions||[]).length,0);
+      toast(`导入完成：${normalized.banks.length} 个题库，${total} 道题。`,'ok');
+    }catch(err){toast('导入备份 JSON 失败：'+err.message,'danger')}
+    finally{e.target.value=''}
+  })();
+}
+
+/* SHIROHA_V25_2_TO_V28_ENHANCEMENTS_END */
 
 function resetData(){if(confirm('确定清除全部本地数据？默认题库也会重新初始化。')){clearStoredState();location.reload()}}
 })();
