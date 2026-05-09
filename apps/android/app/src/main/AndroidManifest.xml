@@ -12,21 +12,14 @@
         android:theme="@style/Theme.ShirohaQuiz"
         android:usesCleartextTraffic="false">
         <activity
-            android:name=".WebShellActivity"
-            android:exported="true"
-            android:label="@string/app_name"
-            android:theme="@style/Theme.ShirohaQuiz.Starting">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-        <activity
-            android:name=".MainActivity"
+            android:name="com.yiqiu.shirohaquiz.MainActivity"
             android:exported="false"
-            android:launchMode="singleTask"
-            android:theme="@style/Theme.ShirohaQuiz" />
+            android:theme="@style/Theme.ShirohaQuiz.Starting" />
+        <activity
+            android:name="com.yiqiu.shirohaquiz.WebShellActivity"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.ShirohaQuiz.Starting" />
     </application>
 
 </manifest>

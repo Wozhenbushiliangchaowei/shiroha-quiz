@@ -8,13 +8,25 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.yiqiu.shirohaquiz"
         minSdk = 26
         targetSdk = 34
-        versionCode = 13
-        versionName = " 0.3.3-alpha"
+        versionCode = 1
+        versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    flavorDimensions += "variant"
+
+    productFlavors {
+        create("web") {
+            dimension = "variant"
+            applicationId = "com.yiqiu.shirohaquiz"
+        }
+        create("native") {
+            dimension = "variant"
+            applicationId = "com.reiqir.shirohaquiz"
+        }
     }
 
     buildTypes {
@@ -52,15 +64,24 @@ android {
     }
 }
 
-val exportNamedDebugApk by tasks.registering(Copy::class) {
-    from(layout.buildDirectory.file("outputs/apk/debug/app-debug.apk"))
+val exportWebDebugApk by tasks.registering(Copy::class) {
+    from(layout.buildDirectory.file("outputs/apk/web/debug/app-web-debug.apk"))
     into(layout.buildDirectory.dir("outputs/shiroha-quiz"))
-    rename { "Shiroha-Quiz-v0.3.3-alpha-debug.apk" }
+    rename { "Shiroha-Quiz-v0.1.0-web-debug.apk" }
+}
+
+val exportNativeDebugApk by tasks.registering(Copy::class) {
+    from(layout.buildDirectory.file("outputs/apk/native/debug/app-native-debug.apk"))
+    into(layout.buildDirectory.dir("outputs/shiroha-quiz"))
+    rename { "Shiroha-Quiz-v0.1.0-native-debug.apk" }
 }
 
 afterEvaluate {
-    tasks.named("assembleDebug") {
-        finalizedBy(exportNamedDebugApk)
+    tasks.named("assembleWebDebug") {
+        finalizedBy(exportWebDebugApk)
+    }
+    tasks.named("assembleNativeDebug") {
+        finalizedBy(exportNativeDebugApk)
     }
 }
 

@@ -2,6 +2,7 @@ package com.yiqiu.shirohaquiz.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -109,9 +110,11 @@ fun StatusChip(
 fun ActionPillButton(
     icon: ImageVector,
     text: String,
-    primary: Boolean = true
+    primary: Boolean = true,
+    onClick: () -> Unit = {}
 ) {
     Surface(
+        modifier = Modifier.clickable(onClick = onClick),
         shape = RoundedCornerShape(ShirohaRadius.Pill),
         color = if (primary) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.84f),
         border = if (primary) null else BorderStroke(1.dp, ShirohaColors.LineStrong)

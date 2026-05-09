@@ -6,10 +6,14 @@ data class QuestionBlock(
 )
 
 object QuestionBlockSplitter {
-    private val questionStartRegex = Regex("""^\s*(\d{1,4})\s*[.:．、]\s*(.*)$""")
+    private val questionStartRegex = Regex("""^\s*(?:第\s*)?(\d{1,4})\s*(?:题)?[.、．:：]\s*(.*)$""")
 
     fun split(text: String): List<QuestionBlock> {
-        val lines = text.lines().map { it.trim() }.filter { it.isNotBlank() }
+        val lines = text
+            .lines()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+
         if (lines.isEmpty()) return emptyList()
 
         val blocks = mutableListOf<QuestionBlock>()
@@ -36,6 +40,7 @@ object QuestionBlockSplitter {
                 currentLines += line
             }
         }
+
         flush()
         return blocks
     }
