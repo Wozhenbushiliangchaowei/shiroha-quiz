@@ -11,8 +11,8 @@ android {
         applicationId = "com.yiqiu.shirohaquiz"
         minSdk = 26
         targetSdk = 34
-        versionCode = 9
-        versionName = "0.3.1-alpha"
+        versionCode = 10
+        versionName = "0.3.2-alpha"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -55,7 +55,7 @@ android {
 val exportNamedDebugApk by tasks.registering(Copy::class) {
     from(layout.buildDirectory.file("outputs/apk/debug/app-debug.apk"))
     into(layout.buildDirectory.dir("outputs/shiroha-quiz"))
-    rename { "Shiroha-Quiz-v0.3.1-alpha-debug.apk" }
+    rename { "Shiroha-Quiz-v0.3.2-alpha-debug.apk" }
 }
 
 afterEvaluate {
