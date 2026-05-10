@@ -14,11 +14,7 @@ class QuizRepositoryExamTest {
 
     @After
     fun tearDown() {
-        QuizRepository.banks.clear()
-        QuizRepository.activeBankId = null
-        QuizRepository.practiceIndex = 0
-        QuizRepository.selectedAnswer = emptyList()
-        QuizRepository.resetExam()
+        QuizRepository.resetForTesting()
     }
 
     @Test
@@ -76,8 +72,39 @@ class QuizRepositoryExamTest {
         assertTrue(QuizRepository.examQuestions.isEmpty())
     }
 
+    @Test
+    fun `wrong answer should enter wrong book and records`() {
+        seedBank()
+
+        QuizRepository.toggleAnswer("B", multiple = false)
+        val result = QuizRepository.submitPracticeQuestion()
+
+        assertNotNull(result)
+        assertFalse(result!!.correct)
+        assertEquals(1, QuizRepository.wrongBook.size)
+        assertEquals(1, QuizRepository.studyRecords.size)
+        assertEquals("练习", QuizRepository.studyRecords.first().source)
+    }
+
+    @Test
+    fun `submitting exam should create study record and wrong entry`() {
+        seedBank()
+        QuizRepository.startExam(questionCount = 2, durationMinutes = 10)
+
+        QuizRepository.toggleExamAnswer("B", multiple = false)
+        QuizRepository.nextExamQuestion()
+        QuizRepository.toggleExamAnswer("A", multiple = true)
+        QuizRepository.submitExam()
+
+        assertEquals(1, QuizRepository.studyRecords.size)
+        assertEquals("考试", QuizRepository.studyRecords.first().source)
+        assertEquals(2, QuizRepository.wrongBook.size)
+    }
+
     private fun seedBank() {
         QuizRepository.banks.clear()
+        QuizRepository.wrongBook.clear()
+        QuizRepository.studyRecords.clear()
         QuizRepository.banks += QuizBank(
             id = "bank-1",
             name = "测试题库",

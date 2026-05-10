@@ -53,17 +53,13 @@ object StandardQuestionParser {
         var stem = stemLines.joinToString(" ").replace(Regex("""\s+"""), " ").trim()
         if (stem.isBlank()) return null
 
-        if (answerText.isBlank()) {
-            trailingJudgeAnswerRegex.find(stem)?.let { hit ->
-                answerText = hit.groupValues[1]
-                stem = stem.removeRange(hit.range).trim()
-            }
+        trailingJudgeAnswerRegex.find(stem)?.let { hit ->
+            if (answerText.isBlank()) answerText = hit.groupValues[1]
+            stem = stem.removeRange(hit.range).trim()
         }
-        if (answerText.isBlank()) {
-            trailingChoiceAnswerRegex.find(stem)?.let { hit ->
-                answerText = hit.groupValues[1]
-                stem = stem.removeRange(hit.range).trim()
-            }
+        trailingChoiceAnswerRegex.find(stem)?.let { hit ->
+            if (answerText.isBlank()) answerText = hit.groupValues[1]
+            stem = stem.removeRange(hit.range).trim()
         }
 
         val type = inferType(stem = stem, options = options, answerText = answerText)

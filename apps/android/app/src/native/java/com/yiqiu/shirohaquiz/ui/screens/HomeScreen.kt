@@ -11,8 +11,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoStories
 import androidx.compose.material.icons.rounded.CloudUpload
-import androidx.compose.material.icons.rounded.Done
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.ReportProblem
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.MaterialTheme
@@ -21,9 +22,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.yiqiu.shirohaquiz.R
 import com.yiqiu.shirohaquiz.state.QuizRepository
 import com.yiqiu.shirohaquiz.ui.components.ActionPillButton
 import com.yiqiu.shirohaquiz.ui.components.GlassCard
+import com.yiqiu.shirohaquiz.ui.components.IllustrationHeroCard
 import com.yiqiu.shirohaquiz.ui.components.MetricGlassCard
 import com.yiqiu.shirohaquiz.ui.components.ShirohaHeader
 import com.yiqiu.shirohaquiz.ui.components.ShortcutGlassCard
@@ -34,11 +37,15 @@ fun HomeScreen(
     onGoImport: () -> Unit,
     onGoPractice: () -> Unit,
     onGoExam: () -> Unit,
-    onOpenBankDetail: (String) -> Unit
+    onOpenBankDetail: (String) -> Unit,
+    onOpenWrongBook: () -> Unit,
+    onOpenRecords: () -> Unit
 ) {
     val activeBank = QuizRepository.activeBank()
     val bankCount = QuizRepository.banks.size
     val questionCount = activeBank?.questions?.size ?: 0
+    val wrongCount = QuizRepository.wrongBook.size
+    val recordCount = QuizRepository.studyRecords.size
 
     Column(
         modifier = Modifier
@@ -49,8 +56,20 @@ fun HomeScreen(
         ShirohaHeader(
             kicker = "Shiroha Quiz",
             title = "原生题库首页",
-            subtitle = "这里只服务原生安卓。导入后的题库会直接进入原生状态，并接入练习与考试流程。"
+            subtitle = "这里是原生 Android 主流程。导入后的题库会直接进入原生状态，并接入练习、考试、错题本和学习记录。"
         )
+
+        IllustrationHeroCard(
+            title = "欢迎回来",
+            subtitle = "这张小头像只承担欢迎和识别感，不去抢首页主信息的空间。",
+            imageRes = R.drawable.illus_home_welcome,
+            imageSize = 84.dp
+        ) {
+            Text(
+                text = if (questionCount > 0) "今天可以继续把 ${activeBank?.name} 往前推一轮。" else "先导入一份题库，我们就能把原生链真正跑起来。",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
 
         GlassCard {
             Text(
@@ -67,9 +86,9 @@ fun HomeScreen(
             Spacer(Modifier.height(8.dp))
             Text(
                 text = if (questionCount > 0) {
-                    "当前题库共 $questionCount 题，现在已经可以直接进入原生练习与考试。"
+                    "当前题库共有 $questionCount 题，已经可以直接进入原生练习和考试。"
                 } else {
-                    "当前还没有真实导入题目。先到“导入”页导入一份标准文本题库。"
+                    "当前还没有真实导入题目。先去导入页完成一份标准题库的导入。"
                 },
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -97,18 +116,53 @@ fun HomeScreen(
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            MetricGlassCard(
+                label = "错题数",
+                value = wrongCount.toString(),
+                desc = "练习和考试中累计的错题",
+                modifier = Modifier.weight(1f)
+            )
+            MetricGlassCard(
+                label = "记录数",
+                value = recordCount.toString(),
+                desc = "原生学习记录条目",
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             ShortcutGlassCard(
                 title = "标准文本导入",
                 icon = Icons.Rounded.AutoStories,
-                desc = "优先覆盖最常见题库格式",
+                desc = "优先覆盖最常见的题库格式",
                 modifier = Modifier.weight(1f)
             )
             ShortcutGlassCard(
                 title = "原生考试模式",
                 icon = Icons.Rounded.Schedule,
-                desc = "题量、计时、交卷和结果页已经接入",
+                desc = "题量、计时、交卷和结果页已经接通",
                 modifier = Modifier.weight(1f)
             )
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            ShortcutGlassCard(
+                title = "错题本",
+                icon = Icons.Rounded.ReportProblem,
+                desc = "收拢练习和考试里的错题",
+                modifier = Modifier.weight(1f)
+            )
+            ShortcutGlassCard(
+                title = "学习记录",
+                icon = Icons.Rounded.History,
+                desc = "查看最近的练习和考试结果",
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ActionPillButton(Icons.Rounded.ReportProblem, "打开错题本", primary = false, onClick = onOpenWrongBook)
+            ActionPillButton(Icons.Rounded.History, "查看记录", primary = false, onClick = onOpenRecords)
         }
 
         GlassCard {
@@ -128,14 +182,17 @@ fun HomeScreen(
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "${bank.questions.size} 题${if (isActive) " · 当前活动题库" else ""}",
+                    text = buildString {
+                        append("${bank.questions.size} 题")
+                        if (isActive) append(" · 当前活动题库")
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     ActionPillButton(
-                        icon = Icons.Rounded.Done,
+                        icon = Icons.Rounded.PlayArrow,
                         text = "查看详情",
                         primary = isActive,
                         onClick = { onOpenBankDetail(bank.id) }

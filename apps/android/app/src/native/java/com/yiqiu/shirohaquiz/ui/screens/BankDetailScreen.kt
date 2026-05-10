@@ -20,9 +20,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.yiqiu.shirohaquiz.R
 import com.yiqiu.shirohaquiz.importer.model.QuestionType
 import com.yiqiu.shirohaquiz.state.QuizRepository
 import com.yiqiu.shirohaquiz.ui.components.ActionPillButton
+import com.yiqiu.shirohaquiz.ui.components.EmptyStateIllustration
 import com.yiqiu.shirohaquiz.ui.components.GlassCard
 import com.yiqiu.shirohaquiz.ui.components.NoticeCard
 import com.yiqiu.shirohaquiz.ui.components.ShirohaHeader
@@ -49,13 +51,19 @@ fun BankDetailScreen(
         ShirohaHeader(
             kicker = "Bank Detail",
             title = bank?.name ?: "题库详情",
-            subtitle = "这里展示当前题库的摘要、题型分布和快速操作，符合前面规划里的题库详情入口。"
+            subtitle = "这里展示题库摘要、题型分布和快速操作，方便我们从原生首页直接进入练习和考试。"
         )
 
         if (bank == null) {
+            EmptyStateIllustration(
+                title = "没有找到对应题库",
+                message = "这通常说明题库已经被切换或删除。回到首页重新选择一份题库就好。",
+                imageRes = R.drawable.illus_empty_state,
+                action = {
+                    Spacer(Modifier.height(12.dp))
+                }
+            )
             GlassCard {
-                NoticeCard("没有找到对应题库。")
-                Spacer(Modifier.height(12.dp))
                 ActionPillButton(
                     icon = Icons.Rounded.Done,
                     text = "返回首页",
@@ -145,7 +153,7 @@ fun BankDetailScreen(
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(Modifier.height(12.dp))
-                NoticeCard("删除题库后会同时清掉这份原生题库的本地记录。")
+                NoticeCard("删除题库后，会一起清理这份原生题库关联的本地记录。")
                 Spacer(Modifier.height(12.dp))
                 ActionPillButton(
                     icon = Icons.Rounded.DeleteOutline,

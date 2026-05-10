@@ -35,20 +35,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.yiqiu.shirohaquiz.R
 import com.yiqiu.shirohaquiz.importer.model.ImportResult
 import com.yiqiu.shirohaquiz.importer.model.Question
 import com.yiqiu.shirohaquiz.importer.model.QuestionType
 import com.yiqiu.shirohaquiz.importer.model.WarningLevel
 import com.yiqiu.shirohaquiz.importer.parser.QuizImportParser
+import com.yiqiu.shirohaquiz.importer.parser.TextImportDecoder
 import com.yiqiu.shirohaquiz.state.QuizRepository
 import com.yiqiu.shirohaquiz.ui.components.ActionPillButton
 import com.yiqiu.shirohaquiz.ui.components.GlassCard
+import com.yiqiu.shirohaquiz.ui.components.IllustrationHeroCard
+import com.yiqiu.shirohaquiz.ui.components.LoadingIllustration
 import com.yiqiu.shirohaquiz.ui.components.NoticeCard
 import com.yiqiu.shirohaquiz.ui.components.ShirohaHeader
 import com.yiqiu.shirohaquiz.ui.components.StatusChip
 import com.yiqiu.shirohaquiz.ui.components.UploadPanel
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaSpacing
-import java.nio.charset.Charset
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -62,7 +65,7 @@ fun ImportScreen(
     var selectedAnswerFileName by rememberSaveable { mutableStateOf("未选择答案文件") }
     var importResult by remember { mutableStateOf<ImportResult?>(null) }
     var statusText by rememberSaveable {
-        mutableStateOf("当前先接入原生标准题库导入。推荐优先导入 txt / json / csv 这类文本文件。")
+        mutableStateOf("当前先接入原生标准题库导入。推荐优先导入 txt / json / csv / docx 这类结构化文本文件。")
     }
     var isStatusWarn by rememberSaveable { mutableStateOf(false) }
     var useDualImport by rememberSaveable { mutableStateOf(false) }
@@ -70,10 +73,10 @@ fun ImportScreen(
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         selectedFileName = queryFileName(context, uri)
-        val text = readTextSafely(context, uri)
-        if (text == null) {
+        val text = readImportedText(context, uri, selectedFileName)
+        if (text.isNullOrBlank()) {
             importResult = null
-            statusText = "当前原生导入第一版只保证标准文本题库。这个文件暂时不能稳定读取，请先转成 txt 再导入。"
+            statusText = "当前原生导入第一版还不能稳定读取这个文件。建议优先使用 txt / csv / json / docx。"
             isStatusWarn = true
         } else {
             rawText = text
@@ -86,9 +89,9 @@ fun ImportScreen(
     val answerFilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         selectedAnswerFileName = queryFileName(context, uri)
-        val text = readTextSafely(context, uri)
-        if (text == null) {
-            statusText = "答案文件暂时还不能稳定读取，请优先使用 txt。"
+        val text = readImportedText(context, uri, selectedAnswerFileName)
+        if (text.isNullOrBlank()) {
+            statusText = "答案文件暂时还不能稳定读取，请优先使用 txt 或可复制文本的文档。"
             isStatusWarn = true
         } else {
             answerText = text
@@ -107,7 +110,14 @@ fun ImportScreen(
         ShirohaHeader(
             kicker = "Import",
             title = "原生导入题库",
-            subtitle = "这版开始接入真正的 Kotlin 原生导入链。当前优先支持标准文本题库导入与原生预览。"
+            subtitle = "这里走的是真正的 Kotlin 原生导入链。当前优先覆盖标准文本和双文件导入，再逐步补齐更多格式。"
+        )
+
+        IllustrationHeroCard(
+            title = "先导入，再核对，最后创建题库",
+            subtitle = "导入页最适合放引导插画。它负责帮用户理解流程，而不是挤占主操作区。",
+            imageRes = R.drawable.illus_import_hint,
+            imageSize = 124.dp
         )
 
         GlassCard {
@@ -140,7 +150,7 @@ fun ImportScreen(
             Spacer(Modifier.height(14.dp))
             UploadPanel(
                 title = "选择题库文件",
-                desc = "当前原生第一版建议导入 txt / csv / json 等文本文件，后面再继续补 docx / pdf。",
+                desc = "当前原生第一版建议导入 txt / csv / json / docx 等文本型文件，后面再继续补 pdf。",
                 icon = Icons.Rounded.FileOpen
             )
             Spacer(Modifier.height(14.dp))
@@ -293,7 +303,7 @@ fun ImportScreen(
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    text = "确认无误后，将当前解析结果写入原生题库状态。首页和练习页会直接使用这批数据。",
+                    text = "确认无误后，把当前解析结果写入原生题库状态。首页、练习、考试、错题本和记录页都会直接使用这批数据。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -305,7 +315,7 @@ fun ImportScreen(
                     onClick = {
                         val bankName = selectedFileName.substringBeforeLast('.').ifBlank { "导入题库" }
                         QuizRepository.importBank(context, bankName, result.questions)
-                        statusText = "已写入原生题库：$bankName，共 ${result.questions.size} 题。现在可以切到首页或练习页查看。"
+                        statusText = "已写入原生题库：$bankName，共 ${result.questions.size} 题。现在可以切到首页、练习或考试查看。"
                         isStatusWarn = false
                         onImportSaved()
                     }
@@ -313,6 +323,10 @@ fun ImportScreen(
             }
 
             NativeImportPreview(result.questions)
+        }
+
+        if (importResult == null && rawText.isNotBlank()) {
+            LoadingIllustration("准备好以后，点击“开始原生解析”，这里会切成结构化预览。")
         }
     }
 }
@@ -439,18 +453,9 @@ private fun queryFileName(context: Context, uri: Uri): String {
     return uri.lastPathSegment ?: "未命名文件"
 }
 
-private fun readTextSafely(context: Context, uri: Uri): String? {
+private fun readImportedText(context: Context, uri: Uri, fileName: String): String? {
     val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
-    if (bytes.isEmpty()) return ""
-
-    val utf8 = bytes.toString(Charsets.UTF_8)
-    if ('�' !in utf8) return utf8
-
-    return try {
-        bytes.toString(Charset.forName("GB18030"))
-    } catch (_: Exception) {
-        utf8
-    }
+    return TextImportDecoder.decode(bytes, fileName)
 }
 
 private fun sampleImportText(): String = """
@@ -461,6 +466,7 @@ C. 增加重量
 D. 无实际作用
 答案：A
 解析：安全帽用于减轻坠落物和碰撞对头部造成的伤害。
+
 2. 雨天驾驶时应注意哪些事项（AB）
 A. 降低车速
 B. 加大跟车距离
@@ -468,6 +474,7 @@ C. 急打方向
 D. 紧急制动
 答案：AB
 解析：雨天路滑，应平稳控制车辆并留足安全距离。
+
 3. 国家安全生产方针是“安全第一，预防为主”。（对）
 答案：对
 解析：这是一道基础判断题，答案为正确。

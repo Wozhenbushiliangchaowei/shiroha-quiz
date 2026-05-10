@@ -38,6 +38,8 @@ import com.yiqiu.shirohaquiz.ui.screens.HomeScreen
 import com.yiqiu.shirohaquiz.ui.screens.ImportScreen
 import com.yiqiu.shirohaquiz.ui.screens.MeScreen
 import com.yiqiu.shirohaquiz.ui.screens.PracticeScreen
+import com.yiqiu.shirohaquiz.ui.screens.RecordsScreen
+import com.yiqiu.shirohaquiz.ui.screens.WrongBookScreen
 
 private enum class MainTab(
     val title: String,
@@ -49,7 +51,9 @@ private enum class MainTab(
     Import("导入", Icons.Rounded.ImportExport),
     Me("我的", Icons.Rounded.Settings),
     Exam("考试", Icons.Rounded.School, showInBottomBar = false),
-    BankDetail("题库详情", Icons.Rounded.Dashboard, showInBottomBar = false)
+    BankDetail("题库详情", Icons.Rounded.Dashboard, showInBottomBar = false),
+    WrongBook("错题本", Icons.Rounded.School, showInBottomBar = false),
+    Records("记录", Icons.Rounded.Dashboard, showInBottomBar = false)
 }
 
 @Composable
@@ -120,14 +124,17 @@ fun ShirohaAppShell() {
                         onOpenBankDetail = { bankId ->
                             detailBankId = bankId
                             currentTab = MainTab.BankDetail
-                        }
+                        },
+                        onOpenWrongBook = { currentTab = MainTab.WrongBook },
+                        onOpenRecords = { currentTab = MainTab.Records }
                     )
 
                     MainTab.Practice -> PracticeScreen()
-                    MainTab.Import -> ImportScreen(
-                        onImportSaved = { currentTab = MainTab.Home }
+                    MainTab.Import -> ImportScreen(onImportSaved = { currentTab = MainTab.Home })
+                    MainTab.Me -> MeScreen(
+                        onOpenWrongBook = { currentTab = MainTab.WrongBook },
+                        onOpenRecords = { currentTab = MainTab.Records }
                     )
-                    MainTab.Me -> MeScreen()
                     MainTab.Exam -> ExamScreen(
                         onBackHome = { currentTab = MainTab.Home },
                         onGoPractice = { currentTab = MainTab.Practice }
@@ -137,6 +144,13 @@ fun ShirohaAppShell() {
                         onBack = { currentTab = MainTab.Home },
                         onGoPractice = { currentTab = MainTab.Practice },
                         onGoExam = { currentTab = MainTab.Exam }
+                    )
+                    MainTab.WrongBook -> WrongBookScreen(
+                        onBack = { currentTab = MainTab.Home },
+                        onGoPractice = { currentTab = MainTab.Practice }
+                    )
+                    MainTab.Records -> RecordsScreen(
+                        onBack = { currentTab = MainTab.Home }
                     )
                 }
             }

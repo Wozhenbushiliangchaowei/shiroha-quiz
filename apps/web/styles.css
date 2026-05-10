@@ -4506,6 +4506,30 @@ body.exam-focus #exam-card{
   width:100%;
   min-height:46px;
 }
+#dashboard .dashboard-stats-row{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+#dashboard .dashboard-stat-item{
+  text-align:center;
+  padding:14px 8px;
+  border-radius:12px;
+  background:#f5f7fb;
+}
+#dashboard .dashboard-stat-item b{
+  display:block;
+  font-size:24px;
+  line-height:1.2;
+  color:var(--ink);
+}
+#dashboard .dashboard-stat-item span{
+  display:block;
+  margin-top:4px;
+  font-size:12px;
+  color:var(--muted);
+  font-weight:700;
+}
 #dashboard .dashboard-tips{
   margin:0;
   padding-left:18px;
@@ -5004,3 +5028,96 @@ body.exam-focus #exam-card{
   }
 }
 /* SHIROHA_WEB_V29_2_FORM_ACTIONS_AND_HOME_TUNE_END */
+
+
+/* SHIROHA_WEB_V29_3_HOME_BALANCE_REFINE_START
+   Web 首页精修：
+   - 删除左侧底部三个说明性 mini metric 后，重新平衡左右区域；
+   - 版本提示与快捷卡片之间拉开一点；
+   - 右侧角色卡片略微缩小；
+   - 左右主区域接近等宽，避免左侧过宽、右侧视觉偏重。 */
+#dashboard .dashboard-home-hero{
+  grid-template-columns:minmax(0,1fr) minmax(320px,.92fr) !important;
+  gap:22px !important;
+  align-items:center !important;
+  padding:22px 24px !important;
+  min-height:0 !important;
+}
+
+#dashboard .dashboard-home-main{
+  justify-content:center !important;
+  gap:16px !important;
+}
+
+#dashboard .dashboard-home-main .kicker{
+  margin-bottom:2px !important;
+}
+
+#dashboard .dashboard-home-main h2{
+  margin-bottom:4px !important;
+}
+
+#dashboard .dashboard-home-desc{
+  margin-bottom:4px !important;
+}
+
+#dashboard .dashboard-action-grid{
+  margin-top:14px !important;
+  gap:12px !important;
+}
+
+#dashboard .dashboard-progress-row{
+  display:none !important;
+}
+
+#dashboard .dashboard-home-side{
+  grid-template-rows:auto auto !important;
+  align-content:center !important;
+  gap:12px !important;
+}
+
+#dashboard .dashboard-character-card{
+  min-height:164px !important;
+  max-height:188px !important;
+  padding:12px 18px !important;
+}
+
+#dashboard .dashboard-character-card .hero-mascot-main{
+  max-width:min(78%,190px) !important;
+  max-height:160px !important;
+}
+
+#dashboard .dashboard-stat-grid{
+  gap:10px !important;
+}
+
+#dashboard .dashboard-stat-grid > div{
+  min-height:74px !important;
+  padding:12px 12px !important;
+}
+
+#dashboard .dashboard-stat-grid b{
+  font-size:25px !important;
+}
+
+#dashboard .dashboard-stat-grid span{
+  margin-top:4px !important;
+  font-size:12px !important;
+}
+
+@media(max-width:1180px){
+  #dashboard .dashboard-home-hero{
+    grid-template-columns:1fr !important;
+  }
+  #dashboard .dashboard-home-side{
+    grid-template-columns:minmax(0,1fr) minmax(260px,.9fr) !important;
+    grid-template-rows:auto !important;
+  }
+}
+
+@media(max-width:760px){
+  #dashboard .dashboard-home-side{
+    grid-template-columns:1fr !important;
+  }
+}
+/* SHIROHA_WEB_V29_3_HOME_BALANCE_REFINE_END */

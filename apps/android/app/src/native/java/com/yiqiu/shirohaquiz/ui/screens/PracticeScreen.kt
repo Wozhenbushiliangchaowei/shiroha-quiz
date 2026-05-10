@@ -16,10 +16,6 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -38,7 +34,7 @@ import com.yiqiu.shirohaquiz.ui.theme.ShirohaSpacing
 fun PracticeScreen() {
     val bank = QuizRepository.activeBank()
     val question = QuizRepository.currentPracticeQuestion()
-    var submitted by remember(question?.id) { mutableStateOf(false) }
+    val result = QuizRepository.practiceLastResult
 
     Column(
         modifier = Modifier
@@ -50,9 +46,9 @@ fun PracticeScreen() {
             kicker = "Practice",
             title = "原生练习页",
             subtitle = if (bank == null || bank.questions.isEmpty()) {
-                "当前还没有可练习的题目。先去导入页导入一份标准题库。"
+                "当前还没有可练习的题目。先去导入页导入一份原生题库。"
             } else {
-                "当前题库：${bank.name}，共 ${bank.questions.size} 题。这里已经开始读取真实导入结果。"
+                "当前题库：${bank.name}，共 ${bank.questions.size} 题。练习提交后会自动写入错题本和学习记录。"
             }
         )
 
@@ -100,7 +96,7 @@ fun PracticeScreen() {
 
                 QuestionType.BLANK,
                 QuestionType.SHORT -> {
-                    NoticeCard("这道题属于 ${typeLabel(question.type)}，当前练习页先展示参考答案和解析，后续再补原生主观题作答交互。")
+                    NoticeCard("这道题属于 ${typeLabel(question.type)}，当前练习页先展示参考答案和解析，后续再补原生主观题作答。")
                 }
             }
 
@@ -110,19 +106,13 @@ fun PracticeScreen() {
                     Icons.AutoMirrored.Rounded.ArrowBack,
                     "上一题",
                     primary = false,
-                    onClick = {
-                        QuizRepository.previousQuestion()
-                        submitted = false
-                    }
+                    onClick = { QuizRepository.previousQuestion() }
                 )
                 ActionPillButton(
                     Icons.AutoMirrored.Rounded.ArrowForward,
                     "下一题",
                     primary = false,
-                    onClick = {
-                        QuizRepository.nextQuestion()
-                        submitted = false
-                    }
+                    onClick = { QuizRepository.nextQuestion() }
                 )
             }
             Spacer(Modifier.height(12.dp))
@@ -130,20 +120,28 @@ fun PracticeScreen() {
                 ActionPillButton(
                     Icons.Rounded.CheckCircle,
                     "提交答案",
-                    onClick = { submitted = true }
+                    onClick = { QuizRepository.submitPracticeQuestion() }
                 )
                 ActionPillButton(
                     Icons.AutoMirrored.Rounded.TextSnippet,
                     "查看解析",
                     primary = false,
-                    onClick = { submitted = true }
+                    onClick = {
+                        if (QuizRepository.practiceLastResult == null) {
+                            QuizRepository.submitPracticeQuestion()
+                        }
+                    }
                 )
             }
 
-            if (submitted) {
+            if (result != null) {
                 Spacer(Modifier.height(16.dp))
-                val answerText = question.answer.joinToString(" / ").ifBlank { "未识别答案" }
-                NoticeCard("正确答案：$answerText")
+                NoticeCard(
+                    text = if (result.correct) "回答正确" else "回答错误",
+                    warning = !result.correct
+                )
+                Spacer(Modifier.height(8.dp))
+                NoticeCard("正确答案：${result.answerText}", warning = false)
                 if (question.analysis.isNotBlank()) {
                     Spacer(Modifier.height(8.dp))
                     Text(

@@ -2,8 +2,12 @@ package com.yiqiu.shirohaquiz.importer.parser
 
 import com.yiqiu.shirohaquiz.importer.model.QuestionType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.ByteArrayOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 class QuizImportParserTest {
 
@@ -28,6 +32,24 @@ class QuizImportParserTest {
         assertEquals(4, question.options.size)
         assertEquals(listOf("A"), question.answer)
         assertTrue(question.analysis.contains("减轻坠落物"))
+    }
+
+    @Test
+    fun `should remove trailing answer from stem even when explicit answer line exists`() {
+        val raw = """
+            1. 雨天驾驶时应注意哪些事项（AB）
+            A. 降低车速
+            B. 加大跟车距离
+            C. 急打方向
+            D. 紧急制动
+            答案：AB
+        """.trimIndent()
+
+        val result = QuizImportParser.parseStandardText(raw)
+        val question = result.questions.single()
+
+        assertFalse(question.question.contains("(AB)"))
+        assertEquals(listOf("A", "B"), question.answer)
     }
 
     @Test
@@ -64,7 +86,7 @@ class QuizImportParserTest {
             1. 安全帽的主要作用是（ ）
             A. 保护头部
             B. 装饰作用
-            
+
             答案解析
             1.【答案】A【解析】安全帽用于保护头部。
         """.trimIndent()
@@ -142,5 +164,32 @@ class QuizImportParserTest {
         val result = QuizImportParser.parseStandardText(raw)
         assertEquals(2, result.questions.size)
         assertTrue(result.questions.none { it.question.contains("单选题") || it.question.contains("多选题") })
+    }
+
+    @Test
+    fun `docx decoder should extract readable text from word xml`() {
+        val xml = """
+            <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+              <w:body>
+                <w:p><w:r><w:t>1. 安全帽的主要作用是（A）</w:t></w:r></w:p>
+                <w:p><w:r><w:t>A. 保护头部</w:t></w:r></w:p>
+                <w:p><w:r><w:t>答案：A</w:t></w:r></w:p>
+              </w:body>
+            </w:document>
+        """.trimIndent()
+
+        val docxBytes = ByteArrayOutputStream().use { output ->
+            ZipOutputStream(output).use { zip ->
+                zip.putNextEntry(ZipEntry("word/document.xml"))
+                zip.write(xml.toByteArray(Charsets.UTF_8))
+                zip.closeEntry()
+            }
+            output.toByteArray()
+        }
+
+        val text = TextImportDecoder.decode(docxBytes, "sample.docx")
+
+        assertTrue(text?.contains("安全帽的主要作用") == true)
+        assertTrue(text?.contains("答案:A") == true)
     }
 }

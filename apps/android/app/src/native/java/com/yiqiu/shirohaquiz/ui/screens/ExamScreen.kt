@@ -29,11 +29,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.yiqiu.shirohaquiz.R
 import com.yiqiu.shirohaquiz.importer.model.QuestionType
 import com.yiqiu.shirohaquiz.state.ExamSummary
 import com.yiqiu.shirohaquiz.state.QuizRepository
 import com.yiqiu.shirohaquiz.ui.components.ActionPillButton
+import com.yiqiu.shirohaquiz.ui.components.EmptyStateIllustration
 import com.yiqiu.shirohaquiz.ui.components.GlassCard
+import com.yiqiu.shirohaquiz.ui.components.IllustrationHeroCard
 import com.yiqiu.shirohaquiz.ui.components.MetricGlassCard
 import com.yiqiu.shirohaquiz.ui.components.NoticeCard
 import com.yiqiu.shirohaquiz.ui.components.QuizOptionCard
@@ -75,13 +78,18 @@ fun ExamScreen(
         ShirohaHeader(
             kicker = "Exam",
             title = "原生考试模式",
-            subtitle = "这条流程只走原生安卓：题量设置、计时、交卷和结果页都在这里继续完成。"
+            subtitle = "这条流程只走原生 Android：题量设置、计时、交卷和结果页都在这里闭环。"
         )
 
         if (activeBank == null || activeBank.questions.isEmpty()) {
+            EmptyStateIllustration(
+                title = "还没有可用于考试的题库",
+                message = "先在原生导入页导入题库，考试流就能真正跑起来。",
+                action = {
+                    Spacer(Modifier.height(14.dp))
+                }
+            )
             GlassCard {
-                NoticeCard("当前还没有可用于考试的题库。请先在原生导入页导入题库。")
-                Spacer(Modifier.height(14.dp))
                 ActionPillButton(
                     icon = Icons.Rounded.PlayArrow,
                     text = "返回首页",
@@ -111,7 +119,7 @@ fun ExamScreen(
         }
 
         if (!QuizRepository.examFinished && examQuestion != null) {
-            ActiveExamPanel(examQuestion.type)
+            ActiveExamPanel()
             return
         }
 
@@ -142,6 +150,13 @@ private fun ExamSetupPanel(
     onStartExam: () -> Unit,
     onBackHome: () -> Unit
 ) {
+    IllustrationHeroCard(
+        title = "配置考试参数",
+        subtitle = "思考状态图只放在考试设置页。真正答题时把画面让给题目、计时和选项。",
+        imageRes = R.drawable.illus_thinking_state,
+        imageSize = 104.dp
+    )
+
     GlassCard {
         Text(
             text = "考试设置",
@@ -214,8 +229,9 @@ private fun ExamSetupPanel(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ActiveExamPanel(questionType: QuestionType) {
+private fun ActiveExamPanel() {
     val examQuestion = QuizRepository.currentExamQuestion() ?: return
+    val questionType = examQuestion.type
 
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         MetricGlassCard(
@@ -302,7 +318,7 @@ private fun ActiveExamPanel(questionType: QuestionType) {
             )
             ActionPillButton(
                 icon = Icons.Rounded.Timer,
-                text = "返回首页",
+                text = "结束本场",
                 primary = false,
                 onClick = { QuizRepository.resetExam() }
             )
@@ -326,7 +342,7 @@ private fun FinishedExamPanel(
         )
         Spacer(Modifier.height(12.dp))
         if (examSummary.autoSubmitted) {
-            NoticeCard("本场考试因倒计时结束而自动交卷。", warning = false)
+            NoticeCard("本场考试因为倒计时结束而自动交卷。", warning = false)
             Spacer(Modifier.height(12.dp))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -41,11 +41,11 @@
 
             <ImageView
                 android:id="@+id/launch_mascot"
-                android:layout_width="136dp"
-                android:layout_height="136dp"
+                android:layout_width="174dp"
+                android:layout_height="150dp"
                 android:contentDescription="Shiroha Quiz"
                 android:scaleType="fitCenter"
-                android:src="@drawable/ic_launcher_foreground_image" />
+                android:src="@drawable/home_welcome_avatar" />
 
             <TextView
                 android:layout_width="wrap_content"
