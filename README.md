@@ -77,9 +77,6 @@ shiroha-quiz/
 ├── docs/                  # 产品、设计、架构文档
 ├── assets/                # 设计素材、归档、备选图片
 ├── releases/              # 历史发布压缩包
-├── build-release.ps1      # Web 壳子发布脚本
-├── build-release-native.ps1  # 原生版发布脚本
-├── source-upload.ps1      # 源码上传助手
 └── CHANGELOG.md
 ```
 
