@@ -9,10 +9,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.TextSnippet
 import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.TextSnippet
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -86,7 +86,13 @@ fun PracticeScreen() {
                         QuizOptionCard(
                             label = option.key,
                             text = option.text,
-                            selected = QuizRepository.selectedAnswer.contains(option.key)
+                            selected = QuizRepository.selectedAnswer.contains(option.key),
+                            onClick = {
+                                QuizRepository.toggleAnswer(
+                                    key = option.key,
+                                    multiple = question.type == QuestionType.MULTIPLE
+                                )
+                            }
                         )
                         Spacer(Modifier.height(10.dp))
                     }
@@ -94,14 +100,14 @@ fun PracticeScreen() {
 
                 QuestionType.BLANK,
                 QuestionType.SHORT -> {
-                    NoticeCard("这道题属于 ${typeLabel(question.type)}，当前练习页先展示参考答案和解析。后面再继续补原生主观题作答交互。")
+                    NoticeCard("这道题属于 ${typeLabel(question.type)}，当前练习页先展示参考答案和解析，后续再补原生主观题作答交互。")
                 }
             }
 
             Spacer(Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ActionPillButton(
-                    Icons.Rounded.ArrowBack,
+                    Icons.AutoMirrored.Rounded.ArrowBack,
                     "上一题",
                     primary = false,
                     onClick = {
@@ -110,7 +116,7 @@ fun PracticeScreen() {
                     }
                 )
                 ActionPillButton(
-                    Icons.Rounded.ArrowForward,
+                    Icons.AutoMirrored.Rounded.ArrowForward,
                     "下一题",
                     primary = false,
                     onClick = {
@@ -127,7 +133,7 @@ fun PracticeScreen() {
                     onClick = { submitted = true }
                 )
                 ActionPillButton(
-                    Icons.Rounded.TextSnippet,
+                    Icons.AutoMirrored.Rounded.TextSnippet,
                     "查看解析",
                     primary = false,
                     onClick = { submitted = true }

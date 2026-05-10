@@ -17,10 +17,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.FileOpen
-import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.FileOpen
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -62,7 +62,7 @@ fun ImportScreen(
     var selectedAnswerFileName by rememberSaveable { mutableStateOf("未选择答案文件") }
     var importResult by remember { mutableStateOf<ImportResult?>(null) }
     var statusText by rememberSaveable {
-        mutableStateOf("当前先接入原生标准题库导入。推荐先导入 txt / json / csv 这类文本文件。")
+        mutableStateOf("当前先接入原生标准题库导入。推荐优先导入 txt / json / csv 这类文本文件。")
     }
     var isStatusWarn by rememberSaveable { mutableStateOf(false) }
     var useDualImport by rememberSaveable { mutableStateOf(false) }
@@ -73,7 +73,7 @@ fun ImportScreen(
         val text = readTextSafely(context, uri)
         if (text == null) {
             importResult = null
-            statusText = "当前原生导入第一版只保证标准文本题库。这个文件还不能稳定读取，请先转成 txt 再导入。"
+            statusText = "当前原生导入第一版只保证标准文本题库。这个文件暂时不能稳定读取，请先转成 txt 再导入。"
             isStatusWarn = true
         } else {
             rawText = text
@@ -107,7 +107,7 @@ fun ImportScreen(
         ShirohaHeader(
             kicker = "Import",
             title = "原生导入题库",
-            subtitle = "这版开始接入真正的 Kotlin 原生导入链。当前先支持标准文本题库导入与原生预览。"
+            subtitle = "这版开始接入真正的 Kotlin 原生导入链。当前优先支持标准文本题库导入与原生预览。"
         )
 
         GlassCard {
@@ -124,11 +124,11 @@ fun ImportScreen(
                 StatusChip("标准文本导入", selected = !useDualImport)
                 StatusChip("原生结果预览", selected = true)
                 StatusChip("文件选择", selected = true)
-                StatusChip("答案区解析", selected = false)
+                StatusChip("答案区解析", selected = true)
                 StatusChip("双文件导入", selected = useDualImport)
             }
             Spacer(Modifier.height(14.dp))
-            NoticeCard(statusText)
+            NoticeCard(statusText, warning = isStatusWarn)
         }
 
         GlassCard {
@@ -216,6 +216,7 @@ fun ImportScreen(
                 textStyle = MaterialTheme.typography.bodyMedium,
                 placeholder = { Text("把标准题库文本粘贴到这里，或通过上方选择文件导入。") }
             )
+
             if (useDualImport) {
                 Spacer(Modifier.height(14.dp))
                 Text(
@@ -251,6 +252,7 @@ fun ImportScreen(
                     onClick = { answerFilePicker.launch(arrayOf("*/*")) }
                 )
             }
+
             Spacer(Modifier.height(14.dp))
             ActionPillButton(
                 icon = Icons.Rounded.PlayArrow,
@@ -282,6 +284,7 @@ fun ImportScreen(
 
         importResult?.let { result ->
             NativeImportSummary(result)
+
             GlassCard {
                 Text(
                     text = "写入原生题库",
@@ -290,7 +293,7 @@ fun ImportScreen(
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    text = "确认无误后，将当前解析结果写入原生题库状态，首页和练习页会直接使用这批数据。",
+                    text = "确认无误后，将当前解析结果写入原生题库状态。首页和练习页会直接使用这批数据。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -300,9 +303,7 @@ fun ImportScreen(
                     text = "保存为当前题库",
                     primary = true,
                     onClick = {
-                        val bankName = selectedFileName
-                            .substringBeforeLast('.')
-                            .ifBlank { "导入题库" }
+                        val bankName = selectedFileName.substringBeforeLast('.').ifBlank { "导入题库" }
                         QuizRepository.importBank(context, bankName, result.questions)
                         statusText = "已写入原生题库：$bankName，共 ${result.questions.size} 题。现在可以切到首页或练习页查看。"
                         isStatusWarn = false
@@ -310,6 +311,7 @@ fun ImportScreen(
                     }
                 )
             }
+
             NativeImportPreview(result.questions)
         }
     }
@@ -340,8 +342,25 @@ private fun NativeImportSummary(result: ImportResult) {
         if (result.warnings.isNotEmpty()) {
             Spacer(Modifier.height(14.dp))
             result.warnings.take(6).forEach { warning ->
-                NoticeCard("第${warning.questionNumber ?: "-"}题：${warning.message}")
+                NoticeCard("第 ${warning.questionNumber ?: "-"} 题：${warning.message}")
                 Spacer(Modifier.height(8.dp))
+            }
+        }
+        if (result.diagnostics.notes.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "候选策略诊断",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(8.dp))
+            result.diagnostics.notes.take(4).forEach { note ->
+                Text(
+                    text = "• $note",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(6.dp))
             }
         }
     }
@@ -442,7 +461,6 @@ C. 增加重量
 D. 无实际作用
 答案：A
 解析：安全帽用于减轻坠落物和碰撞对头部造成的伤害。
-
 2. 雨天驾驶时应注意哪些事项（AB）
 A. 降低车速
 B. 加大跟车距离
@@ -450,12 +468,9 @@ C. 急打方向
 D. 紧急制动
 答案：AB
 解析：雨天路滑，应平稳控制车辆并留足安全距离。
-
 3. 国家安全生产方针是“安全第一，预防为主”。（对）
-A. 对
-B. 错
 答案：对
-解析：这是常见的安全生产基础判断题。
+解析：这是一道基础判断题，答案为正确。
 """.trimIndent()
 
 private fun sampleAnswerText(): String = """

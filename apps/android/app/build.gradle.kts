@@ -10,7 +10,7 @@ android {
     defaultConfig {
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
+        versionCode = 5
         versionName = "0.3.5-alpha"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -96,7 +96,8 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.material3:material3")
     implementation("com.google.android.material:material:1.12.0")
-    testImplementation("junit:junit:4.13.2")
+    testImplementation(files("E:/codex/exercise/output/gradle-8.7/lib/junit-4.13.2.jar"))
+    testImplementation(files("E:/codex/exercise/output/gradle-8.7/lib/hamcrest-core-1.3.jar"))
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

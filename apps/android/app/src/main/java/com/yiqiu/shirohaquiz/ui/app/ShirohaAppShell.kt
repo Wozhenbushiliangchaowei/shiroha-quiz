@@ -107,9 +107,14 @@ fun ShirohaAppShell() {
                 label = "main_tabs"
             ) { tab ->
                 when (tab) {
-                    MainTab.Home -> HomeScreen()
+                    MainTab.Home -> HomeScreen(
+                        onGoImport = { currentTab = MainTab.Import },
+                        onGoPractice = { currentTab = MainTab.Practice }
+                    )
                     MainTab.Practice -> PracticeScreen()
-                    MainTab.Import -> ImportScreen()
+                    MainTab.Import -> ImportScreen(
+                        onImportSaved = { currentTab = MainTab.Home }
+                    )
                     MainTab.Me -> MeScreen()
                 }
             }

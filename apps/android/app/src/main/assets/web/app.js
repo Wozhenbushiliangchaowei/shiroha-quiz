@@ -1,5 +1,5 @@
 (function(){
-const APP_VERSION='v28';
+const APP_VERSION='v28.2';
 const CURRENT_SCHEMA_VERSION=1;
 const KEY='shiroha_quiz_state_v28_4_c1';
 const LEGACY_KEYS=[];
@@ -58,6 +58,15 @@ function upgradeState(){
 function saveState(){localStorage.setItem(KEY,serializeState());toast('已保存到浏览器本地。','ok')}
 function now(){return new Date().toISOString()}
 function activeBank(){return state.banks.find(b=>b.id===state.activeBankId)||state.banks[0]||{questions:[]}}
+function resetViewScrollV282(){
+  try{
+    const main=document.querySelector('.main');
+    if(main)main.scrollTop=0;
+    requestAnimationFrame(()=>window.scrollTo({top:0,left:0,behavior:'auto'}));
+  }catch(_){
+    try{window.scrollTo(0,0)}catch(__){}
+  }
+}
 function bindNav(){ $$('.nav').forEach(btn=>btn.onclick=()=>{
   const target=btn.dataset.view;
   const view=target&&$('#'+target);
@@ -65,6 +74,7 @@ function bindNav(){ $$('.nav').forEach(btn=>btn.onclick=()=>{
   $$('.nav').forEach(b=>b.classList.toggle('active',b===btn));
   $$('.view').forEach(v=>v.classList.toggle('active',v===view));
   const title=$('#page-title');if(title)title.textContent=btn.textContent;
+  resetViewScrollV282();
 });}
 function bindEvents(){
 $('#active-bank-select').onchange=e=>{state.activeBankId=e.target.value;saveSilent();renderAll()};const importNameInput=$('#import-bank-name');if(importNameInput)importNameInput.addEventListener('input',()=>{importNameInput.dataset.autoName='0'});$('#save-all-btn').onclick=saveState;

@@ -10,7 +10,7 @@
 
     <style name="Theme.ShirohaQuiz.Starting" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/surface</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_blank</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground_image</item>
         <item name="windowSplashScreenIconBackgroundColor">@android:color/transparent</item>
         <item name="postSplashScreenTheme">@style/Theme.ShirohaQuiz</item>
     </style>

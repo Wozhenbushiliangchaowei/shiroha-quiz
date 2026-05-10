@@ -3,12 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Shiroha Quiz - v28 WebView 与复习增强测试版</title>
+  <title>Shiroha Quiz - v28.2 双端布局精修版</title>
   <link rel="icon" type="image/png" href="./app-icon.png" />
   <link rel="apple-touch-icon" href="./app-icon.png" />
   <link rel="stylesheet" href="./styles.css" />
   <link rel="preload" as="image" href="./media/home_welcome_avatar.png" />
   <link rel="preload" as="image" href="./media/import_question_bank_folder.png" />
+  <link rel="preload" as="image" href="./media/app_header_walk_strip.jpg" />
 </head>
 <body>
   <div class="app-splash" aria-hidden="true">
@@ -36,6 +37,7 @@
     </aside>
 
     <main class="main">
+      <img class="app-mobile-top-art" src="./media/app_header_walk_strip.jpg" alt="" aria-hidden="true" />
       <header class="topbar">
         <div>
           <p class="kicker">Shiroha Quiz</p>
@@ -51,8 +53,8 @@
         <div class="hero-card">
           <div>
             <p class="kicker">当前版本</p>
-            <h2>v28：WebView 与复习增强测试版。</h2>
-            <p>本版在保留移动端布局修复与页面素材规则的基础上，为 App 壳加入轻量开屏动画和页面素材动效。</p>
+            <h2>v28.2：双端布局精修版。</h2>
+            <p>本版重点优化移动端底部导航、页面留白和角色素材位置，双端结构保持独立，避免互相覆盖。</p>
           </div>
           <div class="hero-stats hero-stats-app">
             <div class="hero-visual-card">
@@ -76,7 +78,7 @@
           <div class="section-head"><div><p class="kicker">Import</p><h2>单文件智能导入</h2></div><button id="load-sample-btn" class="ghost">填入示例</button></div>
           <div class="import-stage-panel">
             <div class="import-stage-copy">
-              <b>先导入，再核对，最后开始练习。</b>
+              <b>导入、核对、开始练习</b>
               <p>这一页优先保证清晰、稳定和适合手指操作。先上传题库，再在预览区确认识别结果，最后一键创建题库。</p>
               <div class="import-stage-tags">
                 <span class="stage-tag active">1 导入文件</span>
@@ -174,7 +176,7 @@ C. 判断题
         <div class="card">
           <div class="section-head"><div><p class="kicker">Practice</p><h2>练习设置</h2></div><div class="pill" id="practice-progress">0 / 0</div></div>
           <div class="page-art-strip practice-art-strip">
-            <div><b>选择题型和题量后开始练习</b><span>练习页保留一个学习状态素材，避免占用答题区域。</span></div>
+            <div><b>选好题型后开始练习</b><span>练习页保留一个学习状态素材，避免占用答题区域。</span></div>
             <img src="./media/quiz_in_progress_study.png" alt="刷题学习素材" />
           </div>
           <div class="form-grid">
@@ -194,7 +196,7 @@ C. 判断题
         <div class="card" id="exam-setup">
           <div class="section-head"><div><p class="kicker">Exam</p><h2>考试设置</h2></div><div class="pill" id="exam-timer">未开始</div></div>
           <div class="page-art-strip exam-art-strip">
-            <div><b>配置考试参数，再开始模拟</b><span>考试模式使用思考提示素材，保持页面轻量，不遮挡试卷区域。</span></div>
+            <div><b>配置参数后开始模拟</b><span>考试模式使用思考提示素材，保持页面轻量，不遮挡试卷区域。</span></div>
             <img src="./media/thinking_state_question.png" alt="思考提示素材" />
           </div>
           <div class="form-grid">
@@ -217,7 +219,7 @@ C. 判断题
 
       <section id="wrongbook" class="view"><div class="card"><div class="section-head"><div><p class="kicker">Wrongbook</p><h2>错题整理</h2></div><button id="clear-wrong-btn" class="danger">清空错题</button></div><div class="page-art-strip wrongbook-art-strip"><div><b>错题复习与掌握状态</b><span>错题本页面使用一个复习素材，帮助区分学习场景，不额外堆叠图片。</span></div><img src="./media/wrong_question_review_clipboard.png" alt="错题复习素材" /></div><div class="form-grid"><label>掌握状态筛选<select id="wrong-status-filter"><option value="active">未掌握/复习中</option><option value="all">全部错题记录</option><option value="未掌握">未掌握</option><option value="复习中">复习中</option><option value="已掌握">已掌握</option></select></label><label>排序<select id="wrong-sort-mode"><option value="lastWrong">最近答错优先</option><option value="wrongCount">错误次数最多</option><option value="status">按掌握状态</option></select></label><label>快捷操作<button id="practice-wrong-btn" class="primary" type="button">重练未掌握错题</button></label></div><div id="wrongbook-list" class="list"></div></div></section>
       <section id="records" class="view"><div class="card"><div class="section-head"><div><p class="kicker">Records</p><h2>记录筛选与导出</h2></div><div class="actions"><button id="export-records-btn" class="ghost">导出记录</button><button id="clear-records-btn" class="danger">清空记录</button></div></div><div class="page-art-strip records-art-strip"><div><b>查看练习与考试记录</b><span>记录页使用休息状态素材，表示阶段性回顾和复盘。</span></div><img src="./media/rest_sleep_pillow.png" alt="休息睡眠素材" /></div><div class="form-grid"><label>记录类型<select id="record-mode-filter"><option value="all">全部</option><option value="练习">练习</option><option value="考试">考试</option></select></label><label>显示范围<select id="record-limit"><option value="30">最近30条</option><option value="100">最近100条</option><option value="all">全部</option></select></label><label>统计<button id="record-refresh-btn" class="ghost" type="button">刷新记录</button></label></div><div id="records-list" class="list"></div></div></section>
-      <section id="settings" class="view"><div class="card"><h2>设置与导出</h2><div class="page-art-strip settings-art-strip"><div><b>定期导出备份，避免本地数据丢失</b><span>设置页使用等待/备份状态素材，保持单页视觉提示不拥挤。</span></div><img src="./media/loading_waiting_hourglass.png" alt="加载等待素材" /></div><p>数据保存在浏览器 localStorage 中。更换浏览器或清理缓存会丢失数据，请定期导出。</p><div class="actions"><button id="export-json-btn" class="primary">导出当前题库 JSON</button><button id="export-all-btn" class="ghost">导出全部数据 JSON</button><button id="reset-data-btn" class="danger">清除全部本地数据</button></div><textarea id="export-output" readonly placeholder="导出内容会显示在这里，也会自动下载文件。"></textarea><details class="asset-reference-details"><summary>角色基准素材预览</summary><img src="./media/mascot_character_sheet.png" alt="角色基准素材" /></details></div></section>
+      <section id="settings" class="view"><div class="card"><h2>设置与导出</h2><div class="page-art-strip settings-art-strip"><div><b>定期导出备份，避免丢失</b><span>设置页使用等待/备份状态素材，保持单页视觉提示不拥挤。</span></div><img src="./media/loading_waiting_hourglass.png" alt="加载等待素材" /></div><p>数据保存在浏览器 localStorage 中。更换浏览器或清理缓存会丢失数据，请定期导出。</p><div class="actions"><button id="export-json-btn" class="primary">导出当前题库 JSON</button><button id="export-all-btn" class="ghost">导出全部数据 JSON</button><button id="reset-data-btn" class="danger">清除全部本地数据</button></div><textarea id="export-output" readonly placeholder="导出内容会显示在这里，也会自动下载文件。"></textarea><details class="asset-reference-details"><summary>角色基准素材预览</summary><img src="./media/mascot_character_sheet.png" alt="角色基准素材" /></details></div></section>
     </main>
   </div>
 

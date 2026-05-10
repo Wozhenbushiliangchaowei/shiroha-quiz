@@ -1,5 +1,5 @@
 (function(){
-const APP_VERSION='v28';
+const APP_VERSION='v28.2';
 const CURRENT_SCHEMA_VERSION=1;
 const KEY='shiroha_quiz_state_v28_4_c1';
 const LEGACY_KEYS=[];
@@ -58,6 +58,15 @@ function upgradeState(){
 function saveState(){localStorage.setItem(KEY,serializeState());toast('已保存到浏览器本地。','ok')}
 function now(){return new Date().toISOString()}
 function activeBank(){return state.banks.find(b=>b.id===state.activeBankId)||state.banks[0]||{questions:[]}}
+function resetViewScrollV282(){
+  try{
+    const main=document.querySelector('.main');
+    if(main)main.scrollTop=0;
+    requestAnimationFrame(()=>window.scrollTo({top:0,left:0,behavior:'auto'}));
+  }catch(_){
+    try{window.scrollTo(0,0)}catch(__){}
+  }
+}
 function updateShellLayoutByView(viewId){
   const current=viewId||document.querySelector('.view.active')?.id||'dashboard';
   document.body.dataset.activeView=current;
@@ -75,6 +84,7 @@ function bindNav(){ $$('.nav').forEach(btn=>btn.onclick=()=>{
   $$('.view').forEach(v=>v.classList.toggle('active',v===view));
   const title=$('#page-title');if(title)title.textContent=btn.textContent;
   updateShellLayoutByView(target);
+  resetViewScrollV282();
 });}
 function bindEvents(){
 $('#active-bank-select').onchange=e=>{state.activeBankId=e.target.value;saveSilent();renderAll()};const importNameInput=$('#import-bank-name');if(importNameInput)importNameInput.addEventListener('input',()=>{importNameInput.dataset.autoName='0'});$('#save-all-btn').onclick=saveState;
@@ -2818,7 +2828,7 @@ function mergeBackupBanksV23(normalized){
    v27: 收藏题与错题本补强
    v28: App WebView 导出兜底与移动端加固
 */
-function init(){upgradeState();ensureDefaultBank();bindNav();bindEvents();bindV25ToV28Events();ensureV25ToV28Panels();renderBankSelect();renderAll();setupEnhancedDataToolsV23();updateShellLayoutByView();}
+function init(){upgradeState();ensureDefaultBank();bindNav();bindEvents();bindV25ToV28Events();ensureV25ToV28Panels();setupSidebarCollapse();renderBankSelect();renderAll();setupEnhancedDataToolsV23();updateShellLayoutByView();}
 function defaultBank(){
   const qb=window.questionBank||{meta:{title:'内置题库（按需加载）'},questions:[]};
   const qs=Array.isArray(qb.questions)?qb.questions:[];
@@ -3033,6 +3043,86 @@ function importBackupJsonFileV23(e){
 }
 
 /* SHIROHA_V25_2_TO_V28_ENHANCEMENTS_END */
+
+
+
+/* SHIROHA_WEB_V28_2_LAYOUT_AND_IMMERSIVE_FIX_START */
+function setupSidebarCollapse(){
+  if($('#sidebar-toggle'))return;
+  const btn=document.createElement('button');
+  btn.id='sidebar-toggle';
+  btn.type='button';
+  btn.className='sidebar-toggle';
+  document.body.appendChild(btn);
+  const stored=localStorage.getItem('shiroha-sidebar-collapsed')==='1';
+  document.body.classList.toggle('side-collapsed',stored);
+  const refresh=()=>{
+    const collapsed=document.body.classList.contains('side-collapsed');
+    btn.textContent=collapsed?'展开导航':'收起导航';
+    btn.setAttribute('aria-label',collapsed?'展开左侧导航':'收起左侧导航');
+    btn.setAttribute('aria-pressed',String(collapsed));
+  };
+  btn.onclick=()=>{
+    document.body.classList.toggle('side-collapsed');
+    localStorage.setItem('shiroha-sidebar-collapsed',document.body.classList.contains('side-collapsed')?'1':'0');
+    refresh();
+  };
+  refresh();
+}
+function exitExamFocus(){
+  document.body.classList.remove('exam-focus');
+  const setup=$('#exam-setup');
+  if(setup)setup.style.display='';
+}
+function startExam(){
+  let count=Number($('#exam-count').value)||50;
+  exam={name:($('#exam-name').value||'模拟考试').trim(),passScore:Number($('#exam-pass-score').value)||0,items:filteredQuestions('all',$('#exam-type').value,$('#exam-order').value,count),answers:{},start:Date.now(),deadline:0,timer:null,submitted:false};
+  if(!exam.items.length){$('#exam-card').innerHTML='<div class="empty">当前条件下没有题目。</div>';return}
+  const min=Number($('#exam-minutes').value)||0;
+  if(min>0){exam.deadline=Date.now()+min*60000;clearInterval(exam.timer);exam.timer=setInterval(updateTimer,1000);updateTimer()}else $('#exam-timer').textContent='不限时';
+  $('#submit-exam-btn').disabled=false;
+  document.body.classList.add('exam-focus');
+  updateShellLayoutByView('exam');
+  renderExamPaper();
+}
+function updateTimer(){
+  if(!exam.deadline)return;
+  const left=Math.max(0,exam.deadline-Date.now());
+  const m=Math.floor(left/60000),s=Math.floor((left%60000)/1000);
+  const text=`剩余 ${m}:${String(s).padStart(2,'0')}`;
+  $('#exam-timer').textContent=text;
+  const focusTimer=$('#exam-focus-timer');
+  if(focusTimer)focusTimer.textContent=text;
+  if(left<=0)submitExam(true);
+}
+function renderExamPaper(){
+  const timerText=exam.deadline?($('#exam-timer')?.textContent||'计时中'):'不限时';
+  let html=`<div class="exam-focus-head"><div><b>${esc(exam.name||'模拟考试')}</b><span id="exam-focus-timer">${esc(timerText)}</span></div><div class="exam-head-actions"><button class="ghost mini-btn focus-mini-btn" id="exam-exit-focus" type="button">退出考试</button><button class="danger focus-mini-btn" id="exam-submit-focus" type="button">交卷评分</button></div></div><div class="notice warn">考试中：多选题需完全一致才得分；填空/简答按参考答案规范化匹配评分，简答题建议交卷后人工核对。</div>`;
+  exam.items.forEach((q,i)=>{html+=`<div class="exam-q" data-qid="${esc(q.id)}">${questionHtml(q,true,i+1)}</div>`});
+  html+=`<div class="exam-focus-actions"><button class="danger" id="exam-submit-focus-bottom" type="button">交卷评分</button></div>`;
+  $('#exam-card').innerHTML=html;
+  $('#exam-submit-focus').onclick=()=>submitExam(false);
+  $('#exam-submit-focus-bottom').onclick=()=>submitExam(false);
+  $('#exam-exit-focus').onclick=()=>{if(confirm('退出本次考试？当前作答不会评分保存。')){clearInterval(exam.timer);exam={items:[],answers:{},start:0,timer:null,deadline:0,submitted:false};$('#exam-card').innerHTML='<div class="empty">考试已退出，可重新配置后开始。</div>';$('#submit-exam-btn').disabled=true;$('#exam-timer').textContent='未开始';exitExamFocus();}};
+  $$('#exam-card .option').forEach(opt=>{opt.onclick=()=>setTimeout(()=>{const box=opt.closest('.exam-q');const id=box.dataset.qid;exam.answers[id]=selectedKeys(`[data-qid="${CSS.escape(id)}"]`);box.querySelectorAll('.option').forEach(o=>o.classList.toggle('selected',o.querySelector('input').checked))},0)});
+  $$('#exam-card .text-answer').forEach(el=>{el.oninput=()=>{const box=el.closest('.exam-q');if(box)exam.answers[box.dataset.qid]=el.value.trim()?[el.value.trim()]:[]}});
+}
+function submitExam(auto){
+  if(exam.submitted)return;
+  collectExamTextAnswers();exam.submitted=true;clearInterval(exam.timer);let got=0,total=0,correct=0;const details=[];const byType={};
+  exam.items.forEach(q=>{const sc=scoreOf(q);total+=sc;const ans=exam.answers[q.id]||[];const ok=sameAnswerForQuestion(q,ans,q.answer);if(ok){got+=sc;correct++} addWrongOnExam(q.id,!ok);details.push(makeAnswerDetail(q,ans,ok,sc,sc));const k=q.type||'single';byType[k]=byType[k]||{total:0,correct:0,score:0,fullScore:0};byType[k].total++;if(ok)byType[k].correct++;byType[k].score+=ok?sc:0;byType[k].fullScore+=sc;});
+  const acc=Math.round(correct/exam.items.length*100);const rec={id:'rec_'+Date.now(),name:exam.name||'模拟考试',mode:'考试',bankId:activeBank().id,bankName:activeBank().name,total:exam.items.length,answered:Object.keys(exam.answers).length,correct,wrong:exam.items.length-correct,accuracy:acc,score:got,totalScore:total,passScore:exam.passScore,passed:got>=Number(exam.passScore||0),autoSubmitted:!!auto,date:now(),duration:Math.round((Date.now()-exam.start)/1000),details,byType};
+  state.records.unshift(rec);saveSilent();$('#submit-exam-btn').disabled=true;$('#exam-timer').textContent=auto?'已自动交卷':'已交卷';renderExamResult(rec);renderAll();
+}
+function renderExamResult(rec){
+  const typeRows=Object.entries(rec.byType||{}).map(([t,v])=>`<tr><td>${label(t)}</td><td>${v.correct}/${v.total}</td><td>${Number(v.score.toFixed? v.score.toFixed(1):v.score)}/${v.fullScore}</td></tr>`).join('');
+  let html=`<div class="exam-focus-head"><div><b>考试结果</b><span>${esc(rec.name||'模拟考试')}</span></div><div class="exam-head-actions"><button class="primary focus-mini-btn" id="exam-back-setup" type="button">返回考试设置</button></div></div><div class="score-card"><div class="metric"><span>得分</span><b>${rec.score}/${rec.totalScore}</b></div><div class="metric"><span>结果</span><b>${rec.passed?'合格':'未合格'}</b></div><div class="metric"><span>正确率</span><b>${rec.accuracy}%</b></div><div class="metric"><span>用时</span><b>${rec.duration}秒</b></div></div><div class="notice ${rec.passed?'ok':'warn'}">${esc(rec.name||'模拟考试')}：及格线 ${rec.passScore} 分，${rec.autoSubmitted?'系统已自动交卷。':'已交卷。'}</div>${typeRows?`<div class="table-wrap"><table><thead><tr><th>题型</th><th>正确</th><th>得分</th></tr></thead><tbody>${typeRows}</tbody></table></div>`:''}`;
+  exam.items.forEach((q,i)=>{const ans=exam.answers[q.id]||[];html+=`<div class="exam-q" data-result-qid="${esc(q.id)}">${questionHtml(q,true,i+1)}<div class="feedback ${sameAnswerForQuestion(q,ans,q.answer)?'ok':'bad'}">你的答案：${esc(ans.join('；')||'未作答')}｜参考答案：${esc(q.answer.join('；'))}${q.analysis?'<br>解析：'+esc(q.analysis):''}</div></div>`});
+  $('#exam-card').innerHTML=html;
+  $('#exam-back-setup').onclick=()=>exitExamFocus();
+  exam.items.forEach(q=>markOptions(`#exam-card [data-result-qid="${CSS.escape(q.id)}"]`,q,exam.answers[q.id]||[]));
+}
+/* SHIROHA_WEB_V28_2_LAYOUT_AND_IMMERSIVE_FIX_END */
 
 function resetData(){if(confirm('确定清除全部本地数据？默认题库也会重新初始化。')){clearStoredState();location.reload()}}
 })();

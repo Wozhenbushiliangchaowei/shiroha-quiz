@@ -183,9 +183,11 @@ fun ShortcutGlassCard(
 fun QuizOptionCard(
     label: String,
     text: String,
-    selected: Boolean
+    selected: Boolean,
+    onClick: () -> Unit = {}
 ) {
     Surface(
+        modifier = Modifier.clickable(onClick = onClick),
         shape = RoundedCornerShape(ShirohaRadius.Lg),
         color = if (selected) ShirohaColors.BrandPrimarySoft else Color.White.copy(alpha = 0.84f),
         border = BorderStroke(
@@ -264,16 +266,22 @@ fun UploadPanel(
 }
 
 @Composable
-fun NoticeCard(text: String) {
+fun NoticeCard(
+    text: String,
+    warning: Boolean = true
+) {
+    val background = if (warning) ShirohaColors.StateWarningSoft else Color.White.copy(alpha = 0.78f)
+    val foreground = if (warning) Color(0xFF9A6700) else MaterialTheme.colorScheme.onSurface
+
     Surface(
         shape = RoundedCornerShape(20.dp),
-        color = ShirohaColors.StateWarningSoft
+        color = background
     ) {
         Text(
             text = text,
             modifier = Modifier.padding(14.dp),
             style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFF9A6700)
+            color = foreground
         )
     }
 }

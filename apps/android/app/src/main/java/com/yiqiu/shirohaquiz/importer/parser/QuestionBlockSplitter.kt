@@ -6,42 +6,31 @@ data class QuestionBlock(
 )
 
 object QuestionBlockSplitter {
-    private val questionStartRegex = Regex("""^\s*(?:第\s*)?(\d{1,4})\s*(?:题)?[.、．:：]\s*(.*)$""")
+    private val questionStartRegex = Regex(
+        """^\s*(?:第\s*)?(\d{1,4})\s*(?:题)?(?:[.、．:：]|[)）])\s*(.*)$"""
+    )
 
     fun split(text: String): List<QuestionBlock> {
-        val lines = text
-            .lines()
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-
-        if (lines.isEmpty()) return emptyList()
-
         val blocks = mutableListOf<QuestionBlock>()
         var currentNumber: String? = null
         var currentLines = mutableListOf<String>()
 
-        fun flush() {
-            val number = currentNumber ?: return
-            if (currentLines.isNotEmpty()) {
-                blocks += QuestionBlock(number, currentLines.toList())
-            }
-            currentNumber = null
-            currentLines = mutableListOf()
-        }
-
-        lines.forEach { line ->
+        text.lineSequence().forEach { rawLine ->
+            val line = rawLine.trim()
             val match = questionStartRegex.find(line)
             if (match != null) {
-                flush()
+                currentNumber?.let { blocks += QuestionBlock(it, currentLines.toList()) }
                 currentNumber = match.groupValues[1]
-                val rest = match.groupValues[2].trim()
-                if (rest.isNotEmpty()) currentLines += rest
-            } else if (currentNumber != null) {
+                currentLines = mutableListOf<String>().apply {
+                    val remainder = match.groupValues[2].trim()
+                    if (remainder.isNotBlank()) add(remainder)
+                }
+            } else if (currentNumber != null && line.isNotBlank()) {
                 currentLines += line
             }
         }
 
-        flush()
+        currentNumber?.let { blocks += QuestionBlock(it, currentLines.toList()) }
         return blocks
     }
 }

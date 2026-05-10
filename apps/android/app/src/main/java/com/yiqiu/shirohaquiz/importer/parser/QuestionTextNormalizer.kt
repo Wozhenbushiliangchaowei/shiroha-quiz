@@ -2,7 +2,9 @@ package com.yiqiu.shirohaquiz.importer.parser
 
 object QuestionTextNormalizer {
     fun normalize(raw: String): String {
+        if (raw.isBlank()) return ""
         return raw
+            .replace("\uFEFF", "")
             .replace("\r\n", "\n")
             .replace('\r', '\n')
             .replace('\u3000', ' ')
@@ -11,7 +13,10 @@ object QuestionTextNormalizer {
             .replace("）", ")")
             .replace("：", ":")
             .replace("．", ".")
-            .replace("、", ".")
+            .replace("，", ",")
+            .replace("；", ";")
+            .replace("【", "[")
+            .replace("】", "]")
             .lineSequence()
             .map { it.trimEnd() }
             .joinToString("\n")

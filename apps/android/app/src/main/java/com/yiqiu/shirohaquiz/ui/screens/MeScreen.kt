@@ -20,11 +20,11 @@ fun MeScreen() {
         ShirohaHeader(
             kicker = "Me",
             title = "设置与资料",
-            subtitle = "这里后面接导出、备份、解析策略和主题设置。"
+            subtitle = "后面这里会接入导出、备份、解析策略、主题和版本信息。"
         )
         GlassCard {
             Text(
-                text = "当前阶段先把三大核心页做稳，设置页暂时保留为轻量占位。",
+                text = "当前阶段先把原生导入链、原生练习和原生考试主流程做稳，设置页暂时保持轻量占位。",
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }

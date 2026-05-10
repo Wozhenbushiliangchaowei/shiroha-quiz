@@ -8,20 +8,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.rounded.DeleteOutline
-import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoStories
 import androidx.compose.material.icons.rounded.CloudUpload
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import com.yiqiu.shirohaquiz.state.QuizRepository
 import com.yiqiu.shirohaquiz.ui.components.ActionPillButton
 import com.yiqiu.shirohaquiz.ui.components.GlassCard
@@ -48,8 +48,8 @@ fun HomeScreen(
     ) {
         ShirohaHeader(
             kicker = "Shiroha Quiz",
-            title = "原生刷题首页",
-            subtitle = "这条线只服务原生安卓。现在已经接通原生导入预览，下一步是让导入后的题库进入练习和考试流程。"
+            title = "原生题库首页",
+            subtitle = "这里只服务原生安卓。导入成功后的题库会直接进入原生状态，并接入后续练习与考试流程。"
         )
 
         GlassCard {
@@ -67,7 +67,7 @@ fun HomeScreen(
             Spacer(Modifier.height(8.dp))
             Text(
                 text = if (questionCount > 0) {
-                    "当前题库共 $questionCount 题，可以直接切到“练习”页查看真实预览。"
+                    "当前题库共 $questionCount 题，可以直接切到“练习”页查看真实导入结果。"
                 } else {
                     "当前还没有真实导入题目。先到“导入”页导入一份标准文本题库。"
                 },
@@ -107,9 +107,7 @@ fun HomeScreen(
                         icon = Icons.Rounded.Done,
                         text = if (isActive) "当前题库" else "切换到此题库",
                         primary = isActive,
-                        onClick = {
-                            if (!isActive) QuizRepository.setActiveBank(context, bank.id)
-                        }
+                        onClick = { if (!isActive) QuizRepository.setActiveBank(context, bank.id) }
                     )
                     ActionPillButton(
                         icon = Icons.Rounded.DeleteOutline,
@@ -145,7 +143,7 @@ fun HomeScreen(
             ShortcutGlassCard(
                 title = "标准文本导入",
                 icon = Icons.Rounded.AutoStories,
-                desc = "先覆盖最常见题库格式",
+                desc = "优先覆盖最常见题库格式",
                 modifier = Modifier.weight(1f)
             )
             ShortcutGlassCard(
