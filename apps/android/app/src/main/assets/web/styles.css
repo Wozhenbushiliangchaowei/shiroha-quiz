@@ -6122,3 +6122,236 @@ button{
   }
 }
 /* SHIROHA_APP_V29_21_DASHBOARD_NO_IMAGE_UI_FILL_END */
+
+
+/* SHIROHA_APP_V29_23_REMOVE_HOME_LOAD_BUTTONS_DOM_START
+   APP 首页物理删除“加载内置 C1 题库 / 在题库管理中加载”两个重复入口。
+   这里仅作为缓存/旧结构兜底隐藏，不影响题库管理页和导入页功能。 */
+@media(max-width:720px){
+  #dashboard .dashboard-quick-actions,
+  #dashboard #load-built-in-bank-btn,
+  #dashboard #load-built-in-bank-btn-banks{
+    display:none !important;
+    visibility:hidden !important;
+    height:0 !important;
+    min-height:0 !important;
+    max-height:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    overflow:hidden !important;
+  }
+}
+/* SHIROHA_APP_V29_23_REMOVE_HOME_LOAD_BUTTONS_DOM_END */
+
+
+/* SHIROHA_APP_V29_24_DASHBOARD_LAYOUT_FIX_START
+   仪表盘细化：
+   - 当前题库改为满宽信息卡，不再被并排压缩；
+   - 今日建议改为满宽浅蓝提示条；
+   - 三个短指标保留三列；
+   - 首页重复的两个加载按钮继续物理删除 + CSS 兜底隐藏。 */
+@media(max-width:720px){
+  #dashboard .dashboard-study-panel{
+    display:block !important;
+    margin:0 0 14px !important;
+    padding:15px !important;
+    border-radius:24px !important;
+    border:1px solid rgba(105,144,255,.10) !important;
+    background:linear-gradient(180deg,#ffffff 0%,#f7fbff 100%) !important;
+    box-shadow:0 10px 26px rgba(81,119,214,.075), inset 0 1px 0 rgba(255,255,255,.92) !important;
+    overflow:hidden !important;
+  }
+
+  #dashboard .dashboard-study-head{
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) auto !important;
+    gap:10px !important;
+    align-items:start !important;
+    margin:0 0 12px !important;
+  }
+
+  #dashboard .dashboard-study-head .kicker{
+    margin:0 0 5px !important;
+    font-size:12px !important;
+  }
+
+  #dashboard .dashboard-study-head h3{
+    margin:0 !important;
+    font-size:20px !important;
+    line-height:1.15 !important;
+    letter-spacing:-.03em !important;
+    color:#172b49 !important;
+  }
+
+  #dashboard #dashboard-start-practice-btn{
+    min-height:36px !important;
+    height:36px !important;
+    padding:0 12px !important;
+    border-radius:15px !important;
+    font-size:12px !important;
+    white-space:nowrap !important;
+    box-shadow:none !important;
+  }
+
+  #dashboard .dashboard-study-status,
+  #dashboard .dashboard-study-status-card,
+  #dashboard .dashboard-study-status-main,
+  #dashboard .dashboard-study-art-wrap,
+  #dashboard .dashboard-study-art{
+    display:none !important;
+  }
+
+  #dashboard .dashboard-study-bank-card{
+    display:block !important;
+    margin:0 0 9px !important;
+    padding:12px 13px !important;
+    border-radius:18px !important;
+    border:1px solid rgba(123,154,255,.09) !important;
+    background:linear-gradient(180deg,#f2f8ff 0%,#ffffff 100%) !important;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.95) !important;
+  }
+
+  #dashboard .dashboard-study-bank-card span,
+  #dashboard .dashboard-study-tip-card span{
+    display:block !important;
+    color:#7a8aa6 !important;
+    font-size:11px !important;
+    line-height:1.15 !important;
+    margin-bottom:7px !important;
+  }
+
+  #dashboard .dashboard-study-bank-card b{
+    display:block !important;
+    color:#173056 !important;
+    font-size:18px !important;
+    line-height:1.18 !important;
+    letter-spacing:-.03em !important;
+    white-space:normal !important;
+    overflow:visible !important;
+    text-overflow:clip !important;
+    word-break:break-word !important;
+    display:-webkit-box !important;
+    -webkit-line-clamp:2 !important;
+    -webkit-box-orient:vertical !important;
+  }
+
+  #dashboard .dashboard-study-bank-card em{
+    display:block !important;
+    margin-top:7px !important;
+    color:#7a8aa6 !important;
+    font-style:normal !important;
+    font-size:12px !important;
+    line-height:1.25 !important;
+    white-space:normal !important;
+  }
+
+  #dashboard .dashboard-study-tip-card{
+    display:block !important;
+    margin:0 0 10px !important;
+    padding:11px 13px !important;
+    border-radius:17px !important;
+    border:1px solid rgba(76,137,255,.09) !important;
+    background:linear-gradient(180deg,#f6fbff 0%,#ffffff 100%) !important;
+  }
+
+  #dashboard .dashboard-study-tip-card b{
+    display:block !important;
+    color:#244368 !important;
+    font-size:14px !important;
+    line-height:1.35 !important;
+    font-weight:850 !important;
+    white-space:normal !important;
+    overflow:visible !important;
+    text-overflow:clip !important;
+  }
+
+  #dashboard .dashboard-study-metrics{
+    display:grid !important;
+    grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+    gap:8px !important;
+    margin:0 !important;
+  }
+
+  #dashboard .dashboard-study-metric{
+    min-width:0 !important;
+    padding:10px 8px !important;
+    border-radius:16px !important;
+    border:1px solid rgba(123,154,255,.08) !important;
+    background:linear-gradient(180deg,#ffffff 0%,#f9fcff 100%) !important;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.92) !important;
+  }
+
+  #dashboard .dashboard-study-metric span{
+    display:block !important;
+    color:#7b89a5 !important;
+    font-size:10px !important;
+    line-height:1.15 !important;
+    margin:0 0 7px !important;
+    white-space:nowrap !important;
+  }
+
+  #dashboard .dashboard-study-metric b{
+    display:block !important;
+    color:#173056 !important;
+    font-size:19px !important;
+    line-height:1 !important;
+    letter-spacing:-.03em !important;
+    white-space:nowrap !important;
+  }
+
+  #dashboard .dashboard-quick-actions,
+  #dashboard #load-built-in-bank-btn,
+  #dashboard #load-built-in-bank-btn-banks{
+    display:none !important;
+    visibility:hidden !important;
+    height:0 !important;
+    min-height:0 !important;
+    max-height:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    overflow:hidden !important;
+  }
+}
+
+@media(max-width:380px){
+  #dashboard .dashboard-study-panel{
+    padding:13px !important;
+    border-radius:22px !important;
+  }
+
+  #dashboard .dashboard-study-head h3{
+    font-size:18px !important;
+  }
+
+  #dashboard .dashboard-study-bank-card{
+    padding:10px 11px !important;
+    border-radius:16px !important;
+  }
+
+  #dashboard .dashboard-study-bank-card b{
+    font-size:16px !important;
+  }
+
+  #dashboard .dashboard-study-tip-card{
+    padding:10px 11px !important;
+    border-radius:16px !important;
+  }
+
+  #dashboard .dashboard-study-tip-card b{
+    font-size:13px !important;
+  }
+
+  #dashboard .dashboard-study-metrics{
+    gap:6px !important;
+  }
+
+  #dashboard .dashboard-study-metric{
+    padding:9px 6px !important;
+    border-radius:14px !important;
+  }
+
+  #dashboard .dashboard-study-metric b{
+    font-size:17px !important;
+  }
+}
+/* SHIROHA_APP_V29_24_DASHBOARD_LAYOUT_FIX_END */

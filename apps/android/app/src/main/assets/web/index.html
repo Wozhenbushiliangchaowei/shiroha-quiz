@@ -68,17 +68,15 @@
             <button id="dashboard-start-practice-btn" class="ghost" type="button">开始刷题</button>
           </div>
 
-          <div class="dashboard-study-status">
-            <div class="dashboard-study-status-card dashboard-study-status-main">
-              <span>当前题库</span>
-              <b id="dashboard-bank-title">—</b>
-              <em id="dashboard-bank-name">共 0 题</em>
-            </div>
-            <div class="dashboard-study-status-card">
-              <span>今日建议</span>
-              <b id="dashboard-study-tip">先加载题库，再开始练习</b>
-              <em>建议每次 20 题，错题及时复盘</em>
-            </div>
+          <div class="dashboard-study-bank-card">
+            <span>当前题库</span>
+            <b id="dashboard-bank-title">—</b>
+            <em id="dashboard-bank-name">共 0 题 · 暂无待复习</em>
+          </div>
+
+          <div class="dashboard-study-tip-card">
+            <span>今日建议</span>
+            <b id="dashboard-study-tip">今天还没开始练习，建议先做 20 题</b>
           </div>
 
           <div class="dashboard-study-metrics">
@@ -96,7 +94,6 @@
             </div>
           </div>
         </section>
-        <div class="actions dashboard-quick-actions"><button id="load-built-in-bank-btn" class="primary" type="button">加载内置 C1 题库</button><button id="load-built-in-bank-btn-banks" class="ghost" type="button">在题库管理中加载</button></div>
       </section>
 
       <section id="import" class="view">
