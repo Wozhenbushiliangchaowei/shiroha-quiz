@@ -55,3 +55,6 @@ apps/web.zip
 
 # Local images / chat exports
 微信图片_*.jpg
+
+# Added by source-upload script
+source-upload.ps1

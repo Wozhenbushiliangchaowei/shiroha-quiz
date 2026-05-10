@@ -1,5 +1,5 @@
 (function(){
-const APP_VERSION='v28.2';
+const APP_VERSION='v28';
 const CURRENT_SCHEMA_VERSION=1;
 const KEY='shiroha_quiz_state_v28_4_c1';
 const LEGACY_KEYS=[];
@@ -58,15 +58,6 @@ function upgradeState(){
 function saveState(){localStorage.setItem(KEY,serializeState());toast('已保存到浏览器本地。','ok')}
 function now(){return new Date().toISOString()}
 function activeBank(){return state.banks.find(b=>b.id===state.activeBankId)||state.banks[0]||{questions:[]}}
-function resetViewScrollV282(){
-  try{
-    const main=document.querySelector('.main');
-    if(main)main.scrollTop=0;
-    requestAnimationFrame(()=>window.scrollTo({top:0,left:0,behavior:'auto'}));
-  }catch(_){
-    try{window.scrollTo(0,0)}catch(__){}
-  }
-}
 function bindNav(){ $$('.nav').forEach(btn=>btn.onclick=()=>{
   const target=btn.dataset.view;
   const view=target&&$('#'+target);
@@ -74,13 +65,12 @@ function bindNav(){ $$('.nav').forEach(btn=>btn.onclick=()=>{
   $$('.nav').forEach(b=>b.classList.toggle('active',b===btn));
   $$('.view').forEach(v=>v.classList.toggle('active',v===view));
   const title=$('#page-title');if(title)title.textContent=btn.textContent;
-  resetViewScrollV282();
 });}
 function bindEvents(){
 $('#active-bank-select').onchange=e=>{state.activeBankId=e.target.value;saveSilent();renderAll()};const importNameInput=$('#import-bank-name');if(importNameInput)importNameInput.addEventListener('input',()=>{importNameInput.dataset.autoName='0'});$('#save-all-btn').onclick=saveState;
 $('#load-sample-btn').onclick=loadSample;$('#import-file').onchange=readImportFile;$('#parse-import-btn').onclick=parseImport;$('#confirm-import-btn').onclick=confirmImport;const dualConfirmBtn=$('#dual-confirm-import-btn');if(dualConfirmBtn)dualConfirmBtn.onclick=confirmImport;$('#clear-import-btn').onclick=()=>{$('#import-text').value='';importCache=[];importSelected.clear();importDiagnostics=null;renderImportPreview([])};
 $('#dual-question-file').onchange=e=>readDualFile(e,'question');$('#dual-answer-file').onchange=e=>readDualFile(e,'answer');$('#parse-dual-import-btn').onclick=parseDualImport;$('#clear-dual-import-btn').onclick=()=>{$('#dual-question-text').value='';$('#dual-answer-text').value='';importCache=[];importSelected.clear();importDiagnostics=null;renderImportPreview([])};$('#dual-load-sample-btn').onclick=loadDualSample;$('#revalidate-import-btn').onclick=()=>renderImportPreview(importCache);
-$('#edit-close-btn').onclick=closeEditModal;$('#edit-save-btn').onclick=saveEditQuestion;$('#edit-delete-btn').onclick=deleteEditQuestion;const pf=$('#import-preview-filter');if(pf)pf.onchange=e=>{importPreviewFilter=e.target.value;renderImportPreview(importCache)};const bid=$('#batch-delete-import-btn');if(bid)bid.onclick=batchDeleteImportSelected;const cis=$('#clear-import-selection-btn');if(cis)cis.onclick=()=>{importSelected.clear();renderImportPreview(importCache)};
+$('#edit-close-btn').onclick=closeEditModal;$('#edit-save-btn').onclick=saveEditQuestion;$('#edit-delete-btn').onclick=deleteEditQuestion;const pf=$('#import-preview-filter');if(pf)pf.onchange=e=>{importPreviewFilter=e.target.value;renderImportPreview(importCache)};const bid=$('#batch-delete-import-btn');if(bid)bid.onclick=batchDeleteImportSelected;const cis=$('#clear-import-selection-btn');if(cis)cis.onclick=()=>{importSelected.clear();renderImportPreview(importCache)};const ipfBtn=$('#import-preview-focus-btn');if(ipfBtn)ipfBtn.onclick=toggleImportPreviewFocus;document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('import-preview-focus'))toggleImportPreviewFocus(false)});
 $('#dedupe-btn').onclick=dedupeActiveBank;$('#rename-bank-btn').onclick=renameActiveBank;$('#duplicate-bank-btn').onclick=duplicateActiveBank;$('#new-empty-bank-btn').onclick=newEmptyBank;$('#merge-bank-btn').onclick=mergeBankIntoActive;$('#bank-sort-mode').onchange=renderBankList;$('#start-practice-btn').onclick=startPractice;$('#reset-practice-btn').onclick=()=>{exitPracticeFocus();$('#practice-card').innerHTML='<div class="empty">选择条件后点击“开始练习”。</div>';practice={items:[],idx:0,answered:0,correct:0,wrong:0,start:0};$('#practice-progress').textContent='0 / 0'};
 $('#start-exam-btn').onclick=startExam;$('#submit-exam-btn').onclick=()=>submitExam(false);$('#clear-wrong-btn').onclick=()=>{if(confirm('确定清空当前题库错题本？')){state.wrongBook[activeBank().id]=[];saveSilent();renderAll()}};
 $('#clear-records-btn').onclick=()=>{if(confirm('确定清空全部刷题记录？')){state.records=[];saveSilent();renderAll()}};$('#export-records-btn').onclick=exportRecords;$('#record-mode-filter').onchange=renderRecords;$('#record-limit').onchange=renderRecords;$('#record-refresh-btn').onclick=renderRecords;$('#wrong-status-filter').onchange=renderWrongBook;$('#wrong-sort-mode').onchange=renderWrongBook;$('#practice-wrong-btn').onclick=startWrongPractice;$('#export-json-btn').onclick=exportCurrentBank;$('#export-all-btn').onclick=exportAll;$('#reset-data-btn').onclick=resetData;
@@ -2391,6 +2381,18 @@ function extractInlineOptionsRich(line){
   return {prefix,options};
 }
 
+
+function toggleImportPreviewFocus(force){
+  const on=typeof force==='boolean'?force:!document.body.classList.contains('import-preview-focus');
+  document.body.classList.toggle('import-preview-focus',on);
+  const btn=$('#import-preview-focus-btn');
+  if(btn){btn.textContent=on?'退出沉浸':'沉浸核对';btn.setAttribute('aria-pressed',on?'true':'false')}
+  if(on){
+    if(document.documentElement.requestFullscreen){document.documentElement.requestFullscreen().catch(()=>{});}
+    setTimeout(()=>{$('.import-preview-card')?.scrollIntoView({block:'start'});},20);
+  }else if(document.fullscreenElement&&document.exitFullscreen){document.exitFullscreen().catch(()=>{});}
+}
+
 function renderImportReportPanel(arr, rows=[], warnings=[]){
   const el=$('#import-report-panel');if(!el)return;
   if(!arr||!arr.length){el.classList.add('hidden');el.innerHTML='';return}
@@ -2666,10 +2668,10 @@ function ensureBankManageExportPanelV23(){
   if($('#bank-bulk-export-panel-v23'))return;
   const bankList=$('#bank-list');if(!bankList)return;
   bankList.insertAdjacentHTML('beforebegin',`<div id="bank-bulk-export-panel-v23" class="data-tool-card-v23 bank-bulk-panel-v23 bank-manage-toolbar-v28">
-    <div class="section-head compact-head-v23"><div><h3>当前题库与批量导出</h3><p class="muted">当前题库改为在上方统一选择；下方卡片只展示题库信息。需要批量导出时，勾选题库后使用这里的导出按钮。</p></div></div>
+    <div class="section-head compact-head-v23"><div><h3>当前题库与批量导出</h3><p class="muted">选择题库后，可勾选多个题库批量导出。</p></div></div>
     <div class="bank-current-bar-v28">
       <label>当前题库<select id="bank-current-select-v28"></select></label>
-      <span class="muted">切换后会同步顶部当前题库，并刷新预览、练习和错题范围。</span>
+      <span class="muted">切换后自动刷新。</span>
     </div>
     <div class="actions wrap-v23 bank-toolbar-actions-v28">
       <label class="check-line-v23"><input id="export-bank-all-v23" type="checkbox">全选</label>
@@ -2694,7 +2696,7 @@ function ensureSettingsBackupPanelV23(){
   const settingsCard=$('#settings .card');if(!settingsCard)return;
   settingsCard.insertAdjacentHTML('beforeend',`<div id="settings-backup-panel-v23" class="data-tools-v23">
     <h2>备份与恢复</h2>
-    <p class="muted">用于完整备份/恢复本机 localStorage 中的 Shiroha Quiz 数据。手机 WebView 若无法下载文件，可使用“复制全部数据备份文本”。</p>
+    <p class="muted">建议定期导出全部数据备份。</p>
     <div class="form-grid">
       <label>恢复方式<select id="settings-backup-mode-v23"><option value="merge">合并导入：保留当前数据，新增备份中的题库</option><option value="overwrite" selected>覆盖恢复：用备份替换当前本地数据</option></select></label>
       <label>备份范围<input disabled value="全部题库、错题、记录、设置" /></label>
@@ -2704,7 +2706,7 @@ function ensureSettingsBackupPanelV23(){
       <button class="ghost" id="settings-copy-all-backup-v23" type="button">复制全部数据备份文本</button>
       <button class="ghost" id="settings-import-backup-v23" type="button">导入配置 / 备份 JSON</button>
     </div>
-    <p class="muted">提示：覆盖恢复会替换本机数据；合并导入遇到同名题库会自动追加“_导入”。下方文本框会显示最近一次导出或导入的 JSON。</p>
+    <p class="muted">恢复前建议先导出备份。</p>
   </div>`);
   $('#settings-export-all-backup-v23').onclick=exportAllBackupV23;
   $('#settings-copy-all-backup-v23').onclick=copyAllBackupJsonV23;
@@ -2857,13 +2859,13 @@ function ensureV25ToV28Panels(){
 function ensureBuiltInPanelV252(){
   if($('#builtin-bank-panel-v252'))return;
   const bankList=$('#bank-list');if(!bankList)return;
-  bankList.insertAdjacentHTML('beforebegin',`<div id="builtin-bank-panel-v252" class="builtin-bank-card-v252"><div class="section-head compact-head-v23"><div><h3>内置题库按需加载</h3><p class="muted">完整 C1 题库已从 question-bank.js 拆分到 data/c1-full.json，页面启动时不再同步加载完整题库。</p></div><button id="load-built-in-bank-btn-panel" class="primary" type="button">加载内置 C1 题库</button></div><div id="builtin-bank-status-v252" class="muted"></div></div>`);
+  bankList.insertAdjacentHTML('beforebegin',`<div id="builtin-bank-panel-v252" class="builtin-bank-card-v252"><div class="section-head compact-head-v23"><div><h3>内置题库按需加载</h3><p class="muted">可按需加载内置 C1 题库。</p></div><button id="load-built-in-bank-btn-panel" class="primary" type="button">加载内置 C1 题库</button></div><div id="builtin-bank-status-v252" class="muted"></div></div>`);
   $('#load-built-in-bank-btn-panel').onclick=()=>loadBuiltInBankV252();
 }
 function renderBuiltInPanelV252(){
   const el=$('#builtin-bank-status-v252');if(!el)return;
   const has=state.banks.some(b=>b.id==='default-c1'&&(b.questions||[]).length>0)||state.banks.some(b=>/C1驾照科目一/.test(b.name||''));
-  el.textContent=has?'内置 C1 题库已在本地题库列表中。':'尚未加载完整内置题库，可按需加载。';
+  el.textContent=has?'内置 C1 题库已加载。':'可按需加载内置 C1 题库。';
 }
 async function fetchJsonLocalV252(url){
   try{const res=await fetch(url,{cache:'no-store'});if(res.ok)return await res.json();throw new Error('HTTP '+res.status)}
@@ -2880,7 +2882,7 @@ async function loadBuiltInBankV252(){
       item=(index||[])[0];
       if(item) data=await fetchJsonLocalV252(item.file||'data/c1-full.json');
     }catch(fetchErr){
-      warnDev('按需读取内置题库 JSON 失败，转用 question-bank.js 内置兜底数据。',fetchErr);
+      warnDev('读取内置题库 JSON 失败，转用备用数据。',fetchErr);
     }
     if(!data && window.questionBank && Array.isArray(window.questionBank.questions)){
       data=window.questionBank;

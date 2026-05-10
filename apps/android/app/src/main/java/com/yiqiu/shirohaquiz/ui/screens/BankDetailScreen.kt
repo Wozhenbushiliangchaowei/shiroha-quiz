@@ -1,0 +1,170 @@
+package com.yiqiu.shirohaquiz.ui.screens
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Done
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.yiqiu.shirohaquiz.importer.model.QuestionType
+import com.yiqiu.shirohaquiz.state.QuizRepository
+import com.yiqiu.shirohaquiz.ui.components.ActionPillButton
+import com.yiqiu.shirohaquiz.ui.components.GlassCard
+import com.yiqiu.shirohaquiz.ui.components.NoticeCard
+import com.yiqiu.shirohaquiz.ui.components.ShirohaHeader
+import com.yiqiu.shirohaquiz.ui.components.StatusChip
+import com.yiqiu.shirohaquiz.ui.theme.ShirohaSpacing
+
+@Composable
+fun BankDetailScreen(
+    bankId: String?,
+    onBack: () -> Unit,
+    onGoPractice: () -> Unit,
+    onGoExam: () -> Unit
+) {
+    val context = LocalContext.current
+    val bank = QuizRepository.banks.firstOrNull { it.id == bankId } ?: QuizRepository.activeBank()
+    val isActive = bank?.id == QuizRepository.activeBank()?.id
+
+    Column(
+        modifier = Modifier
+            .verticalScroll(rememberScrollState())
+            .padding(ShirohaSpacing.Xl),
+        verticalArrangement = Arrangement.spacedBy(ShirohaSpacing.Lg)
+    ) {
+        ShirohaHeader(
+            kicker = "Bank Detail",
+            title = bank?.name ?: "题库详情",
+            subtitle = "这里展示当前题库的摘要、题型分布和快速操作，符合前面规划里的题库详情入口。"
+        )
+
+        if (bank == null) {
+            GlassCard {
+                NoticeCard("没有找到对应题库。")
+                Spacer(Modifier.height(12.dp))
+                ActionPillButton(
+                    icon = Icons.Rounded.Done,
+                    text = "返回首页",
+                    primary = true,
+                    onClick = onBack
+                )
+            }
+            return
+        }
+
+        GlassCard {
+            Text(
+                text = "题库摘要",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                StatusChip("${bank.questions.size} 题", selected = true)
+                StatusChip(if (isActive) "当前活动题库" else "可切换题库", selected = isActive)
+            }
+            Spacer(Modifier.height(14.dp))
+            Text(
+                text = "单选 ${bank.questions.count { it.type == QuestionType.SINGLE }} · 多选 ${bank.questions.count { it.type == QuestionType.MULTIPLE }} · 判断 ${bank.questions.count { it.type == QuestionType.JUDGE }} · 主观 ${bank.questions.count { it.type == QuestionType.BLANK || it.type == QuestionType.SHORT }}",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ActionPillButton(
+                    icon = Icons.Rounded.Done,
+                    text = if (isActive) "当前题库" else "设为当前题库",
+                    primary = true,
+                    onClick = {
+                        if (!isActive) {
+                            QuizRepository.setActiveBank(context, bank.id)
+                        }
+                    }
+                )
+                ActionPillButton(
+                    icon = Icons.Rounded.PlayArrow,
+                    text = "进入练习",
+                    primary = false,
+                    onClick = onGoPractice
+                )
+                ActionPillButton(
+                    icon = Icons.Rounded.Timer,
+                    text = "开始考试",
+                    primary = false,
+                    onClick = onGoExam
+                )
+            }
+        }
+
+        GlassCard {
+            Text(
+                text = "题目预览",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(12.dp))
+            bank.questions.take(5).forEach { question ->
+                StatusChip(typeLabel(question.type))
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "${question.number}. ${question.question}",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+                if (question.options.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = question.options.joinToString("  ") { "${it.key}. ${it.text}" },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(Modifier.height(14.dp))
+            }
+        }
+
+        if (bank.id != "demo-bank") {
+            GlassCard {
+                Text(
+                    text = "危险操作",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.height(12.dp))
+                NoticeCard("删除题库后会同时清掉这份原生题库的本地记录。")
+                Spacer(Modifier.height(12.dp))
+                ActionPillButton(
+                    icon = Icons.Rounded.DeleteOutline,
+                    text = "删除这份题库",
+                    primary = false,
+                    onClick = {
+                        QuizRepository.deleteBank(context, bank.id)
+                        onBack()
+                    }
+                )
+            }
+        }
+    }
+}
+
+private fun typeLabel(type: QuestionType): String = when (type) {
+    QuestionType.SINGLE -> "单选题"
+    QuestionType.MULTIPLE -> "多选题"
+    QuestionType.JUDGE -> "判断题"
+    QuestionType.BLANK -> "填空题"
+    QuestionType.SHORT -> "简答题"
+}

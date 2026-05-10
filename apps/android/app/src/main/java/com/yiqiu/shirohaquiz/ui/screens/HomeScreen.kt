@@ -11,7 +11,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoStories
 import androidx.compose.material.icons.rounded.CloudUpload
-import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Schedule
@@ -20,7 +19,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.yiqiu.shirohaquiz.state.QuizRepository
@@ -35,9 +33,9 @@ import com.yiqiu.shirohaquiz.ui.theme.ShirohaSpacing
 fun HomeScreen(
     onGoImport: () -> Unit,
     onGoPractice: () -> Unit,
-    onGoExam: () -> Unit
+    onGoExam: () -> Unit,
+    onOpenBankDetail: (String) -> Unit
 ) {
-    val context = LocalContext.current
     val activeBank = QuizRepository.activeBank()
     val bankCount = QuizRepository.banks.size
     val questionCount = activeBank?.questions?.size ?: 0
@@ -51,12 +49,12 @@ fun HomeScreen(
         ShirohaHeader(
             kicker = "Shiroha Quiz",
             title = "原生题库首页",
-            subtitle = "这里只服务原生安卓。导入成功后的题库会直接进入原生状态，并接入练习与考试流程。"
+            subtitle = "这里只服务原生安卓。导入后的题库会直接进入原生状态，并接入练习与考试流程。"
         )
 
         GlassCard {
             Text(
-                text = "当前原生题库",
+                text = "当前题库",
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Bold
             )
@@ -69,7 +67,7 @@ fun HomeScreen(
             Spacer(Modifier.height(8.dp))
             Text(
                 text = if (questionCount > 0) {
-                    "当前题库共 $questionCount 题，已经可以直接进入原生练习与考试。"
+                    "当前题库共 $questionCount 题，现在已经可以直接进入原生练习与考试。"
                 } else {
                     "当前还没有真实导入题目。先到“导入”页导入一份标准文本题库。"
                 },
@@ -80,50 +78,6 @@ fun HomeScreen(
                 ActionPillButton(Icons.Rounded.CloudUpload, "去导入", primary = true, onClick = onGoImport)
                 ActionPillButton(Icons.Rounded.PlayArrow, "进入练习", primary = false, onClick = onGoPractice)
                 ActionPillButton(Icons.Rounded.Timer, "开始考试", primary = false, onClick = onGoExam)
-            }
-        }
-
-        GlassCard {
-            Text(
-                text = "题库列表",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(Modifier.height(12.dp))
-            QuizRepository.banks.forEach { bank ->
-                val isActive = bank.id == activeBank?.id
-                Text(
-                    text = bank.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "${bank.questions.size} 题${if (isActive) " · 当前活动题库" else ""}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    ActionPillButton(
-                        icon = Icons.Rounded.Done,
-                        text = if (isActive) "当前题库" else "切换到此题库",
-                        primary = isActive,
-                        onClick = { if (!isActive) QuizRepository.setActiveBank(context, bank.id) }
-                    )
-                    ActionPillButton(
-                        icon = Icons.Rounded.DeleteOutline,
-                        text = "删除",
-                        primary = false,
-                        onClick = {
-                            if (bank.id != "demo-bank") {
-                                QuizRepository.deleteBank(context, bank.id)
-                            }
-                        }
-                    )
-                }
-                Spacer(Modifier.height(18.dp))
             }
         }
 
@@ -152,9 +106,43 @@ fun HomeScreen(
             ShortcutGlassCard(
                 title = "原生考试模式",
                 icon = Icons.Rounded.Schedule,
-                desc = "开始接入题量、计时、交卷和结果页",
+                desc = "题量、计时、交卷和结果页已经接入",
                 modifier = Modifier.weight(1f)
             )
+        }
+
+        GlassCard {
+            Text(
+                text = "题库列表",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(12.dp))
+            QuizRepository.banks.forEach { bank ->
+                val isActive = bank.id == activeBank?.id
+                Text(
+                    text = bank.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "${bank.questions.size} 题${if (isActive) " · 当前活动题库" else ""}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ActionPillButton(
+                        icon = Icons.Rounded.Done,
+                        text = "查看详情",
+                        primary = isActive,
+                        onClick = { onOpenBankDetail(bank.id) }
+                    )
+                }
+                Spacer(Modifier.height(18.dp))
+            }
         }
     }
 }

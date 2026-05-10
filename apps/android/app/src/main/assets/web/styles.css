@@ -4453,3 +4453,343 @@ button{
   }
 }
 /* SHIROHA_APP_V28_7_TOP_RIGHT_ART_END */
+
+/* SHIROHA_APP_V28_8_TOPBAR_AND_CARD_TOP_TIGHTEN_START
+   App 专属：顶部题库选择与保存按钮改为单行，选择框左边界对齐页面主卡片内容；各页英文 kicker 上提到白色卡片顶部，进一步节省纵向空间。 */
+@media(max-width:720px){
+  .main{
+    padding-left:18px !important;
+    padding-right:18px !important;
+  }
+
+  .topbar{
+    margin:0 0 18px !important;
+    padding:12px 28px !important;
+    border-radius:28px !important;
+  }
+  .topbar .top-actions{
+    width:100% !important;
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) 112px !important;
+    gap:10px !important;
+    align-items:center !important;
+    margin:0 !important;
+  }
+  .topbar .top-actions select,
+  .topbar .top-actions button{
+    width:100% !important;
+    min-width:0 !important;
+    min-height:48px !important;
+    height:48px !important;
+    border-radius:18px !important;
+  }
+  .topbar .top-actions select{
+    text-align:left !important;
+    text-align-last:left !important;
+    padding-left:18px !important;
+    padding-right:32px !important;
+    font-size:15px !important;
+  }
+  .topbar .top-actions button{
+    padding:0 12px !important;
+    font-size:14px !important;
+    white-space:nowrap !important;
+  }
+
+  #banks.view > .card:first-child,
+  #import.view > .card:first-child,
+  #practice.view > .card:first-child,
+  #exam.view > .card:first-child,
+  #wrongbook.view > .card:first-child,
+  #records.view > .card:first-child,
+  #settings.view > .card:first-child{
+    padding-top:14px !important;
+  }
+
+  #banks .section-head,
+  #import .section-head,
+  #practice .section-head,
+  #exam .section-head,
+  #wrongbook .section-head,
+  #records .section-head{
+    margin-top:0 !important;
+    margin-bottom:8px !important;
+  }
+  #banks .section-head .kicker,
+  #import .section-head .kicker,
+  #practice .section-head .kicker,
+  #exam .section-head .kicker,
+  #wrongbook .section-head .kicker,
+  #records .section-head .kicker{
+    margin-top:0 !important;
+    margin-bottom:4px !important;
+    line-height:1 !important;
+  }
+  #banks .section-head h2,
+  #import .section-head h2,
+  #practice .section-head h2,
+  #exam .section-head h2,
+  #wrongbook .section-head h2,
+  #records .section-head h2{
+    line-height:1.05 !important;
+  }
+
+  #banks .section-head > button,
+  #import .section-head > button,
+  #practice .section-head > .pill,
+  #exam .section-head > .pill,
+  #wrongbook .section-head > button,
+  #records .section-head > .actions{
+    margin-top:24px !important;
+  }
+
+  #banks .page-art-strip,
+  #import .import-stage-panel,
+  #practice .page-art-strip,
+  #exam .page-art-strip,
+  #wrongbook .page-art-strip,
+  #records .page-art-strip,
+  #settings .page-art-strip{
+    margin-top:2px !important;
+  }
+}
+
+@media(max-width:380px){
+  .topbar{
+    padding-left:22px !important;
+    padding-right:22px !important;
+  }
+  .topbar .top-actions{
+    grid-template-columns:minmax(0,1fr) 100px !important;
+    gap:8px !important;
+  }
+  .topbar .top-actions select,
+  .topbar .top-actions button{
+    min-height:46px !important;
+    height:46px !important;
+  }
+  .topbar .top-actions select{
+    font-size:14px !important;
+    padding-left:14px !important;
+  }
+  .topbar .top-actions button{
+    font-size:13px !important;
+    padding:0 8px !important;
+  }
+}
+/* SHIROHA_APP_V28_8_TOPBAR_AND_CARD_TOP_TIGHTEN_END */
+
+/* SHIROHA_APP_V28_9_USER_FACING_IMPORT_REVIEW_START
+   App 专属：减少开发侧浅色说明文字；导入核对区增加沉浸模式，提升手机端核对效率。 */
+@media(max-width:720px){
+  /* 去掉或压缩面向开发者的浅色说明，保留必要操作信息 */
+  #dashboard .grid3 .card p,
+  #import .import-stage-copy p,
+  #practice.view > .card:first-child > p.muted,
+  .builtin-bank-card-v252 .compact-head-v23 p.muted,
+  .bank-current-bar-v28 > .muted,
+  #settings-backup-panel-v23 > p.muted,
+  .data-tools-v23 > p.muted{
+    display:none !important;
+  }
+
+  #import > .card:nth-of-type(2) > p.muted{
+    font-size:13px !important;
+    line-height:1.55 !important;
+    margin:2px 0 12px !important;
+  }
+
+  .builtin-bank-card-v252,
+  .data-tool-card-v23,
+  #settings-backup-panel-v23{
+    padding:14px !important;
+    margin:12px 0 !important;
+  }
+
+  .builtin-bank-card-v252 .section-head,
+  .data-tool-card-v23 .section-head,
+  #settings-backup-panel-v23 .section-head{
+    margin-bottom:8px !important;
+  }
+
+  /* 导入核对卡片：正常模式下也更紧凑，按钮不再挤在一列浪费空间 */
+  #import .import-preview-card{
+    padding-top:16px !important;
+  }
+  #import .import-preview-card .section-head{
+    display:block !important;
+    margin-bottom:10px !important;
+  }
+  #import .import-preview-card .section-head > div:first-child{
+    margin-bottom:10px !important;
+  }
+  #import .import-preview-card .section-head h2{
+    line-height:1.08 !important;
+  }
+  #import .import-preview-card .section-head .muted{
+    display:none !important;
+  }
+  #import .import-preview-card .row-actions{
+    display:grid !important;
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+    gap:8px !important;
+    margin:0 !important;
+    width:100% !important;
+  }
+  #import .import-preview-card .row-actions .inline-filter{
+    grid-column:1/-1 !important;
+    display:grid !important;
+    grid-template-columns:auto minmax(0,1fr) !important;
+    gap:8px !important;
+    align-items:center !important;
+    font-weight:900 !important;
+  }
+  #import .import-preview-card .row-actions button,
+  #import .import-preview-card .row-actions select{
+    width:100% !important;
+    min-height:40px !important;
+    height:40px !important;
+    border-radius:16px !important;
+    font-size:13px !important;
+    padding:0 10px !important;
+    white-space:nowrap !important;
+  }
+  #import .import-preview-card #import-summary{
+    margin:8px 0 10px !important;
+    font-size:13px !important;
+    line-height:1.45 !important;
+  }
+  #import .import-preview-card .report-panel{
+    margin:8px 0 !important;
+  }
+  #import .import-preview-card .table-wrap{
+    margin-top:8px !important;
+    max-height:320px !important;
+    overflow:auto !important;
+    -webkit-overflow-scrolling:touch !important;
+  }
+  #import .import-preview-card table{
+    min-width:720px !important;
+  }
+
+  /* 沉浸核对：隐藏导航和其它导入区，只保留预览表格 */
+  body.import-preview-focus{
+    overflow:hidden !important;
+    background:#f5faff !important;
+  }
+  body.import-preview-focus .side,
+  body.import-preview-focus .topbar,
+  body.import-preview-focus .app-mobile-top-art,
+  body.import-preview-focus .app-splash{
+    display:none !important;
+  }
+  body.import-preview-focus .app{
+    display:block !important;
+    min-height:100dvh !important;
+    background:#f5faff !important;
+  }
+  body.import-preview-focus .main{
+    height:100dvh !important;
+    min-height:100dvh !important;
+    max-width:none !important;
+    width:100vw !important;
+    padding:0 !important;
+    margin:0 !important;
+    overflow:hidden !important;
+    background:#f5faff !important;
+  }
+  body.import-preview-focus .view:not(#import){
+    display:none !important;
+  }
+  body.import-preview-focus #import.view{
+    display:block !important;
+    height:100dvh !important;
+    overflow:hidden !important;
+    padding:0 !important;
+  }
+  body.import-preview-focus #import > .card:not(.import-preview-card),
+  body.import-preview-focus #import > details{
+    display:none !important;
+  }
+  body.import-preview-focus #import .import-preview-card{
+    position:fixed !important;
+    inset:0 !important;
+    z-index:9999 !important;
+    width:100vw !important;
+    height:100dvh !important;
+    max-height:none !important;
+    margin:0 !important;
+    padding:calc(env(safe-area-inset-top,0px) + 12px) 12px calc(env(safe-area-inset-bottom,0px) + 12px) !important;
+    border-radius:0 !important;
+    border:0 !important;
+    box-shadow:none !important;
+    display:flex !important;
+    flex-direction:column !important;
+    overflow:hidden !important;
+    background:#fff !important;
+  }
+  body.import-preview-focus #import .import-preview-card .section-head{
+    flex:0 0 auto !important;
+    margin:0 0 8px !important;
+  }
+  body.import-preview-focus #import .import-preview-card .section-head > div:first-child{
+    display:flex !important;
+    align-items:center !important;
+    justify-content:space-between !important;
+    gap:10px !important;
+    margin-bottom:8px !important;
+  }
+  body.import-preview-focus #import .import-preview-card .section-head h2{
+    font-size:23px !important;
+    margin:0 !important;
+  }
+  body.import-preview-focus #import .import-preview-card .row-actions{
+    grid-template-columns:repeat(4,minmax(0,1fr)) !important;
+    gap:6px !important;
+  }
+  body.import-preview-focus #import .import-preview-card .row-actions .inline-filter{
+    grid-column:1/-1 !important;
+  }
+  body.import-preview-focus #import .import-preview-card .row-actions button,
+  body.import-preview-focus #import .import-preview-card .row-actions select{
+    min-height:38px !important;
+    height:38px !important;
+    font-size:12px !important;
+    border-radius:14px !important;
+    padding:0 8px !important;
+  }
+  body.import-preview-focus #import-summary{
+    flex:0 0 auto !important;
+    max-height:86px !important;
+    overflow:auto !important;
+    margin:0 0 8px !important;
+    padding:10px 12px !important;
+  }
+  body.import-preview-focus #import-report-panel{
+    display:none !important;
+  }
+  body.import-preview-focus #import .import-preview-card .table-wrap{
+    flex:1 1 auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    overflow:auto !important;
+    margin:0 !important;
+    border-radius:16px !important;
+    background:#fff !important;
+  }
+  body.import-preview-focus #import .import-preview-card table{
+    min-width:820px !important;
+  }
+  body.import-preview-focus #import .import-preview-card th,
+  body.import-preview-focus #import .import-preview-card td{
+    padding:10px 9px !important;
+    font-size:12px !important;
+  }
+}
+
+@media(max-width:380px){
+  body.import-preview-focus #import .import-preview-card .row-actions{
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+  }
+}
+/* SHIROHA_APP_V28_9_USER_FACING_IMPORT_REVIEW_END */
