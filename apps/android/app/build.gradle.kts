@@ -10,8 +10,8 @@ android {
     defaultConfig {
         minSdk = 26
         targetSdk = 34
-        versionCode = 5
-        versionName = "0.3.5-alpha"
+        versionCode = 6
+        versionName = "0.3.6-alpha"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -67,7 +67,7 @@ android {
 val exportWebDebugApk by tasks.registering(Copy::class) {
     from(layout.buildDirectory.file("outputs/apk/web/debug/app-web-debug.apk"))
     into(layout.buildDirectory.dir("outputs/shiroha-quiz"))
-    rename { "Shiroha-Quiz-v0.3.5-alpha-web-debug.apk" }
+    rename { "Shiroha-Quiz-v0.3.6-alpha-web-debug.apk" }
 }
 
 val exportNativeDebugApk by tasks.registering(Copy::class) {
