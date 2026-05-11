@@ -21,6 +21,11 @@ object ImportStrategyScorer {
             }.toDouble() / objectiveCount.toDouble()
         }
         val sectionBonus = if (questions.any { it.category.isNotBlank() }) 20 else 0
+        val suspiciousFrontMatterCount = questions.count { question ->
+            question.number == "00" || Regex("""^(?:说明|注意事项|密卷|绝密|祝各位考生|时间[:：]|考试时间[:：])""").containsMatchIn(question.question.trim())
+        }
+        val subjectiveCount = questions.count { it.type == QuestionType.SHORT || it.type == QuestionType.BLANK }
+        val suspiciousSubjectivePenalty = if (questions.size >= 30 && subjectiveCount > questions.size / 2 && suspiciousFrontMatterCount > 0) 400 else 0
 
         return questions.size * 5 +
             answeredCount * 12 +
@@ -28,6 +33,8 @@ object ImportStrategyScorer {
             (optionCoverage * 80).toInt() +
             sectionBonus -
             hardErrors * 35 -
-            softWarnings * 6
+            softWarnings * 6 -
+            suspiciousFrontMatterCount * 1200 -
+            suspiciousSubjectivePenalty
     }
 }

@@ -20,13 +20,14 @@ object StandardQuestionParser {
     fun parse(
         text: String,
         forcedType: QuestionType? = null,
-        category: String = ""
+        category: String = "",
+        allowUnnumbered: Boolean = true
     ): List<Question> {
         return QuestionBlockSplitter.split(
             text = text,
             forcedType = forcedType,
             category = category,
-            allowUnnumbered = true
+            allowUnnumbered = allowUnnumbered
         ).mapNotNull(::parseBlock)
     }
 

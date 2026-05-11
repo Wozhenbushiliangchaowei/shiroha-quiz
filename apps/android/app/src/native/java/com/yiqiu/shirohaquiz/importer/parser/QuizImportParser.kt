@@ -15,7 +15,15 @@ object QuizImportParser {
         val candidates = mutableListOf<Candidate>()
 
         val standardQuestions = QuestionParser.parseStandard(normalized)
-        candidates += buildCandidate("标准优先解析", standardQuestions)
+        val standardCandidate = buildCandidate("标准优先解析", standardQuestions)
+        candidates += standardCandidate
+
+        if (FullPaperFallbackStrategy.shouldTry(normalized, standardCandidate.questions)) {
+            val fullPaperQuestions = FullPaperFallbackStrategy.parse(normalized)
+            if (fullPaperQuestions.isNotEmpty()) {
+                candidates += buildCandidate("整卷真题复杂兜底解析", fullPaperQuestions)
+            }
+        }
 
         if (QuestionParser.looksCompact(normalized)) {
             val compactQuestions = QuestionParser.parseCompact(normalized)

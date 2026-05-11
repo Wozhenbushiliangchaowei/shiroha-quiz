@@ -14,6 +14,9 @@ object QuestionBlockSplitter {
     private val strictQuestionStartRegex = Regex(
         """^\s*(?:第\s*)?(\d{1,4})\s*(?:题)?\s*[.、．:：)）]\s*(.*)$"""
     )
+    private val bracketQuestionStartRegex = Regex(
+        """^\s*[【\[]\s*(\d{1,4})\s*[】\]]\s*(.*)$"""
+    )
     private val spacedQuestionStartRegex = Regex(
         """^\s*(\d{1,3})\s+(.+)$"""
     )
@@ -95,6 +98,10 @@ object QuestionBlockSplitter {
     }
 
     private fun parseQuestionStart(line: String): Pair<String, String>? {
+        bracketQuestionStartRegex.find(line)?.let { match ->
+            return match.groupValues[1] to match.groupValues[2]
+        }
+
         strictQuestionStartRegex.find(line)?.let { match ->
             return match.groupValues[1] to match.groupValues[2]
         }

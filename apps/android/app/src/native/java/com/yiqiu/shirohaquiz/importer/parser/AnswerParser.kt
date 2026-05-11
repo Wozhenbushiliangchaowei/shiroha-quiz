@@ -86,6 +86,19 @@ object AnswerParser {
     private val rangeEntryRegex = Regex(
         """^\s*(\d{1,4})\s*[-~～至]\s*(\d{1,4})\s*[:：]\s*(.+)$"""
     )
+    private val bracketAnswerLineRegex = Regex(
+        """^\s*(?:第\s*)?(\d{1,4})\s*(?:题)?\s*[.、．:：]?\s*(?:[【\[]\s*(?:答案|正确答案|参考答案|标准答案|解析)\s*[】\]]|(?:答案|正确答案|参考答案|标准答案|解析)\s*[:：])\s*([A-Ga-g]{1,7}|对|错|正确|错误|√|×|True|False)\s*[.。]?\s*(?:[【\[]?\s*解析\s*[】\]]?\s*[:：]?)?\s*(.*)$""",
+        RegexOption.IGNORE_CASE
+    )
+    private val simpleAnswerTailRegex = Regex(
+        """^\s*(?:第\s*)?(\d{1,4})\s*(?:题)?\s*[.、．:：]?\s*([A-Ga-g]{1,7})(?=\s|$|[\u4e00-\u9fa5])\s*(.*)$""",
+        RegexOption.IGNORE_CASE
+    )
+    private val multipleBracketEntryRegex = Regex(
+        """(?:第\s*)?(\d{1,4})\s*(?:题)?\s*[【\[]\s*(?:答案|正确答案|参考答案|标准答案)\s*[】\]]\s*([A-Ga-g]{1,7}|对|错|正确|错误|√|×|True|False)""",
+        RegexOption.IGNORE_CASE
+    )
+
 
     fun parse(text: String): List<ParsedAnswerEntry> {
         val entries = mutableListOf<ParsedAnswerEntry>()
@@ -126,6 +139,34 @@ object AnswerParser {
                 }
             }
 
+            val bracketEntries = multipleBracketEntryRegex.findAll(line).mapNotNull { match ->
+                val answer = AnswerTokenParser.parseObjectiveAnswers(match.groupValues[2])
+                if (answer.isEmpty()) null else ParsedAnswerEntry(
+                    number = match.groupValues[1],
+                    answer = answer,
+                    type = currentType,
+                    sequence = sequence++
+                )
+            }.toList()
+            if (bracketEntries.size >= 2) {
+                entries += bracketEntries
+                return@forEach
+            }
+
+            bracketAnswerLineRegex.find(line)?.let { match ->
+                val answer = AnswerTokenParser.parseObjectiveAnswers(match.groupValues[2])
+                if (answer.isNotEmpty()) {
+                    entries += ParsedAnswerEntry(
+                        number = match.groupValues[1],
+                        answer = answer,
+                        analysis = match.groupValues[3].trim(),
+                        type = currentType,
+                        sequence = sequence++
+                    )
+                    return@forEach
+                }
+            }
+
             val lineEntries = inlineEntryRegex.findAll(line).mapNotNull { match ->
                 val number = match.groupValues[1]
                 val answer = AnswerTokenParser.parseObjectiveAnswers(match.groupValues[2])
@@ -156,7 +197,24 @@ object AnswerParser {
                 }
             }
 
-            if (lineEntries.isNotEmpty()) entries += lineEntries
+            if (lineEntries.isNotEmpty()) {
+                entries += lineEntries
+                return@forEach
+            }
+
+            simpleAnswerTailRegex.find(line)?.let { match ->
+                val answer = AnswerTokenParser.parseObjectiveAnswers(match.groupValues[2])
+                val tail = match.groupValues[3].trim()
+                if (answer.isNotEmpty() && tail.length >= 2) {
+                    entries += ParsedAnswerEntry(
+                        number = match.groupValues[1],
+                        answer = answer,
+                        analysis = tail,
+                        type = currentType,
+                        sequence = sequence++
+                    )
+                }
+            }
         }
 
         return entries
