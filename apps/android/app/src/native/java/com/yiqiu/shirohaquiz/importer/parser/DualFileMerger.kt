@@ -2,51 +2,124 @@ package com.yiqiu.shirohaquiz.importer.parser
 
 import com.yiqiu.shirohaquiz.importer.model.ImportWarning
 import com.yiqiu.shirohaquiz.importer.model.Question
+import com.yiqiu.shirohaquiz.importer.model.QuestionType
 import com.yiqiu.shirohaquiz.importer.model.WarningLevel
+import com.yiqiu.shirohaquiz.importer.score.ImportStrategyScorer
+import com.yiqiu.shirohaquiz.importer.validate.ImportValidator
 
 data class MergeResult(
     val questions: List<Question>,
-    val warnings: List<ImportWarning>
+    val warnings: List<ImportWarning>,
+    val name: String = "按题号合并"
 )
 
 object DualFileMerger {
+    fun mergeAuto(
+        questions: List<Question>,
+        answers: List<ParsedAnswerEntry>
+    ): MergeResult {
+        val candidates = listOf(
+            mergeByNumber(questions, answers),
+            mergeByTypeAndNumber(questions, answers),
+            mergeBySequence(questions, answers)
+        )
+        return candidates.maxByOrNull { candidate ->
+            val validation = ImportValidator.validate(candidate.questions)
+            ImportStrategyScorer.score(candidate.questions, validation + candidate.warnings)
+        } ?: mergeByNumber(questions, answers)
+    }
+
     fun mergeByNumber(
         questions: List<Question>,
         answers: List<ParsedAnswerEntry>
     ): MergeResult {
-        val answerMap = answers.associateBy { it.number }
+        val answerMap = answers.groupBy { it.number }.mapValues { it.value.first() }
+        val used = mutableSetOf<ParsedAnswerEntry>()
         val warnings = mutableListOf<ImportWarning>()
 
         val mergedQuestions = questions.map { question ->
             val matched = answerMap[question.number]
             if (matched == null) {
-                warnings += ImportWarning(
-                    level = WarningLevel.WARNING,
-                    questionNumber = question.number,
-                    message = "未匹配到对应答案"
-                )
+                warnings += ImportWarning(WarningLevel.WARNING, question.number, "未匹配到对应答案")
                 question
             } else {
-                question.copy(
-                    answer = if (question.answer.isNotEmpty()) question.answer else matched.answer,
-                    analysis = if (question.analysis.isNotBlank()) question.analysis else matched.analysis
-                )
+                used += matched
+                applyAnswer(question, matched)
             }
         }
 
-        answers.forEach { entry ->
-            if (questions.none { it.number == entry.number }) {
-                warnings += ImportWarning(
-                    level = WarningLevel.WARNING,
-                    questionNumber = entry.number,
-                    message = "答案文件中存在未匹配题号"
-                )
+        answers.filterNot { it in used }.forEach { entry ->
+            warnings += ImportWarning(WarningLevel.WARNING, entry.number, "答案文件中存在未匹配题号")
+        }
+
+        return MergeResult(mergedQuestions, warnings, "按全局题号合并")
+    }
+
+    fun mergeByTypeAndNumber(
+        questions: List<Question>,
+        answers: List<ParsedAnswerEntry>
+    ): MergeResult {
+        val typedAnswers = answers.filter { it.type != null }
+        if (typedAnswers.isEmpty()) return mergeByNumber(questions, answers).copy(name = "按题型分组题号合并")
+
+        val answerMap = typedAnswers.groupBy { (it.type ?: QuestionType.SINGLE) to it.number }.mapValues { it.value.first() }
+        val used = mutableSetOf<ParsedAnswerEntry>()
+        val warnings = mutableListOf<ImportWarning>()
+
+        val mergedQuestions = questions.map { question ->
+            val matched = answerMap[question.type to question.number]
+            if (matched == null) {
+                warnings += ImportWarning(WarningLevel.WARNING, question.number, "未在对应题型分组中匹配到答案")
+                question
+            } else {
+                used += matched
+                applyAnswer(question, matched)
             }
         }
 
-        return MergeResult(
-            questions = mergedQuestions,
-            warnings = warnings
+        typedAnswers.filterNot { it in used }.forEach { entry ->
+            warnings += ImportWarning(WarningLevel.WARNING, entry.number, "分组答案中存在未匹配题号")
+        }
+        return MergeResult(mergedQuestions, warnings, "按题型分组题号合并")
+    }
+
+    fun mergeBySequence(
+        questions: List<Question>,
+        answers: List<ParsedAnswerEntry>
+    ): MergeResult {
+        val warnings = mutableListOf<ImportWarning>()
+        val mergedQuestions = questions.mapIndexed { index, question ->
+            val matched = answers.getOrNull(index)
+            if (matched == null) {
+                warnings += ImportWarning(WarningLevel.WARNING, question.number, "按顺序未匹配到答案")
+                question
+            } else {
+                applyAnswer(question, matched)
+            }
+        }
+        if (answers.size > questions.size) {
+            warnings += ImportWarning(WarningLevel.WARNING, null, "答案数量多于题目数量，已忽略多余答案")
+        }
+        return MergeResult(mergedQuestions, warnings, "按顺序合并")
+    }
+
+    private fun applyAnswer(question: Question, entry: ParsedAnswerEntry): Question {
+        return question.copy(
+            answer = if (question.answer.isNotEmpty()) question.answer else normalizeAnswerForQuestion(question, entry.answer),
+            analysis = if (question.analysis.isNotBlank()) question.analysis else entry.analysis
         )
+    }
+
+    private fun normalizeAnswerForQuestion(question: Question, answer: List<String>): List<String> {
+        if (answer.isEmpty()) return emptyList()
+        if (question.type == QuestionType.JUDGE) {
+            val first = answer.first().trim()
+            return when (first) {
+                "正确", "对", "是", "√", "T", "TRUE" -> listOf("A")
+                "错误", "错", "否", "×", "F", "FALSE" -> listOf("B")
+                else -> answer
+            }
+        }
+        return answer
     }
 }

@@ -16,50 +16,39 @@ object ImportValidator {
 
             when (question.type) {
                 QuestionType.SINGLE -> {
-                    if (question.options.size < 2) {
-                        warnings += ImportWarning(WarningLevel.ERROR, question.number, "单选题缺少足够选项")
-                    }
-                    if (question.answer.isEmpty()) {
-                        warnings += ImportWarning(WarningLevel.WARNING, question.number, "单选题未识别到答案")
-                    }
-                    if (question.answer.size > 1) {
-                        warnings += ImportWarning(WarningLevel.ERROR, question.number, "单选题出现多个答案")
-                    }
-                    if (question.options.size == 2) {
-                        val optionTexts = question.options.map { it.text }
-                        if (optionTexts.all { it in listOf("正确", "错误", "对", "错", "是", "否") }) {
-                            warnings += ImportWarning(
-                                WarningLevel.WARNING,
-                                question.number,
-                                "两选项单选题，请确认这不是判断题分区内容"
-                            )
-                        }
-                    }
+                    if (question.options.size < 2) warnings += ImportWarning(WarningLevel.ERROR, question.number, "单选题缺少足够选项")
+                    if (question.answer.isEmpty()) warnings += ImportWarning(WarningLevel.WARNING, question.number, "单选题未识别到答案")
+                    if (question.answer.size > 1) warnings += ImportWarning(WarningLevel.ERROR, question.number, "单选题出现多个答案")
+                    validateChoiceAnswer(question, warnings)
                 }
 
                 QuestionType.MULTIPLE -> {
-                    if (question.options.size < 2) {
-                        warnings += ImportWarning(WarningLevel.ERROR, question.number, "多选题缺少足够选项")
-                    }
-                    if (question.answer.size < 2) {
-                        warnings += ImportWarning(WarningLevel.WARNING, question.number, "多选题答案数量偏少，请确认")
-                    }
+                    if (question.options.size < 2) warnings += ImportWarning(WarningLevel.ERROR, question.number, "多选题缺少足够选项")
+                    if (question.answer.isEmpty()) warnings += ImportWarning(WarningLevel.WARNING, question.number, "多选题未识别到答案")
+                    validateChoiceAnswer(question, warnings)
                 }
 
                 QuestionType.JUDGE -> {
-                    if (question.answer.isEmpty()) {
-                        warnings += ImportWarning(WarningLevel.WARNING, question.number, "判断题未识别到答案")
-                    }
+                    if (question.options.size < 2) warnings += ImportWarning(WarningLevel.WARNING, question.number, "判断题缺少对/错选项，已尝试自动补全")
+                    if (question.answer.isEmpty()) warnings += ImportWarning(WarningLevel.WARNING, question.number, "判断题未识别到答案")
+                    if (question.answer.any { it !in listOf("A", "B") }) warnings += ImportWarning(WarningLevel.WARNING, question.number, "判断题答案不是标准对/错标记")
                 }
 
                 QuestionType.BLANK, QuestionType.SHORT -> {
-                    if (question.answer.isEmpty()) {
-                        warnings += ImportWarning(WarningLevel.WARNING, question.number, "主观题未识别到参考答案")
-                    }
+                    if (question.answer.isEmpty()) warnings += ImportWarning(WarningLevel.WARNING, question.number, "主观题未识别到参考答案")
                 }
             }
         }
 
         return warnings
+    }
+
+    private fun validateChoiceAnswer(question: Question, warnings: MutableList<ImportWarning>) {
+        if (question.answer.isEmpty() || question.options.isEmpty()) return
+        val keys = question.options.map { it.key }.toSet()
+        val invalid = question.answer.filterNot { it in keys }
+        if (invalid.isNotEmpty()) {
+            warnings += ImportWarning(WarningLevel.WARNING, question.number, "答案选项不在当前题目选项范围内")
+        }
     }
 }

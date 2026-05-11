@@ -5,16 +5,28 @@ import com.yiqiu.shirohaquiz.importer.model.Question
 import com.yiqiu.shirohaquiz.importer.model.QuestionType
 
 object StandardQuestionParser {
-    private val optionRegex = Regex("""^\s*([A-Ga-g])[.、．:：)]\s*(.+)$""")
-    private val answerLineRegex = Regex("""^\s*(?:答案|正确答案|参考答案|标准答案)\s*[:：]\s*(.+)$""")
-    private val analysisLineRegex = Regex("""^\s*(?:解析|说明)\s*[:：]?\s*(.*)$""")
-    private val trailingChoiceAnswerRegex = Regex("""\(([A-Ga-g](?:[A-Ga-g]|[,，、/\s]+[A-Ga-g])*)\)\s*$""")
-    private val trailingJudgeAnswerRegex = Regex("""\((对|错|正确|错误|√|×|True|False)\)\s*$""", RegexOption.IGNORE_CASE)
-    private val shortKeywords = Regex("""(简答|问答|名词解释|论述|说明原因|谈谈)""")
-    private val blankKeywords = Regex("""(填空|填入|补全|补充完整)""")
+    private val answerLineRegex = Regex("""^\s*\[?\s*(?:答案|正确答案|参考答案|标准答案|答)\s*[:：]\s*(.+?)\s*\]?$""")
+    private val analysisLineRegex = Regex("""^\s*\[?\s*(?:解析|答案解析|说明)\s*\]?\s*[:：]?\s*(.*)$""")
+    private val bracketAnswerRegex = Regex("""[\[\(]\s*(?:答案|正确答案|参考答案|标准答案)\s*[:：]\s*([^\]\)]+)\s*[\]\)]""")
+    private val embeddedChoiceAnswerRegex = Regex("""[\(]\s*([A-Ga-g]{1,7}|对|错|正确|错误|√|×|True|False)\s*[\)]""", RegexOption.IGNORE_CASE)
+    private val shortKeywords = Regex("""(简答|问答|名词解释|论述|说明原因|谈谈|分析|阐述|为什么|如何|哪些|什么是)""")
+    private val blankKeywords = Regex("""(填空|填入|补全|补充完整|_{2,}|[\(]\s*[\)]|空白处)""")
+    private val judgeKeywords = Regex("""(判断|正确|错误|对错|是非|是否|√|×)""")
 
-    fun parse(text: String): List<Question> {
-        return QuestionBlockSplitter.split(text).mapNotNull(::parseBlock)
+    private data class OptionMarker(val key: String, val markerStart: Int, val contentStart: Int)
+    private data class LineAnswerExtraction(val cleanLine: String, val answerText: String? = null, val analysisText: String? = null)
+
+    fun parse(
+        text: String,
+        forcedType: QuestionType? = null,
+        category: String = ""
+    ): List<Question> {
+        return QuestionBlockSplitter.split(
+            text = text,
+            forcedType = forcedType,
+            category = category,
+            allowUnnumbered = true
+        ).mapNotNull(::parseBlock)
     }
 
     private fun parseBlock(block: QuestionBlock): Question? {
@@ -27,21 +39,28 @@ object StandardQuestionParser {
         var inAnalysis = false
 
         block.lines.forEach { rawLine ->
-            val line = rawLine.trim()
+            val extracted = extractInlineAnswer(rawLine.trim())
+            val line = extracted.cleanLine.trim()
+            if (extracted.answerText?.isNotBlank() == true && answerText.isBlank()) {
+                answerText = extracted.answerText.trim()
+            }
+            if (extracted.analysisText?.isNotBlank() == true) {
+                analysisLines += extracted.analysisText.trim()
+            }
+
             when {
                 line.isBlank() -> Unit
                 inAnalysis -> analysisLines += line
                 analysisLineRegex.matches(line) -> {
                     inAnalysis = true
-                    analysisLines += analysisLineRegex.find(line)?.groupValues?.get(1).orEmpty()
+                    analysisLines += analysisLineRegex.find(line)?.groupValues?.get(1).orEmpty().trim()
                 }
                 answerLineRegex.matches(line) -> {
-                    answerText = answerLineRegex.find(line)?.groupValues?.get(1)?.trim().orEmpty()
+                    if (answerText.isBlank()) {
+                        answerText = answerLineRegex.find(line)?.groupValues?.get(1)?.trim().orEmpty()
+                    }
                 }
-                optionRegex.matches(line) -> {
-                    val match = optionRegex.find(line) ?: return@forEach
-                    options += Option(match.groupValues[1].uppercase(), match.groupValues[2].trim())
-                }
+                appendOptionsOrStem(line, options, stemLines) -> Unit
                 options.isNotEmpty() -> {
                     val last = options.removeLast()
                     options += last.copy(text = "${last.text} $line".replace(Regex("""\s+"""), " ").trim())
@@ -53,61 +72,160 @@ object StandardQuestionParser {
         var stem = stemLines.joinToString(" ").replace(Regex("""\s+"""), " ").trim()
         if (stem.isBlank()) return null
 
-        trailingJudgeAnswerRegex.find(stem)?.let { hit ->
-            if (answerText.isBlank()) answerText = hit.groupValues[1]
-            stem = stem.removeRange(hit.range).trim()
-        }
-        trailingChoiceAnswerRegex.find(stem)?.let { hit ->
-            if (answerText.isBlank()) answerText = hit.groupValues[1]
-            stem = stem.removeRange(hit.range).trim()
+        if (answerText.isBlank()) {
+            embeddedChoiceAnswerRegex.find(stem)?.let { hit ->
+                answerText = hit.groupValues[1].trim()
+                stem = stem.replaceRange(hit.range, "( )").replace(Regex("""\s+"""), " ").trim()
+            }
         }
 
-        val type = inferType(stem = stem, options = options, answerText = answerText)
+        val type = inferType(
+            stem = stem,
+            options = options,
+            answerText = answerText,
+            forcedType = block.forcedType
+        )
+        val normalizedOptions = normalizeOptionsForType(options, type)
         val answer = normalizeAnswer(answerText, type)
 
         return Question(
             number = block.number,
             type = type,
             question = stem,
-            options = options,
+            options = normalizedOptions,
             answer = answer,
-            analysis = analysisLines.joinToString("\n").trim()
+            analysis = analysisLines.joinToString("\n").trim(),
+            category = block.category
         )
     }
 
-    private fun inferType(stem: String, options: List<Option>, answerText: String): QuestionType {
-        if (shortKeywords.containsMatchIn(stem)) return QuestionType.SHORT
-        if (blankKeywords.containsMatchIn(stem)) return QuestionType.BLANK
+    private fun extractInlineAnswer(line: String): LineAnswerExtraction {
+        var answer: String? = null
+        var analysis: String? = null
+        var clean = line
+
+        bracketAnswerRegex.find(clean)?.let { match ->
+            answer = match.groupValues[1].trim()
+            clean = clean.removeRange(match.range).trim()
+        }
+
+        val answerWithAnalysis = Regex(
+            """^\s*\[?\s*(?:答案|正确答案|参考答案|标准答案|答)\s*[:：]\s*(.+?)(?:\s*(?:解析|说明)\s*[:：]\s*(.*))?\s*\]?$"""
+        ).find(clean)
+        if (answerWithAnalysis != null) {
+            answer = answer ?: answerWithAnalysis.groupValues[1].trim()
+            analysis = answerWithAnalysis.groupValues.getOrElse(2) { "" }.trim().ifBlank { null }
+        }
+
+        return LineAnswerExtraction(cleanLine = clean, answerText = answer, analysisText = analysis)
+    }
+
+    private fun appendOptionsOrStem(
+        line: String,
+        options: MutableList<Option>,
+        stemLines: MutableList<String>
+    ): Boolean {
+        val markers = findOptionMarkers(line)
+        if (markers.isEmpty()) return false
+        if (markers.size == 1 && markers.first().markerStart > 0 && options.isNotEmpty()) return false
+
+        val firstMarker = markers.first()
+        if (firstMarker.markerStart > 0) {
+            val prefix = line.substring(0, firstMarker.markerStart).trim()
+            if (prefix.isNotBlank()) stemLines += prefix
+        }
+
+        markers.forEachIndexed { index, marker ->
+            val end = markers.getOrNull(index + 1)?.markerStart ?: line.length
+            val text = line.substring(marker.contentStart, end)
+                .trim()
+                .trim(';', '；')
+                .trim()
+            if (text.isNotBlank()) {
+                val existingIndex = options.indexOfLast { it.key == marker.key }
+                if (existingIndex >= 0) {
+                    val old = options[existingIndex]
+                    options[existingIndex] = old.copy(text = "${old.text} $text".replace(Regex("""\s+"""), " ").trim())
+                } else {
+                    options += Option(marker.key, text)
+                }
+            }
+        }
+        return true
+    }
+
+    private fun findOptionMarkers(line: String): List<OptionMarker> {
+        val markers = mutableListOf<OptionMarker>()
+
+        Regex("""([A-Ga-g])\s*[.、．:：]""").findAll(line).forEach { match ->
+            markers += OptionMarker(
+                key = match.groupValues[1].uppercase(),
+                markerStart = match.range.first,
+                contentStart = match.range.last + 1
+            )
+        }
+
+        Regex("""^\s*([A-Ga-g])\s*[)）]""").findAll(line).forEach { match ->
+            markers += OptionMarker(
+                key = match.groupValues[1].uppercase(),
+                markerStart = match.range.first,
+                contentStart = match.range.last + 1
+            )
+        }
+
+        Regex("""[;；]\s*([A-Ga-g])(?=\S)""").findAll(line).forEach { match ->
+            val keyGroup = match.groups[1] ?: return@forEach
+            markers += OptionMarker(
+                key = keyGroup.value.uppercase(),
+                markerStart = keyGroup.range.first,
+                contentStart = keyGroup.range.last + 1
+            )
+        }
+
+        return markers
+            .distinctBy { it.markerStart to it.key }
+            .sortedBy { it.markerStart }
+    }
+
+    private fun inferType(
+        stem: String,
+        options: List<Option>,
+        answerText: String,
+        forcedType: QuestionType?
+    ): QuestionType {
+        if (forcedType != null) return forcedType
 
         if (options.isEmpty()) {
             if (AnswerTokenParser.isObjectiveAnswerText(answerText)) {
                 val tokens = AnswerTokenParser.parseObjectiveAnswers(answerText)
-                if (tokens.all { it == "A" || it == "B" } &&
-                    Regex("""(对|错|正确|错误|判断|是非|√|×)""").containsMatchIn(stem + answerText)
-                ) {
+                if (tokens.all { it == "A" || it == "B" } && judgeKeywords.containsMatchIn(stem + answerText)) {
                     return QuestionType.JUDGE
                 }
-                return if (tokens.size > 1) QuestionType.MULTIPLE else QuestionType.BLANK
+                return if (blankKeywords.containsMatchIn(stem)) QuestionType.BLANK else QuestionType.SHORT
             }
-            return QuestionType.SHORT
+            return when {
+                shortKeywords.containsMatchIn(stem) -> QuestionType.SHORT
+                blankKeywords.containsMatchIn(stem) -> QuestionType.BLANK
+                answerText.length in 1..20 -> QuestionType.BLANK
+                else -> QuestionType.SHORT
+            }
         }
 
         val optionKeys = options.map { it.key.uppercase() }
         val looksLikeJudgePair = optionKeys == listOf("A", "B") &&
-            options.all { it.text in listOf("正确", "错误", "对", "错", "是", "否", "√", "×", "True", "False") }
-
-        val hasChoiceBeyondB = optionKeys.any { it in listOf("C", "D", "E", "F", "G") }
-        if (hasChoiceBeyondB || options.size >= 3) {
-            val tokens = AnswerTokenParser.parseObjectiveAnswers(answerText)
-            return if (tokens.size > 1) QuestionType.MULTIPLE else QuestionType.SINGLE
-        }
-
-        if (looksLikeJudgePair) {
-            return QuestionType.SINGLE
-        }
+            options.map { it.text.trim() }.all { it in listOf("正确", "错误", "对", "错", "是", "否", "√", "×", "True", "False") }
+        if (looksLikeJudgePair && judgeKeywords.containsMatchIn(stem + answerText)) return QuestionType.JUDGE
 
         val tokens = AnswerTokenParser.parseObjectiveAnswers(answerText)
         return if (tokens.size > 1) QuestionType.MULTIPLE else QuestionType.SINGLE
+    }
+
+    private fun normalizeOptionsForType(options: List<Option>, type: QuestionType): List<Option> {
+        return if (type == QuestionType.JUDGE && options.isEmpty()) {
+            listOf(Option("A", "正确"), Option("B", "错误"))
+        } else {
+            options.distinctBy { it.key }
+        }
     }
 
     private fun normalizeAnswer(answerText: String, type: QuestionType): List<String> {
@@ -118,8 +236,8 @@ object StandardQuestionParser {
                 val normalized = AnswerTokenParser.parseObjectiveAnswers(answerText)
                 when {
                     normalized.isNotEmpty() -> normalized
-                    Regex("""^(对|正确|是|√|true)$""", RegexOption.IGNORE_CASE).matches(answerText.trim()) -> listOf("A")
-                    Regex("""^(错|错误|否|×|false)$""", RegexOption.IGNORE_CASE).matches(answerText.trim()) -> listOf("B")
+                    Regex("""^(对|正确|是|√|true|t)$""", RegexOption.IGNORE_CASE).matches(answerText.trim()) -> listOf("A")
+                    Regex("""^(错|错误|否|×|x|false|f)$""", RegexOption.IGNORE_CASE).matches(answerText.trim()) -> listOf("B")
                     else -> emptyList()
                 }
             }

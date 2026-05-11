@@ -4,16 +4,20 @@ import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -23,7 +27,9 @@ import androidx.compose.material.icons.rounded.FileOpen
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,6 +38,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -51,6 +59,8 @@ import com.yiqiu.shirohaquiz.ui.components.NoticeCard
 import com.yiqiu.shirohaquiz.ui.components.ShirohaHeader
 import com.yiqiu.shirohaquiz.ui.components.StatusChip
 import com.yiqiu.shirohaquiz.ui.components.UploadPanel
+import com.yiqiu.shirohaquiz.ui.theme.ShirohaColors
+import com.yiqiu.shirohaquiz.ui.theme.ShirohaRadius
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaSpacing
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -182,25 +192,28 @@ fun ImportScreen(
                 )
             }
             Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ActionPillButton(
-                    icon = Icons.Rounded.AutoAwesome,
-                    text = if (useDualImport) "当前：双文件导入" else "切换到双文件导入",
-                    primary = useDualImport,
-                    onClick = {
-                        useDualImport = true
-                        importResult = null
-                        statusText = "已切换到原生双文件导入模式。"
-                    }
-                )
-                ActionPillButton(
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ImportModeChip(
                     icon = Icons.Rounded.Description,
-                    text = if (!useDualImport) "当前：标准导入" else "切回标准导入",
-                    primary = !useDualImport,
+                    text = "标准导入",
+                    selected = !useDualImport,
                     onClick = {
                         useDualImport = false
                         importResult = null
                         statusText = "已切换到原生标准导入模式。"
+                    }
+                )
+                ImportModeChip(
+                    icon = Icons.Rounded.AutoAwesome,
+                    text = "双文件导入",
+                    selected = useDualImport,
+                    onClick = {
+                        useDualImport = true
+                        importResult = null
+                        statusText = "已切换到原生双文件导入模式。"
                     }
                 )
             }
@@ -327,6 +340,43 @@ fun ImportScreen(
 
         if (importResult == null && rawText.isNotBlank()) {
             LoadingIllustration("准备好以后，点击“开始原生解析”，这里会切成结构化预览。")
+        }
+    }
+}
+
+@Composable
+private fun ImportModeChip(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(ShirohaRadius.Pill),
+        color = if (selected) ShirohaColors.BrandPrimarySoft else Color.White.copy(alpha = 0.84f),
+        border = BorderStroke(
+            1.dp,
+            if (selected) ShirohaColors.LineSelected else ShirohaColors.LineStrong
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = text,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }

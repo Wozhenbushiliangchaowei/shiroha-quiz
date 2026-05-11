@@ -8,7 +8,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.ImportExport
@@ -25,9 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -93,24 +90,6 @@ fun ShirohaAppShell() {
                 )
                 .padding(innerPadding)
         ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 20.dp, top = 12.dp)
-                    .blur(48.dp)
-                    .background(Color(0x334F7CFF), CircleShape)
-                    .padding(80.dp)
-            )
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(end = 10.dp, top = 56.dp)
-                    .blur(56.dp)
-                    .background(Color(0x22FFFFFF), CircleShape)
-                    .padding(68.dp)
-            )
-
             AnimatedContent(
                 targetState = currentTab,
                 transitionSpec = { fadeIn() togetherWith fadeOut() },
