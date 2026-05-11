@@ -109,9 +109,10 @@ object QuizRepository {
         wrongBook.clear()
         studyRecords.clear()
 
-        if (restoredBanks.isNotEmpty()) {
-            banks.addAll(restoredBanks)
-            activeBankId = prefs.getString(KEY_ACTIVE_BANK_ID, restoredBanks.firstOrNull()?.id)
+        val sanitizedRestoredBanks = restoredBanks.map(::sanitizeBank)
+        if (sanitizedRestoredBanks.isNotEmpty()) {
+            banks.addAll(sanitizedRestoredBanks)
+            activeBankId = prefs.getString(KEY_ACTIVE_BANK_ID, sanitizedRestoredBanks.firstOrNull()?.id)
         } else {
             banks += demoBank()
             activeBankId = "demo-bank"
@@ -119,6 +120,7 @@ object QuizRepository {
 
         wrongBook.addAll(restoredWrongBook)
         studyRecords.addAll(restoredStudyRecords)
+        if (sanitizedRestoredBanks != restoredBanks) persist()
     }
 
     fun importBank(context: Context, name: String, questions: List<Question>) {
@@ -126,7 +128,7 @@ object QuizRepository {
         val bank = QuizBank(
             id = "bank_${System.currentTimeMillis()}",
             name = name.ifBlank { "导入题库" },
-            questions = questions
+            questions = questions.map(::sanitizeQuestion)
         )
         banks += bank
         activeBankId = bank.id
@@ -372,6 +374,45 @@ object QuizRepository {
         practiceLastResult = null
     }
 
+    private fun sanitizeBank(bank: QuizBank): QuizBank {
+        return bank.copy(questions = bank.questions.map(::sanitizeQuestion))
+    }
+
+    private fun sanitizeQuestion(question: Question): Question {
+        val cleanQuestion = stripEmbeddedAnswerBracket(question.question, question.answer)
+        return if (cleanQuestion == question.question) question else question.copy(question = cleanQuestion)
+    }
+
+    private fun stripEmbeddedAnswerBracket(stem: String, answer: List<String>): String {
+        if (stem.isBlank() || answer.isEmpty()) return stem
+        val expected = answer.map { it.trim().uppercase() }.filter { it.isNotBlank() }.sorted()
+        if (expected.isEmpty()) return stem
+
+        val match = Regex(
+            """[（(]\s*([A-Ga-g]{1,7}|正确|错误|对|错|是|否|√|×|True|False)\s*[）)]""",
+            RegexOption.IGNORE_CASE
+        ).findAll(stem).toList().asReversed().firstOrNull { hit ->
+            embeddedAnswerToKeys(hit.groupValues[1]) == expected
+        } ?: return stem
+
+        return stem.removeRange(match.range)
+            .replace(Regex("""\s+([?？。；;，,])"""), "$1")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+            .trimEnd('，', ',', '；', ';', ':', '：')
+            .trim()
+    }
+
+    private fun embeddedAnswerToKeys(raw: String): List<String> {
+        val value = raw.trim().uppercase()
+        return when {
+            value.matches(Regex("""^[A-G]{1,7}$""")) -> value.map { it.toString() }.distinct().sorted()
+            value in listOf("正确", "对", "是", "√", "TRUE", "T") -> listOf("A")
+            value in listOf("错误", "错", "否", "×", "X", "FALSE", "F") -> listOf("B")
+            else -> emptyList()
+        }
+    }
+
     private fun evaluateQuestion(question: Question, userAnswer: List<String>): QuestionCheckResult {
         val correctAnswer = question.answer.sorted()
         val normalizedUserAnswer = userAnswer.sorted()
@@ -599,18 +640,20 @@ object QuizRepository {
             }
         }
 
-        return Question(
-            id = questionJson.optString("id"),
-            number = questionJson.optString("number"),
-            type = runCatching {
-                QuestionType.valueOf(questionJson.optString("type"))
-            }.getOrDefault(QuestionType.SINGLE),
-            question = questionJson.optString("question"),
-            options = options,
-            answer = answers,
-            analysis = questionJson.optString("analysis"),
-            category = questionJson.optString("category"),
-            score = if (questionJson.has("score")) questionJson.optDouble("score") else null
+        return sanitizeQuestion(
+            Question(
+                id = questionJson.optString("id"),
+                number = questionJson.optString("number"),
+                type = runCatching {
+                    QuestionType.valueOf(questionJson.optString("type"))
+                }.getOrDefault(QuestionType.SINGLE),
+                question = questionJson.optString("question"),
+                options = options,
+                answer = answers,
+                analysis = questionJson.optString("analysis"),
+                category = questionJson.optString("category"),
+                score = if (questionJson.has("score")) questionJson.optDouble("score") else null
+            )
         )
     }
 

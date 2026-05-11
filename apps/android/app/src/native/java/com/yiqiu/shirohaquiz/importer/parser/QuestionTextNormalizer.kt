@@ -5,6 +5,7 @@ object QuestionTextNormalizer {
         if (raw.isBlank()) return ""
         return raw
             .replace("\uFEFF", "")
+            .replace("\uFE0F", "")
             .replace("\r\n", "\n")
             .replace('\r', '\n')
             .replace('\u3000', ' ')

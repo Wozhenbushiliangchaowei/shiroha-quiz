@@ -8,13 +8,14 @@ object StandardQuestionParser {
     private val answerLineRegex = Regex("""^\s*\[?\s*(?:答案|正确答案|参考答案|标准答案|答)\s*[:：]\s*(.+?)\s*\]?$""")
     private val analysisLineRegex = Regex("""^\s*\[?\s*(?:解析|答案解析|说明)\s*\]?\s*[:：]?\s*(.*)$""")
     private val bracketAnswerRegex = Regex("""[\[\(]\s*(?:答案|正确答案|参考答案|标准答案)\s*[:：]\s*([^\]\)]+)\s*[\]\)]""")
-    private val embeddedChoiceAnswerRegex = Regex("""[\(]\s*([A-Ga-g]{1,7}|对|错|正确|错误|√|×|True|False)\s*[\)]""", RegexOption.IGNORE_CASE)
+    private val embeddedChoiceAnswerRegex = Regex("""[\(]\s*([A-Ga-g]{1,7}|对|错|正确|错误|是|否|√|×|True|False)\s*[\)]""", RegexOption.IGNORE_CASE)
     private val shortKeywords = Regex("""(简答|问答|名词解释|论述|说明原因|谈谈|分析|阐述|为什么|如何|哪些|什么是)""")
     private val blankKeywords = Regex("""(填空|填入|补全|补充完整|_{2,}|[\(]\s*[\)]|空白处)""")
     private val judgeKeywords = Regex("""(判断|正确|错误|对错|是非|是否|√|×)""")
 
     private data class OptionMarker(val key: String, val markerStart: Int, val contentStart: Int)
     private data class LineAnswerExtraction(val cleanLine: String, val answerText: String? = null, val analysisText: String? = null)
+    private data class EmbeddedStemAnswer(val cleanStem: String, val answerText: String)
 
     fun parse(
         text: String,
@@ -72,11 +73,11 @@ object StandardQuestionParser {
         var stem = stemLines.joinToString(" ").replace(Regex("""\s+"""), " ").trim()
         if (stem.isBlank()) return null
 
-        if (answerText.isBlank()) {
-            embeddedChoiceAnswerRegex.find(stem)?.let { hit ->
-                answerText = hit.groupValues[1].trim()
-                stem = stem.replaceRange(hit.range, "( )").replace(Regex("""\s+"""), " ").trim()
+        extractEmbeddedAnswerFromStem(stem, answerText, options)?.let { extracted ->
+            if (answerText.isBlank()) {
+                answerText = extracted.answerText
             }
+            stem = extracted.cleanStem
         }
 
         val type = inferType(
@@ -97,6 +98,38 @@ object StandardQuestionParser {
             analysis = analysisLines.joinToString("\n").trim(),
             category = block.category
         )
+    }
+
+
+    private fun extractEmbeddedAnswerFromStem(
+        stem: String,
+        existingAnswer: String,
+        options: List<Option>
+    ): EmbeddedStemAnswer? {
+        val matches = embeddedChoiceAnswerRegex.findAll(stem).toList()
+        if (matches.isEmpty()) return null
+
+        val answerTokens = AnswerTokenParser.parseObjectiveAnswers(existingAnswer)
+        val selected = matches.asReversed().firstOrNull { match ->
+            val candidate = match.groupValues[1].trim()
+            val candidateTokens = AnswerTokenParser.parseObjectiveAnswers(candidate)
+            when {
+                existingAnswer.isBlank() && candidateTokens.isNotEmpty() -> true
+                candidateTokens.isNotEmpty() && answerTokens.isNotEmpty() && candidateTokens == answerTokens -> true
+                options.isNotEmpty() && AnswerTokenParser.isObjectiveAnswerText(candidate) -> true
+                else -> false
+            }
+        } ?: return null
+
+        val candidate = selected.groupValues[1].trim()
+        val cleanStem = stem.removeRange(selected.range)
+            .replace(Regex("""\s+([?？。；;，,])"""), "$1")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+            .trimEnd('，', ',', '；', ';', ':', '：')
+            .trim()
+
+        return EmbeddedStemAnswer(cleanStem = cleanStem, answerText = candidate)
     }
 
     private fun extractInlineAnswer(line: String): LineAnswerExtraction {
