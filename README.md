@@ -114,7 +114,7 @@ shiroha-quiz/
 
 ## 下载与使用
 
-最新 Web 版：**v0.3.9-alpha** / 原生版：**v0.1.0**
+最新 Web 版：**v0.4.0-alpha** / 原生版：**v0.1.2**
 
 - [GitHub Releases](https://github.com/reiqr/shiroha-quiz/releases)
 - [在线体验](https://reiqr.github.io/shiroha-quiz)
