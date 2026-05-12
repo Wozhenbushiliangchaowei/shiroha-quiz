@@ -1,6 +1,12 @@
-# Changelog
+﻿# Changelog
 
 ## Unreleased
+
+## v0.2.3-native
+
+- 新增题库重命名
+- 二次核对功能
+- 优化核对页面排版nn## v0.2.3-nativenn- 新增题库重命名n- 二次核对功能n- 优化核对页面排版n## v0.2.3-nativen- 新增题库重命名n- 优化核对页面排版
 
 ## v0.4.3-alpha
 
