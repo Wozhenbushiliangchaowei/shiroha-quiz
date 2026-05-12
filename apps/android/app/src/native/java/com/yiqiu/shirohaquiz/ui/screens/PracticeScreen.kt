@@ -12,8 +12,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaColors
+import com.yiqiu.shirohaquiz.ui.theme.ShirohaRadius
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -494,7 +496,7 @@ private fun PracticeSetupPanel(
 
 @Composable
 private fun CompactPracticeSetupHero() {
-    GlassCard {
+    GlassCard(modifier = Modifier.height(132.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -502,7 +504,7 @@ private fun CompactPracticeSetupHero() {
         ) {
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(7.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.Start
             ) {
                 PracticeSetupStepCard(index = "1", text = "选好参数")
@@ -512,7 +514,7 @@ private fun CompactPracticeSetupHero() {
             Image(
                 painter = painterResource(R.drawable.illus_practice_hint_webp),
                 contentDescription = "练习提示",
-                modifier = Modifier.size(88.dp)
+                modifier = Modifier.size(92.dp)
             )
         }
     }
@@ -521,21 +523,23 @@ private fun CompactPracticeSetupHero() {
 @Composable
 private fun PracticeSetupStepCard(index: String, text: String) {
     Surface(
-        modifier = Modifier.width(172.dp),
-        shape = RoundedCornerShape(999.dp),
+        modifier = Modifier
+            .width(144.dp)
+            .defaultMinSize(minHeight = 34.dp),
+        shape = RoundedCornerShape(ShirohaRadius.Pill),
         color = ShirohaColors.BrandPrimarySoft,
         border = BorderStroke(1.dp, ShirohaColors.LineSelected)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .padding(horizontal = 10.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
             Text(
                 text = "$index  $text",
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -546,20 +550,22 @@ private fun PracticeSetupStepCard(index: String, text: String) {
 }
 
 
+
 @Composable
 private fun CompactPracticeChip(
     text: String,
     selected: Boolean = false
 ) {
     Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = if (selected) ShirohaColors.BrandPrimarySoft else Color.White.copy(alpha = 0.82f),
+        modifier = Modifier.defaultMinSize(minHeight = 32.dp),
+        shape = RoundedCornerShape(ShirohaRadius.Pill),
+        color = if (selected) ShirohaColors.BrandPrimarySoft else ShirohaColors.CardMuted,
         border = BorderStroke(1.dp, if (selected) ShirohaColors.LineSelected else ShirohaColors.LineSoft)
     ) {
         Text(
             text = text,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            color = if (selected) MaterialTheme.colorScheme.primary else ShirohaColors.TextSecondary,
             fontWeight = FontWeight.SemiBold,
             style = MaterialTheme.typography.labelMedium,
             maxLines = 1,
@@ -568,13 +574,14 @@ private fun CompactPracticeChip(
     }
 }
 
+
 @Composable
 private fun CompactExitPracticeButton(onClick: () -> Unit) {
     Surface(
         modifier = Modifier
-            .height(34.dp)
+            .defaultMinSize(minHeight = 34.dp)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(999.dp),
+        shape = RoundedCornerShape(ShirohaRadius.Pill),
         color = Color.White.copy(alpha = 0.86f),
         border = BorderStroke(1.dp, ShirohaColors.LineStrong)
     ) {
@@ -591,7 +598,7 @@ private fun CompactExitPracticeButton(onClick: () -> Unit) {
             )
             Spacer(Modifier.width(4.dp))
             Text(
-                text = "退出练习",
+                text = "退出",
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -600,6 +607,7 @@ private fun CompactExitPracticeButton(onClick: () -> Unit) {
         }
     }
 }
+
 
 @Composable
 private fun PracticeCompletionCard(

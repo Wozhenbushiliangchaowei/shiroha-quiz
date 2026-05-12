@@ -9,6 +9,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -642,38 +643,16 @@ private fun ImportModeChip(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    Surface(
-        modifier = modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(ShirohaRadius.Pill),
-        color = if (selected) ShirohaColors.BrandPrimarySoft else Color.White.copy(alpha = 0.84f),
-        border = BorderStroke(
-            1.dp,
-            if (selected) ShirohaColors.LineSelected else ShirohaColors.LineStrong
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = text,
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-            Spacer(Modifier.width(7.dp))
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-            )
-        }
-    }
+    ActionPillButton(
+        icon = icon,
+        text = text,
+        primary = selected,
+        modifier = modifier,
+        fillWidthContent = true,
+        onClick = onClick
+    )
 }
+
 
 @Composable
 private fun ReviewTypeChip(
@@ -682,12 +661,14 @@ private fun ReviewTypeChip(
     onClick: () -> Unit
 ) {
     Surface(
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier
+            .defaultMinSize(minHeight = 32.dp)
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(ShirohaRadius.Pill),
-        color = if (selected) ShirohaColors.BrandPrimarySoft else Color.White.copy(alpha = 0.84f),
+        color = if (selected) ShirohaColors.BrandPrimarySoft else ShirohaColors.CardMuted,
         border = BorderStroke(
             1.dp,
-            if (selected) ShirohaColors.LineSelected else ShirohaColors.LineStrong
+            if (selected) ShirohaColors.LineSelected else ShirohaColors.LineSoft
         )
     ) {
         Text(
@@ -695,10 +676,13 @@ private fun ReviewTypeChip(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
-            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+            color = if (selected) MaterialTheme.colorScheme.primary else ShirohaColors.TextSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
+
 
 @Composable
 private fun ReviewCompactButton(
@@ -709,13 +693,15 @@ private fun ReviewCompactButton(
     onClick: () -> Unit
 ) {
     Surface(
-        modifier = modifier.clickable(onClick = onClick),
+        modifier = modifier
+            .defaultMinSize(minHeight = 38.dp)
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(ShirohaRadius.Pill),
-        color = if (primary) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.82f),
-        border = if (primary) null else BorderStroke(1.dp, ShirohaColors.LineStrong)
+        color = if (primary) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.86f),
+        border = BorderStroke(1.dp, if (primary) MaterialTheme.colorScheme.primary else ShirohaColors.LineStrong)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 0.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
@@ -737,6 +723,7 @@ private fun ReviewCompactButton(
         }
     }
 }
+
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -1590,7 +1577,7 @@ private fun sampleAnswerText(): String = """
 
 @Composable
 private fun ImportStepHeroCard() {
-    GlassCard {
+    GlassCard(modifier = Modifier.height(132.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -1598,7 +1585,7 @@ private fun ImportStepHeroCard() {
         ) {
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 ImportStepPill("1 导入文件", selected = true)
                 ImportStepPill("2 核对结果", selected = false)
@@ -1607,7 +1594,7 @@ private fun ImportStepHeroCard() {
             Image(
                 painter = painterResource(R.drawable.illus_import_hint_webp),
                 contentDescription = null,
-                modifier = Modifier.size(134.dp),
+                modifier = Modifier.size(92.dp),
                 contentScale = ContentScale.Fit
             )
         }
@@ -1620,19 +1607,22 @@ private fun ImportStepPill(
     selected: Boolean
 ) {
     Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = if (selected) ShirohaColors.BrandPrimarySoft else Color.White.copy(alpha = 0.72f),
+        shape = RoundedCornerShape(ShirohaRadius.Pill),
+        color = if (selected) ShirohaColors.BrandPrimarySoft else ShirohaColors.CardMuted,
         border = BorderStroke(1.dp, if (selected) ShirohaColors.LineSelected else ShirohaColors.LineSoft),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 28.dp)
     ) {
         Text(
             text = text,
-            modifier = Modifier.padding(horizontal = 15.dp, vertical = 8.dp),
-            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+            color = if (selected) MaterialTheme.colorScheme.primary else ShirohaColors.TextSecondary,
+            style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
     }
 }
+

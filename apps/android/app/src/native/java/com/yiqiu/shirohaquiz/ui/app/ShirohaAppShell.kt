@@ -1,9 +1,5 @@
 package com.yiqiu.shirohaquiz.ui.app
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -101,80 +97,74 @@ fun ShirohaAppShell() {
                 )
                 .padding(innerPadding)
         ) {
-            AnimatedContent(
-                targetState = currentTab,
-                transitionSpec = { fadeIn() togetherWith fadeOut() },
-                label = "main_tabs"
-            ) { tab ->
-                when (tab) {
-                    MainTab.Home -> HomeScreen(
-                        onGoImport = { currentTab = MainTab.Import },
-                        onGoPractice = { currentTab = MainTab.Practice },
-                        onGoExam = { currentTab = MainTab.Exam },
-                        onOpenBankList = { currentTab = MainTab.BankList },
-                        onOpenBankDetail = { bankId ->
-                            detailBankId = bankId
-                            currentTab = MainTab.BankDetail
-                        },
-                        onOpenWrongBook = { currentTab = MainTab.WrongBook },
-                        onOpenRecords = { currentTab = MainTab.Records }
-                    )
+            when (currentTab) {
+                MainTab.Home -> HomeScreen(
+                    onGoImport = { currentTab = MainTab.Import },
+                    onGoPractice = { currentTab = MainTab.Practice },
+                    onGoExam = { currentTab = MainTab.Exam },
+                    onOpenBankList = { currentTab = MainTab.BankList },
+                    onOpenBankDetail = { bankId ->
+                        detailBankId = bankId
+                        currentTab = MainTab.BankDetail
+                    },
+                    onOpenWrongBook = { currentTab = MainTab.WrongBook },
+                    onOpenRecords = { currentTab = MainTab.Records }
+                )
 
-                    MainTab.Practice -> PracticeScreen(
-                        onGoExam = { currentTab = MainTab.Exam },
-                        onOpenRecords = { currentTab = MainTab.Records }
-                    )
-                    MainTab.Import -> ImportScreen(onImportSaved = { currentTab = MainTab.Home })
-                    MainTab.Me -> MeScreen(
-                        onOpenWrongBook = { currentTab = MainTab.WrongBook },
-                        onOpenRecords = { currentTab = MainTab.Records },
-                        onOpenStandardFormat = { currentTab = MainTab.StandardFormat },
-                        onOpenAbout = { currentTab = MainTab.About }
-                    )
-                    MainTab.Exam -> ExamScreen(
-                        onBackHome = { currentTab = MainTab.Home },
-                        onGoPractice = { currentTab = MainTab.Practice }
-                    )
-                    MainTab.BankList -> BankListScreen(
-                        onBack = { currentTab = MainTab.Home },
-                        onOpenBankDetail = { bankId ->
-                            detailBankId = bankId
-                            currentTab = MainTab.BankDetail
-                        }
-                    )
-                    MainTab.BankDetail -> BankDetailScreen(
-                        bankId = detailBankId,
-                        onBack = { currentTab = MainTab.Home },
-                        onGoPractice = { currentTab = MainTab.Practice },
-                        onGoExam = { currentTab = MainTab.Exam },
-                        onOpenReview = { currentTab = MainTab.BankReview }
-                    )
-                    MainTab.BankReview -> BankReviewScreen(
-                        bankId = detailBankId,
-                        onBack = { currentTab = MainTab.BankDetail }
-                    )
-                    MainTab.WrongBook -> WrongBookScreen(
-                        onBack = { currentTab = MainTab.Home },
-                        onGoPractice = { currentTab = MainTab.Practice }
-                    )
-                    MainTab.Records -> RecordsScreen(
-                        onBack = { currentTab = MainTab.Home },
-                        onOpenRecord = { recordId ->
-                            detailRecordId = recordId
-                            currentTab = MainTab.RecordDetail
-                        }
-                    )
-                    MainTab.RecordDetail -> RecordDetailScreen(
-                        recordId = detailRecordId,
-                        onBack = { currentTab = MainTab.Records }
-                    )
-                    MainTab.StandardFormat -> StandardImportFormatScreen(
-                        onBack = { currentTab = MainTab.Me }
-                    )
-                    MainTab.About -> AboutScreen(
-                        onBack = { currentTab = MainTab.Me }
-                    )
-                }
+                MainTab.Practice -> PracticeScreen(
+                    onGoExam = { currentTab = MainTab.Exam },
+                    onOpenRecords = { currentTab = MainTab.Records }
+                )
+                MainTab.Import -> ImportScreen(onImportSaved = { currentTab = MainTab.Home })
+                MainTab.Me -> MeScreen(
+                    onOpenWrongBook = { currentTab = MainTab.WrongBook },
+                    onOpenRecords = { currentTab = MainTab.Records },
+                    onOpenStandardFormat = { currentTab = MainTab.StandardFormat },
+                    onOpenAbout = { currentTab = MainTab.About }
+                )
+                MainTab.Exam -> ExamScreen(
+                    onBackHome = { currentTab = MainTab.Home },
+                    onGoPractice = { currentTab = MainTab.Practice }
+                )
+                MainTab.BankList -> BankListScreen(
+                    onBack = { currentTab = MainTab.Home },
+                    onOpenBankDetail = { bankId ->
+                        detailBankId = bankId
+                        currentTab = MainTab.BankDetail
+                    }
+                )
+                MainTab.BankDetail -> BankDetailScreen(
+                    bankId = detailBankId,
+                    onBack = { currentTab = MainTab.Home },
+                    onGoPractice = { currentTab = MainTab.Practice },
+                    onGoExam = { currentTab = MainTab.Exam },
+                    onOpenReview = { currentTab = MainTab.BankReview }
+                )
+                MainTab.BankReview -> BankReviewScreen(
+                    bankId = detailBankId,
+                    onBack = { currentTab = MainTab.BankDetail }
+                )
+                MainTab.WrongBook -> WrongBookScreen(
+                    onBack = { currentTab = MainTab.Home },
+                    onGoPractice = { currentTab = MainTab.Practice }
+                )
+                MainTab.Records -> RecordsScreen(
+                    onBack = { currentTab = MainTab.Home },
+                    onOpenRecord = { recordId ->
+                        detailRecordId = recordId
+                        currentTab = MainTab.RecordDetail
+                    }
+                )
+                MainTab.RecordDetail -> RecordDetailScreen(
+                    recordId = detailRecordId,
+                    onBack = { currentTab = MainTab.Records }
+                )
+                MainTab.StandardFormat -> StandardImportFormatScreen(
+                    onBack = { currentTab = MainTab.Me }
+                )
+                MainTab.About -> AboutScreen(
+                    onBack = { currentTab = MainTab.Me }
+                )
             }
         }
     }

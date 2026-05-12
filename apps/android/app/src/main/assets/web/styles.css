@@ -7590,3 +7590,100 @@ body.exam-focus .exam-q{
     font-size:12px!important;
   }
 }
+
+/* v18: 严格统一题库管理卡片“更多 / 删除”的真实盒模型与视觉尺寸 */
+#bank-list .bank-card-actions-v16{
+  width:66px!important;
+  min-width:66px!important;
+  max-width:66px!important;
+  display:grid!important;
+  grid-template-columns:66px!important;
+  grid-auto-rows:32px!important;
+  align-content:start!important;
+  justify-content:end!important;
+  justify-items:stretch!important;
+  align-items:stretch!important;
+  gap:8px!important;
+}
+#bank-list .bank-card-actions-v16 .bank-more-menu-v28,
+#bank-list .bank-card-actions-v16 .bank-more-menu-v28 summary,
+#bank-list .bank-card-actions-v16 .bank-delete-under-more-v16{
+  box-sizing:border-box!important;
+  width:66px!important;
+  min-width:66px!important;
+  max-width:66px!important;
+  height:32px!important;
+  min-height:32px!important;
+  max-height:32px!important;
+  margin:0!important;
+  padding:0!important;
+  border-width:1px!important;
+  border-style:solid!important;
+  border-radius:16px!important;
+  font-size:13px!important;
+  font-weight:900!important;
+  line-height:30px!important;
+  text-align:center!important;
+  white-space:nowrap!important;
+  letter-spacing:0!important;
+  transform:none!important;
+  appearance:none!important;
+  -webkit-appearance:none!important;
+}
+#bank-list .bank-card-actions-v16 .bank-more-menu-v28{
+  position:relative!important;
+  display:block!important;
+  border:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  overflow:visible!important;
+}
+#bank-list .bank-card-actions-v16 .bank-more-menu-v28 summary,
+#bank-list .bank-card-actions-v16 .bank-delete-under-more-v16{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  overflow:hidden!important;
+  box-shadow:0 7px 15px rgba(47,111,237,.05)!important;
+}
+#bank-list .bank-card-actions-v16 .bank-more-menu-v28 summary{
+  list-style:none!important;
+  cursor:pointer!important;
+  color:#2f6fed!important;
+  border-color:rgba(47,111,237,.18)!important;
+  background:linear-gradient(180deg,rgba(255,255,255,.96),rgba(248,252,255,.94))!important;
+}
+#bank-list .bank-card-actions-v16 .bank-more-menu-v28 summary::-webkit-details-marker{
+  display:none!important;
+}
+#bank-list .bank-card-actions-v16 .bank-delete-under-more-v16{
+  color:#d82d2d!important;
+  border-color:rgba(239,68,68,.22)!important;
+  background:linear-gradient(180deg,rgba(255,255,255,.96),rgba(255,250,250,.94))!important;
+}
+#bank-list .bank-card-actions-v16 .bank-more-menu-v28[open] summary{
+  background:linear-gradient(180deg,rgba(239,246,255,.98),rgba(230,242,255,.96))!important;
+}
+@media(max-width:720px){
+  #bank-list .bank-card-actions-v16{
+    width:62px!important;
+    min-width:62px!important;
+    max-width:62px!important;
+    grid-template-columns:62px!important;
+    grid-auto-rows:31px!important;
+    gap:7px!important;
+  }
+  #bank-list .bank-card-actions-v16 .bank-more-menu-v28,
+  #bank-list .bank-card-actions-v16 .bank-more-menu-v28 summary,
+  #bank-list .bank-card-actions-v16 .bank-delete-under-more-v16{
+    width:62px!important;
+    min-width:62px!important;
+    max-width:62px!important;
+    height:31px!important;
+    min-height:31px!important;
+    max-height:31px!important;
+    border-radius:15.5px!important;
+    font-size:12px!important;
+    line-height:29px!important;
+  }
+}

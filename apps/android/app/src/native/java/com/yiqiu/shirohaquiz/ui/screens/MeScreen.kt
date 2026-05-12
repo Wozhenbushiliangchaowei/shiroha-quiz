@@ -111,6 +111,7 @@ fun MeScreen(
             title = "我是Shiroha，欢迎关注。",
             subtitle = "",
             imageRes = R.drawable.illus_home_welcome_webp,
+            modifier = Modifier.height(132.dp),
             imageSize = 92.dp
         )
 

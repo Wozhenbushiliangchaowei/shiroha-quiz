@@ -3,6 +3,7 @@ package com.yiqiu.shirohaquiz.ui.components
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,10 +33,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -47,6 +55,30 @@ import com.yiqiu.shirohaquiz.R
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaColors
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaRadius
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaSpacing
+
+@Composable
+private fun Modifier.cardRiseMotion(enabled: Boolean): Modifier {
+    if (!enabled) return this
+
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { visible = true }
+
+    val offsetY by animateFloatAsState(
+        targetValue = if (visible) 0f else 7f,
+        animationSpec = tween(durationMillis = 180),
+        label = "shiroha_card_rise_y"
+    )
+    val alphaValue by animateFloatAsState(
+        targetValue = if (visible) 1f else 0.92f,
+        animationSpec = tween(durationMillis = 160),
+        label = "shiroha_card_rise_alpha"
+    )
+
+    return graphicsLayer {
+        translationY = offsetY
+        alpha = alphaValue
+    }
+}
 
 @Composable
 fun ShirohaHeader(
@@ -87,30 +119,37 @@ fun ShirohaHeader(
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
+    animated: Boolean = false,
+    contentPadding: Dp = ShirohaSpacing.Xl,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(ShirohaRadius.Xl),
-        colors = CardDefaults.cardColors(containerColor = ShirohaColors.CardGlass),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.72f)),
+        modifier = modifier
+            .fillMaxWidth()
+            .cardRiseMotion(animated),
+        shape = RoundedCornerShape(ShirohaRadius.Lg),
+        colors = CardDefaults.cardColors(containerColor = ShirohaColors.CardSoft),
+        border = BorderStroke(1.dp, ShirohaColors.LineSoft),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
-            modifier = Modifier.padding(ShirohaSpacing.Xl),
+            modifier = Modifier.padding(contentPadding),
             content = content
         )
     }
 }
 
+
 @Composable
 fun StatusChip(
     text: String,
-    selected: Boolean = false
+    selected: Boolean = false,
+    modifier: Modifier = Modifier
 ) {
     Surface(
+        modifier = modifier.defaultMinSize(minHeight = 32.dp),
         shape = RoundedCornerShape(ShirohaRadius.Pill),
-        color = if (selected) ShirohaColors.BrandPrimarySoft else Color.White.copy(alpha = 0.74f),
+        color = if (selected) ShirohaColors.BrandPrimarySoft else ShirohaColors.CardMuted,
         border = BorderStroke(
             1.dp,
             if (selected) ShirohaColors.LineSelected else ShirohaColors.LineSoft
@@ -118,13 +157,16 @@ fun StatusChip(
     ) {
         Text(
             text = text,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            color = if (selected) MaterialTheme.colorScheme.primary else ShirohaColors.TextSecondary,
             fontWeight = FontWeight.SemiBold,
-            style = MaterialTheme.typography.labelLarge
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
+
 
 @Composable
 fun ActionPillButton(
@@ -136,34 +178,41 @@ fun ActionPillButton(
     onClick: () -> Unit = {}
 ) {
     Surface(
-        modifier = modifier.clickable(onClick = onClick),
+        modifier = modifier
+            .defaultMinSize(minHeight = 44.dp)
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(ShirohaRadius.Pill),
-        color = if (primary) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.84f),
-        border = if (primary) null else BorderStroke(1.dp, ShirohaColors.LineStrong)
+        color = if (primary) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.86f),
+        border = BorderStroke(
+            1.dp,
+            if (primary) MaterialTheme.colorScheme.primary else ShirohaColors.LineStrong
+        )
     ) {
         Row(
-            modifier = (if (fillWidthContent) Modifier.fillMaxSize() else Modifier)
-                .padding(horizontal = if (fillWidthContent) 10.dp else 16.dp, vertical = 11.dp),
+            modifier = (if (fillWidthContent) Modifier.fillMaxSize() else Modifier.defaultMinSize(minHeight = 44.dp))
+                .padding(horizontal = if (fillWidthContent) 10.dp else 14.dp, vertical = 0.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = if (fillWidthContent) Arrangement.Center else Arrangement.Start
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = text,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(17.dp),
                 tint = if (primary) Color.White else MaterialTheme.colorScheme.primary
             )
-            Spacer(Modifier.width(if (fillWidthContent) 6.dp else 8.dp))
+            Spacer(Modifier.width(if (fillWidthContent) 6.dp else 7.dp))
             Text(
                 text = text,
                 color = if (primary) Color.White else MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.labelLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
     }
 }
+
 
 @Composable
 fun MetricGlassCard(
@@ -267,8 +316,8 @@ fun UploadPanel(
     icon: ImageVector
 ) {
     Surface(
-        shape = RoundedCornerShape(26.dp),
-        color = Color.White.copy(alpha = 0.58f),
+        shape = RoundedCornerShape(ShirohaRadius.Lg),
+        color = ShirohaColors.CardSoft,
         border = BorderStroke(1.dp, ShirohaColors.LineSoft)
     ) {
         Column(
