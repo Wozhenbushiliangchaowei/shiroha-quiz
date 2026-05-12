@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## v0.4.3-alpha
+
+- 优化答题体验
+- 题库可以二次编辑
+
 ## v0.2.2-native
 
 - 优化原生 APP 功能
