@@ -1,6 +1,7 @@
 package com.yiqiu.shirohaquiz.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -39,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -134,12 +136,7 @@ fun PracticeScreen(
 
         val isPracticeRunning = QuizRepository.practiceQuestions.isNotEmpty()
         if (!isPracticeRunning) {
-            IllustrationHeroCard(
-                title = "选好参数，开始练习。",
-                subtitle = "",
-                imageRes = R.drawable.illus_practice_hint_webp,
-                imageSize = 96.dp
-            )
+            CompactPracticeSetupHero()
         }
 
         if (bank == null || bank.questions.isEmpty()) {
@@ -373,67 +370,102 @@ private fun PracticeSetupPanel(
     GlassCard {
         Text(
             text = bankName,
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
-            maxLines = 1
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = "共 $totalQuestions 题 · 先选择题型和题量，再开始练习",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.height(14.dp))
-        Text("组题方式", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(8.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            ActionPillButton(
-                icon = Icons.Rounded.PlayArrow,
-                text = "随机刷题",
-                primary = practiceOrderMode == "random",
-                onClick = { onSelectPracticeOrderMode("random") }
-            )
-            ActionPillButton(
-                icon = Icons.AutoMirrored.Rounded.TextSnippet,
-                text = "顺序刷题",
-                primary = practiceOrderMode == "ordered",
-                onClick = { onSelectPracticeOrderMode("ordered") }
-            )
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = if (practiceOrderMode == "random") "随机刷题会从当前筛选题型中抽题。" else "顺序刷题会按题库原顺序练习。",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        Spacer(Modifier.height(14.dp))
-        Text("题型", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(8.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            practiceTypeOrder.filter { (availableCounts[it] ?: 0) > 0 }.forEach { type ->
-                val note = if (type in QuizRepository.objectiveQuestionTypes()) "" else " · 主观"
-                ActionPillButton(
-                    icon = Icons.Rounded.CheckCircle,
-                    text = "${typeLabel(type)} ${availableCounts[type] ?: 0}$note",
-                    primary = type in selectedTypes,
-                    onClick = { onToggleType(type) }
-                )
-            }
-        }
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(2.dp))
         Text(
-            text = "当前筛选可用 $selectedAvailable 题",
+            text = "共 $totalQuestions 题 · 选范围后开始",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
         Spacer(Modifier.height(10.dp))
-        Text("题量", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(8.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("组题方式", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                text = if (practiceOrderMode == "random") "随机抽题" else "题库顺序",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ActionPillButton(
+                icon = Icons.Rounded.PlayArrow,
+                text = "随机刷题",
+                primary = practiceOrderMode == "random",
+                modifier = Modifier
+                    .weight(1f)
+                    .height(40.dp),
+                fillWidthContent = true,
+                onClick = { onSelectPracticeOrderMode("random") }
+            )
+            ActionPillButton(
+                icon = Icons.AutoMirrored.Rounded.TextSnippet,
+                text = "顺序刷题",
+                primary = practiceOrderMode == "ordered",
+                modifier = Modifier
+                    .weight(1f)
+                    .height(40.dp),
+                fillWidthContent = true,
+                onClick = { onSelectPracticeOrderMode("ordered") }
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = if (practiceOrderMode == "random") "从已选题型中随机抽题。" else "按题库原顺序练习。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        Spacer(Modifier.height(10.dp))
+        Text("题型", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(6.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            practiceTypeOrder.filter { (availableCounts[it] ?: 0) > 0 }.forEach { type ->
+                val note = if (type in QuizRepository.objectiveQuestionTypes()) "" else " · 主观"
+                ActionPillButton(
+                    icon = Icons.Rounded.CheckCircle,
+                    text = "${typeLabel(type)} ${availableCounts[type] ?: 0}$note",
+                    primary = type in selectedTypes,
+                    modifier = Modifier.height(40.dp),
+                    onClick = { onToggleType(type) }
+                )
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("题量", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                text = "可用 $selectedAvailable 题",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             val safeAvailable = selectedAvailable.coerceAtLeast(1)
             val halfCount = (safeAvailable / 2).coerceAtLeast(1)
             buildList {
@@ -449,25 +481,52 @@ private fun PracticeSetupPanel(
                         icon = Icons.Rounded.PlayArrow,
                         text = label,
                         primary = selectedQuestionCount == count,
+                        modifier = Modifier.height(40.dp),
                         onClick = { onSelectQuestionCount(count) }
                     )
                 }
         }
         if (selectedAvailable <= 0) {
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
             NoticeCard("当前筛选没有可练习题目，请至少选择一种有题目的题型。", warning = true)
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
         ActionPillButton(
             icon = Icons.Rounded.PlayArrow,
             text = "开始练习",
             primary = selectedAvailable > 0,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(50.dp),
+                .height(48.dp),
             fillWidthContent = true,
             onClick = { if (selectedAvailable > 0) onStartPractice() }
         )
+    }
+}
+
+@Composable
+private fun CompactPracticeSetupHero() {
+    GlassCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "选好参数，开始练习。",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.width(10.dp))
+            Image(
+                painter = painterResource(R.drawable.illus_practice_hint_webp),
+                contentDescription = "练习提示",
+                modifier = Modifier.size(74.dp)
+            )
+        }
     }
 }
 
