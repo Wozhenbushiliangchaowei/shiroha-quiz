@@ -372,7 +372,7 @@ private fun PracticeSetupPanel(
             text = bankName,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
         Spacer(Modifier.height(2.dp))
@@ -383,22 +383,10 @@ private fun PracticeSetupPanel(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(12.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("组题方式", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text(
-                text = if (practiceOrderMode == "random") "随机抽题" else "题库顺序",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-        Spacer(Modifier.height(6.dp))
+        Text("组题方式", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(7.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -409,7 +397,7 @@ private fun PracticeSetupPanel(
                 primary = practiceOrderMode == "random",
                 modifier = Modifier
                     .weight(1f)
-                    .height(40.dp),
+                    .height(44.dp),
                 fillWidthContent = true,
                 onClick = { onSelectPracticeOrderMode("random") }
             )
@@ -419,7 +407,7 @@ private fun PracticeSetupPanel(
                 primary = practiceOrderMode == "ordered",
                 modifier = Modifier
                     .weight(1f)
-                    .height(40.dp),
+                    .height(44.dp),
                 fillWidthContent = true,
                 onClick = { onSelectPracticeOrderMode("ordered") }
             )
@@ -443,7 +431,7 @@ private fun PracticeSetupPanel(
                     icon = Icons.Rounded.CheckCircle,
                     text = "${typeLabel(type)} ${availableCounts[type] ?: 0}$note",
                     primary = type in selectedTypes,
-                    modifier = Modifier.height(40.dp),
+                    modifier = Modifier.height(44.dp),
                     onClick = { onToggleType(type) }
                 )
             }
@@ -481,7 +469,7 @@ private fun PracticeSetupPanel(
                         icon = Icons.Rounded.PlayArrow,
                         text = label,
                         primary = selectedQuestionCount == count,
-                        modifier = Modifier.height(40.dp),
+                        modifier = Modifier.height(44.dp),
                         onClick = { onSelectQuestionCount(count) }
                     )
                 }
@@ -497,7 +485,7 @@ private fun PracticeSetupPanel(
             primary = selectedAvailable > 0,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp),
+                .height(50.dp),
             fillWidthContent = true,
             onClick = { if (selectedAvailable > 0) onStartPractice() }
         )
@@ -512,19 +500,49 @@ private fun CompactPracticeSetupHero() {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "选好参数，开始练习。",
+            Column(
                 modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.width(10.dp))
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                PracticeSetupStepCard(index = "1", text = "选好参数")
+                PracticeSetupStepCard(index = "2", text = "开始练习")
+            }
+            Spacer(Modifier.width(12.dp))
             Image(
                 painter = painterResource(R.drawable.illus_practice_hint_webp),
                 contentDescription = "练习提示",
-                modifier = Modifier.size(74.dp)
+                modifier = Modifier.size(92.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun PracticeSetupStepCard(index: String, text: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(999.dp),
+        color = ShirohaColors.BrandPrimarySoft,
+        border = BorderStroke(1.dp, ShirohaColors.LineSelected)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = index,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
