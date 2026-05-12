@@ -19,14 +19,14 @@ android {
         create("web") {
             dimension = "variant"
             applicationId = "com.yiqiu.shirohaquiz"
-            versionCode = 19
-            versionName = "0.4.3-alpha"
+            versionCode = 20
+            versionName = "0.4.4-alpha"
         }
         create("native") {
             dimension = "variant"
             applicationId = "com.reqir.shirohaquiz"
-            versionCode = 26
-            versionName = "0.2.5"
+            versionCode = 27
+            versionName = "0.2.6"
         }
     }
 
@@ -67,15 +67,17 @@ android {
 }
 
 val exportWebReleaseApk by tasks.registering(Copy::class) {
+    val webVersionName = android.productFlavors.getByName("web").versionName
     from(layout.buildDirectory.file("outputs/apk/web/release/app-web-release.apk"))
     into(layout.buildDirectory.dir("outputs/shiroha-quiz"))
-    rename { "Shiroha-Quiz-v0.4.3-alpha-web-release.apk" }
+    rename { "Shiroha-Quiz-v$webVersionName-web-release.apk" }
 }
 
 val exportNativeReleaseApk by tasks.registering(Copy::class) {
+    val nativeVersionName = android.productFlavors.getByName("native").versionName
     from(layout.buildDirectory.file("outputs/apk/native/release/app-native-release.apk"))
     into(layout.buildDirectory.dir("outputs/shiroha-quiz"))
-    rename { "Shiroha-Quiz-v0.2.5-native-release.apk" }
+    rename { "Shiroha-Quiz-v$nativeVersionName-native-release.apk" }
 }
 
 afterEvaluate {
