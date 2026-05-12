@@ -373,7 +373,7 @@ fun IllustrationHeroCard(
 fun EmptyStateIllustration(
     title: String,
     message: String,
-    @DrawableRes imageRes: Int = R.drawable.illus_empty_state,
+    @DrawableRes imageRes: Int = R.drawable.illus_empty_state_webp,
     modifier: Modifier = Modifier,
     action: (@Composable () -> Unit)? = null
 ) {
@@ -409,7 +409,7 @@ fun EmptyStateIllustration(
 @Composable
 fun LoadingIllustration(
     text: String,
-    @DrawableRes imageRes: Int = R.drawable.illus_loading_state
+    @DrawableRes imageRes: Int = R.drawable.illus_loading_state_webp
 ) {
     val transition = rememberInfiniteTransition(label = "loading_illus")
     val scale = transition.animateFloat(

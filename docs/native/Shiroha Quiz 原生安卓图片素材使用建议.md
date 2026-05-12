@@ -38,16 +38,16 @@
 
 原始素材文件名包含中文、数字、短横线，不适合直接作为 Android 资源名使用。建议统一改为英文小写下划线命名。
 
-| 原素材 | 建议资源名 | 推荐用途 |
-|---|---|---|
-| 01-首页欢迎小头像.png | `illus_home_welcome.png` | 首页欢迎、个人页头像、品牌识别 |
-| 02-空状态插画.png | `illus_empty_state.png` | 无题库、无记录、无错题、搜索无结果 |
-| 03-导入题库提示.png | `illus_import_hint.png` | 导入页顶部引导、导入成功、待核对 |
-| 04-错题本提示.png | `illus_wrongbook_hint.png` | 错题复习、薄弱项提醒、错题为空 |
-| 05-刷题中提示.png | `illus_practice_hint.png` | 练习前设置、刷题中轻提示 |
-| 06-加载状态.png | `illus_loading_state.png` | 解析中、加载中、生成预览中 |
-| 07-睡眠状态.png | `illus_rest_state.png` | 完成练习、暂无任务、阶段性休息 |
-| 08-思考状态.png | `illus_thinking_state.png` | 考试模式、提交确认、思考提示 |
+| 原素材            | 建议资源名                      | 推荐用途              |
+| -------------- | -------------------------- | ----------------- |
+| 01-首页欢迎小头像.png | `illus_home_welcome.png`   | 首页欢迎、个人页头像、品牌识别   |
+| 02-空状态插画.png   | `illus_empty_state.png`    | 无题库、无记录、无错题、搜索无结果 |
+| 03-导入题库提示.png  | `illus_import_hint.png`    | 导入页顶部引导、导入成功、待核对  |
+| 04-错题本提示.png   | `illus_wrongbook_hint.png` | 错题复习、薄弱项提醒、错题为空   |
+| 05-刷题中提示.png   | `illus_practice_hint.png`  | 练习前设置、刷题中轻提示      |
+| 06-加载状态.png    | `illus_loading_state.png`  | 解析中、加载中、生成预览中     |
+| 07-睡眠状态.png    | `illus_rest_state.png`     | 完成练习、暂无任务、阶段性休息   |
+| 08-思考状态.png    | `illus_thinking_state.png` | 考试模式、提交确认、思考提示    |
 
 建议存放位置：
 
@@ -190,11 +190,11 @@ illus_practice_hint.png
 
 可以根据结果切换状态图：
 
-| 场景 | 推荐素材 |
-|---|---|
-| 练习完成，表现稳定 | `illus_rest_state.png` |
+| 场景        | 推荐素材                       |
+| --------- | -------------------------- |
+| 练习完成，表现稳定 | `illus_rest_state.png`     |
 | 错题较多，需要复习 | `illus_wrongbook_hint.png` |
-| 暂无题目 | `illus_empty_state.png` |
+| 暂无题目      | `illus_empty_state.png`    |
 
 ---
 
@@ -242,11 +242,11 @@ illus_thinking_state.png
 
 根据结果切换：
 
-| 场景 | 推荐素材 |
-|---|---|
-| 成绩较好 | `illus_rest_state.png` |
-| 错题较多 | `illus_wrongbook_hint.png` |
-| 未生成结果 | `illus_empty_state.png` |
+| 场景    | 推荐素材                       |
+| ----- | -------------------------- |
+| 成绩较好  | `illus_rest_state.png`     |
+| 错题较多  | `illus_wrongbook_hint.png` |
+| 未生成结果 | `illus_empty_state.png`    |
 
 ---
 
@@ -316,29 +316,29 @@ illus_rest_state.png
 
 如果后续原生版扩展出独立错题本、刷题记录、收藏题页面，可以按下面使用。
 
-| 页面 | 推荐素材 | 用法 |
-|---|---|---|
-| 错题本 | `illus_wrongbook_hint.png` | 顶部提醒、错题为空状态 |
-| 刷题记录 | `illus_rest_state.png` | 暂无记录、阶段性回顾 |
-| 收藏题 | `illus_empty_state.png` | 空收藏状态 |
-| 加载页 | `illus_loading_state.png` | 全局解析 / 加载状态 |
+| 页面    | 推荐素材                                                | 用法          |
+| ----- | --------------------------------------------------- | ----------- |
+| 错题本   | `illus_wrongbook_hint.png`                          | 顶部提醒、错题为空状态 |
+| 刷题记录  | `illus_rest_state.png`                              | 暂无记录、阶段性回顾  |
+| 收藏题   | `illus_empty_state.png`                             | 空收藏状态       |
+| 加载页   | `illus_loading_state.png`                           | 全局解析 / 加载状态 |
 | 导入核对页 | `illus_import_hint.png` 或 `illus_loading_state.png` | 等待核对、正在生成预览 |
 
 ---
 
 ## 五、尺寸建议总表
 
-| 使用场景 | 推荐尺寸 |
-|---|---|
-| 首页欢迎头像 | 72dp ~ 96dp |
+| 使用场景    | 推荐尺寸          |
+| ------- | ------------- |
+| 首页欢迎头像  | 72dp ~ 96dp   |
 | 顶部引导卡插画 | 112dp ~ 136dp |
-| 导入页主插画 | 120dp ~ 148dp |
-| 空状态插画 | 128dp ~ 156dp |
-| 答题中小头像 | 40dp ~ 48dp |
-| 考试设置插画 | 96dp ~ 128dp |
-| 加载状态插画 | 96dp ~ 120dp |
-| 我的页头像 | 64dp ~ 88dp |
-| 提交确认小图 | 64dp ~ 80dp |
+| 导入页主插画  | 120dp ~ 148dp |
+| 空状态插画   | 128dp ~ 156dp |
+| 答题中小头像  | 40dp ~ 48dp   |
+| 考试设置插画  | 96dp ~ 128dp  |
+| 加载状态插画  | 96dp ~ 120dp  |
+| 我的页头像   | 64dp ~ 88dp   |
+| 提交确认小图  | 64dp ~ 80dp   |
 
 简单原则：
 
@@ -619,21 +619,21 @@ illus_rest_state.png
 
 ## 十一、最终推荐分配表
 
-| 页面 / 状态 | 推荐素材 | 显示方式 |
-|---|---|---|
-| HomeScreen 首页 | `illus_home_welcome.png` | 顶部欢迎卡，小尺寸 |
-| ImportScreen 导入页 | `illus_import_hint.png` | 顶部引导卡，中尺寸 |
-| ImportScreen 解析中 | `illus_loading_state.png` | 加载状态，中小尺寸 |
-| PracticeScreen 未开始 | `illus_practice_hint.png` | 练习设置卡，中尺寸 |
-| PracticeScreen 答题中 | `illus_practice_hint.png` | 小头像或隐藏 |
-| PracticeScreen 完成 | `illus_rest_state.png` | 完成状态卡 |
-| ExamScreen 设置页 | `illus_thinking_state.png` | 考试设置卡，中小尺寸 |
-| ExamScreen 考试中 | 不显示或极小图 | 保持专注 |
-| ExamScreen 提交确认 | `illus_thinking_state.png` | 小尺寸 |
-| BankDetailScreen 空状态 | `illus_empty_state.png` | 居中空状态 |
-| MeScreen 我的页 | `illus_home_welcome.png` 或 `illus_rest_state.png` | 顶部小头像 |
-| 错题提醒 | `illus_wrongbook_hint.png` | 错题卡 / 空状态 |
-| 刷题记录为空 | `illus_rest_state.png` | 空状态 / 回顾状态 |
+| 页面 / 状态              | 推荐素材                                              | 显示方式       |
+| -------------------- | ------------------------------------------------- | ---------- |
+| HomeScreen 首页        | `illus_home_welcome.png`                          | 顶部欢迎卡，小尺寸  |
+| ImportScreen 导入页     | `illus_import_hint.png`                           | 顶部引导卡，中尺寸  |
+| ImportScreen 解析中     | `illus_loading_state.png`                         | 加载状态，中小尺寸  |
+| PracticeScreen 未开始   | `illus_practice_hint.png`                         | 练习设置卡，中尺寸  |
+| PracticeScreen 答题中   | `illus_practice_hint.png`                         | 小头像或隐藏     |
+| PracticeScreen 完成    | `illus_rest_state.png`                            | 完成状态卡      |
+| ExamScreen 设置页       | `illus_thinking_state.png`                        | 考试设置卡，中小尺寸 |
+| ExamScreen 考试中       | 不显示或极小图                                           | 保持专注       |
+| ExamScreen 提交确认      | `illus_thinking_state.png`                        | 小尺寸        |
+| BankDetailScreen 空状态 | `illus_empty_state.png`                           | 居中空状态      |
+| MeScreen 我的页         | `illus_home_welcome.png` 或 `illus_rest_state.png` | 顶部小头像      |
+| 错题提醒                 | `illus_wrongbook_hint.png`                        | 错题卡 / 空状态  |
+| 刷题记录为空               | `illus_rest_state.png`                            | 空状态 / 回顾状态 |
 
 ---
 
