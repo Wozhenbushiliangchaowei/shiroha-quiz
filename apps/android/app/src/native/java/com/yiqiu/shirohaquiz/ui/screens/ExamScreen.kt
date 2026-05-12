@@ -491,6 +491,9 @@ private fun ExamMetricCard(
 private fun ActiveExamPanel() {
     val examQuestion = QuizRepository.currentExamQuestion() ?: return
     val questionType = examQuestion.type
+    var showAnswerCard by remember { mutableStateOf(false) }
+    var showSubmitConfirm by remember { mutableStateOf(false) }
+    val unansweredCount = QuizRepository.examQuestions.size - QuizRepository.examAnsweredCount()
 
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         ExamMetricCard(
@@ -514,7 +517,7 @@ private fun ActiveExamPanel() {
                 primary = false,
                 modifier = Modifier.fillMaxWidth().height(42.dp),
                 fillWidthContent = true,
-                onClick = {}
+                onClick = { showAnswerCard = true }
             )
         }
     }
@@ -572,10 +575,161 @@ private fun ActiveExamPanel() {
         }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ActionPillButton(Icons.Rounded.CheckCircle, "立即交卷", primary = true, onClick = { QuizRepository.submitExam() })
+            ActionPillButton(
+                Icons.Rounded.CheckCircle,
+                "立即交卷",
+                primary = true,
+                onClick = {
+                    if (unansweredCount > 0) {
+                        showSubmitConfirm = true
+                    } else {
+                        QuizRepository.submitExam()
+                    }
+                }
+            )
             ActionPillButton(Icons.Rounded.Timer, "结束本场", primary = false, onClick = { QuizRepository.resetExam() })
         }
     }
+
+    if (showAnswerCard) {
+        ExamAnswerCardDialog(
+            onDismiss = { showAnswerCard = false },
+            onJumpToQuestion = { index ->
+                val targetIndex = index.coerceIn(0, QuizRepository.examQuestions.lastIndex)
+                while (QuizRepository.examIndex < targetIndex) {
+                    QuizRepository.nextExamQuestion()
+                }
+                while (QuizRepository.examIndex > targetIndex) {
+                    QuizRepository.previousExamQuestion()
+                }
+                showAnswerCard = false
+            },
+            onSubmit = {
+                showAnswerCard = false
+                if (unansweredCount > 0) {
+                    showSubmitConfirm = true
+                } else {
+                    QuizRepository.submitExam()
+                }
+            }
+        )
+    }
+
+    if (showSubmitConfirm) {
+        ConfirmSubmitExamDialog(
+            unansweredCount = unansweredCount,
+            onDismiss = { showSubmitConfirm = false },
+            onGoAnswerCard = {
+                showSubmitConfirm = false
+                showAnswerCard = true
+            },
+            onConfirmSubmit = {
+                showSubmitConfirm = false
+                QuizRepository.submitExam()
+            }
+        )
+    }
+}
+
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ExamAnswerCardDialog(
+    onDismiss: () -> Unit,
+    onJumpToQuestion: (Int) -> Unit,
+    onSubmit: () -> Unit
+) {
+    val total = QuizRepository.examQuestions.size
+    val answered = QuizRepository.examAnsweredCount()
+    val unanswered = total - answered
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("答题卡") },
+        text = {
+            Column(
+                modifier = Modifier.heightIn(max = 460.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    MetricGlassCard("已答", answered.toString(), "", Modifier.weight(1f))
+                    MetricGlassCard("未答", unanswered.toString(), "", Modifier.weight(1f))
+                }
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    StatusChip("当前", selected = true)
+                    StatusChip("已答")
+                    StatusChip("未答")
+                }
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        QuizRepository.examQuestions.forEachIndexed { index, question ->
+                            val answeredQuestion = QuizRepository.examAnswers[question.id].orEmpty().isNotEmpty()
+                            val currentQuestion = index == QuizRepository.examIndex
+                            val icon = when {
+                                currentQuestion -> Icons.Rounded.ListAlt
+                                answeredQuestion -> Icons.Rounded.CheckCircle
+                                else -> Icons.Rounded.Timer
+                            }
+                            ActionPillButton(
+                                icon = icon,
+                                text = (index + 1).toString(),
+                                primary = currentQuestion,
+                                modifier = Modifier.height(38.dp),
+                                onClick = { onJumpToQuestion(index) }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onSubmit) { Text("交卷") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("继续答题") }
+        }
+    )
+}
+
+@Composable
+private fun ConfirmSubmitExamDialog(
+    unansweredCount: Int,
+    onDismiss: () -> Unit,
+    onGoAnswerCard: () -> Unit,
+    onConfirmSubmit: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("还有未答题") },
+        text = {
+            Text(
+                text = "当前还有 $unansweredCount 道题未作答。确认交卷后，未答题会按错误处理。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirmSubmit) { Text("仍然交卷") }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onGoAnswerCard) { Text("查看答题卡") }
+                TextButton(onClick = onDismiss) { Text("继续答题") }
+            }
+        }
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)

@@ -36,8 +36,11 @@ import com.yiqiu.shirohaquiz.ui.screens.ExamScreen
 import com.yiqiu.shirohaquiz.ui.screens.HomeScreen
 import com.yiqiu.shirohaquiz.ui.screens.ImportScreen
 import com.yiqiu.shirohaquiz.ui.screens.MeScreen
+import com.yiqiu.shirohaquiz.ui.screens.StandardImportFormatScreen
+import com.yiqiu.shirohaquiz.ui.screens.AboutScreen
 import com.yiqiu.shirohaquiz.ui.screens.PracticeScreen
 import com.yiqiu.shirohaquiz.ui.screens.RecordsScreen
+import com.yiqiu.shirohaquiz.ui.screens.RecordDetailScreen
 import com.yiqiu.shirohaquiz.ui.screens.WrongBookScreen
 
 private enum class MainTab(
@@ -54,13 +57,17 @@ private enum class MainTab(
     BankDetail("题库详情", Icons.Rounded.Dashboard, showInBottomBar = false),
     BankReview("题库核对", Icons.Rounded.Dashboard, showInBottomBar = false),
     WrongBook("错题本", Icons.Rounded.School, showInBottomBar = false),
-    Records("记录", Icons.Rounded.Dashboard, showInBottomBar = false)
+    Records("记录", Icons.Rounded.Dashboard, showInBottomBar = false),
+    RecordDetail("记录详情", Icons.Rounded.Dashboard, showInBottomBar = false),
+    StandardFormat("标准格式", Icons.Rounded.ImportExport, showInBottomBar = false),
+    About("关于", Icons.Rounded.Settings, showInBottomBar = false)
 }
 
 @Composable
 fun ShirohaAppShell() {
     var currentTab by rememberSaveable { mutableStateOf(MainTab.Home) }
     var detailBankId by rememberSaveable { mutableStateOf<String?>(null) }
+    var detailRecordId by rememberSaveable { mutableStateOf<String?>(null) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -113,11 +120,16 @@ fun ShirohaAppShell() {
                         onOpenRecords = { currentTab = MainTab.Records }
                     )
 
-                    MainTab.Practice -> PracticeScreen(onGoExam = { currentTab = MainTab.Exam })
+                    MainTab.Practice -> PracticeScreen(
+                        onGoExam = { currentTab = MainTab.Exam },
+                        onOpenRecords = { currentTab = MainTab.Records }
+                    )
                     MainTab.Import -> ImportScreen(onImportSaved = { currentTab = MainTab.Home })
                     MainTab.Me -> MeScreen(
                         onOpenWrongBook = { currentTab = MainTab.WrongBook },
-                        onOpenRecords = { currentTab = MainTab.Records }
+                        onOpenRecords = { currentTab = MainTab.Records },
+                        onOpenStandardFormat = { currentTab = MainTab.StandardFormat },
+                        onOpenAbout = { currentTab = MainTab.About }
                     )
                     MainTab.Exam -> ExamScreen(
                         onBackHome = { currentTab = MainTab.Home },
@@ -146,7 +158,21 @@ fun ShirohaAppShell() {
                         onGoPractice = { currentTab = MainTab.Practice }
                     )
                     MainTab.Records -> RecordsScreen(
-                        onBack = { currentTab = MainTab.Home }
+                        onBack = { currentTab = MainTab.Home },
+                        onOpenRecord = { recordId ->
+                            detailRecordId = recordId
+                            currentTab = MainTab.RecordDetail
+                        }
+                    )
+                    MainTab.RecordDetail -> RecordDetailScreen(
+                        recordId = detailRecordId,
+                        onBack = { currentTab = MainTab.Records }
+                    )
+                    MainTab.StandardFormat -> StandardImportFormatScreen(
+                        onBack = { currentTab = MainTab.Me }
+                    )
+                    MainTab.About -> AboutScreen(
+                        onBack = { currentTab = MainTab.Me }
                     )
                 }
             }

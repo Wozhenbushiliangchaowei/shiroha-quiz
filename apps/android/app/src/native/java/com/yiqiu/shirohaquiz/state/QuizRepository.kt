@@ -12,6 +12,11 @@ import com.yiqiu.shirohaquiz.importer.model.QuestionImage
 import com.yiqiu.shirohaquiz.importer.model.QuestionType
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 data class QuizBank(
     val id: String,
@@ -56,6 +61,15 @@ enum class WrongStatus(val label: String) {
     }
 }
 
+data class StudyQuestionResult(
+    val question: Question,
+    val userAnswer: List<String>,
+    val correct: Boolean,
+    val answerText: String,
+    val earnedScore: Double? = null,
+    val maxScore: Double? = null
+)
+
 data class StudyRecord(
     val id: String,
     val bankId: String?,
@@ -66,7 +80,11 @@ data class StudyRecord(
     val correct: Int,
     val timestamp: Long,
     val durationSeconds: Int? = null,
-    val autoSubmitted: Boolean = false
+    val autoSubmitted: Boolean = false,
+    val startedAt: Long? = null,
+    val earnedScore: Double? = null,
+    val totalScore: Double? = null,
+    val questionResults: List<StudyQuestionResult> = emptyList()
 )
 
 data class QuestionCheckResult(
@@ -97,6 +115,8 @@ object QuizRepository {
     var practiceLastResult by mutableStateOf<QuestionCheckResult?>(null)
         private set
     val practiceSessionResults = mutableStateMapOf<String, Boolean>()
+    val practiceAnswerResults = mutableStateMapOf<String, StudyQuestionResult>()
+    private var practiceStartedAt by mutableStateOf<Long?>(null)
 
     private var initialized by mutableStateOf(false)
     private var appContext: Context? = null
@@ -313,6 +333,8 @@ object QuizRepository {
         selectedAnswer = emptyList()
         practiceLastResult = null
         practiceSessionResults.clear()
+        practiceAnswerResults.clear()
+        practiceStartedAt = System.currentTimeMillis()
         return true
     }
 
@@ -331,6 +353,7 @@ object QuizRepository {
     }
 
     fun endPracticeSession() {
+        finishPracticeSessionIfNeeded()
         resetPracticeState()
     }
 
@@ -361,6 +384,8 @@ object QuizRepository {
             selectedAnswer = emptyList()
             practiceLastResult = null
             practiceSessionResults.clear()
+            practiceAnswerResults.clear()
+            practiceStartedAt = System.currentTimeMillis()
         }
     }
 
@@ -413,9 +438,14 @@ object QuizRepository {
         val result = evaluateQuestion(question, selectedAnswer)
         practiceLastResult = result
         practiceSessionResults[question.id] = result.correct
+        practiceAnswerResults[question.id] = StudyQuestionResult(
+            question = question,
+            userAnswer = result.userAnswer,
+            correct = result.correct,
+            answerText = result.answerText
+        )
 
         val bank = activeBank()
-        recordPracticeResult(bank, question, result)
         if (result.correct) {
             markWrongQuestionRight(bank = bank, question = question)
         } else {
@@ -531,19 +561,38 @@ object QuizRepository {
 
         val summary = examSummary()
         val bank = activeBank()
+        val now = System.currentTimeMillis()
+        val usedSeconds = summary.durationSeconds - summary.remainingSeconds
+        val detailResults = examQuestions.map { question ->
+            val userAnswer = examAnswers[question.id].orEmpty()
+            val result = evaluateQuestion(question, userAnswer)
+            val maxScore = scoreForExamQuestion(question)
+            StudyQuestionResult(
+                question = question,
+                userAnswer = userAnswer,
+                correct = result.correct,
+                answerText = result.answerText,
+                earnedScore = if (result.correct) maxScore else 0.0,
+                maxScore = maxScore
+            )
+        }
         studyRecords.add(
             0,
             StudyRecord(
-                id = "exam_${System.currentTimeMillis()}",
+                id = "exam_${now}",
                 bankId = bank?.id,
                 bankName = bank?.name ?: "未命名题库",
                 source = "考试",
                 title = "原生考试",
                 total = summary.total,
                 correct = summary.correct,
-                timestamp = System.currentTimeMillis(),
-                durationSeconds = summary.durationSeconds - summary.remainingSeconds,
-                autoSubmitted = autoSubmitted
+                timestamp = now,
+                durationSeconds = usedSeconds,
+                autoSubmitted = autoSubmitted,
+                startedAt = now - usedSeconds * 1000L,
+                earnedScore = summary.earnedScore,
+                totalScore = summary.totalScore,
+                questionResults = detailResults
             )
         )
 
@@ -603,42 +652,161 @@ object QuizRepository {
 
     fun exportBanksBackupJson(bankIds: Set<String>): String {
         val selectedBanks = banks.filter { bankIds.contains(it.id) }
-        val root = JSONObject()
-        root.put("kind", "shiroha_quiz_selected_banks")
-        root.put("version", 1)
-        root.put("exportedAt", System.currentTimeMillis())
-        root.put("banks", JSONArray(banksToJson(selectedBanks)))
-        return root.toString(2)
+        return buildBackupJson(
+            kind = "shiroha_quiz_selected_banks",
+            selectedBanks = selectedBanks,
+            includeWrongBook = false,
+            includeStudyRecords = false,
+            assetMapping = null
+        ).toString(2)
     }
 
     fun exportFullBackupJson(): String {
-        val root = JSONObject()
-        root.put("kind", "shiroha_quiz_full_backup")
-        root.put("version", 1)
-        root.put("exportedAt", System.currentTimeMillis())
-        root.put("activeBankId", activeBankId)
-        root.put("banks", JSONArray(banksToJson(banks)))
-        root.put("wrongBook", JSONArray(wrongBookToJson(wrongBook)))
-        root.put("studyRecords", JSONArray(studyRecordsToJson(studyRecords)))
-        return root.toString(2)
+        return buildBackupJson(
+            kind = "shiroha_quiz_full_backup",
+            selectedBanks = banks,
+            includeWrongBook = true,
+            includeStudyRecords = true,
+            assetMapping = null
+        ).toString(2)
+    }
+
+    fun exportBanksBackupZip(bankIds: Set<String>): ByteArray {
+        val selectedBanks = banks.filter { bankIds.contains(it.id) }
+        return buildBackupZip(
+            kind = "shiroha_quiz_selected_banks",
+            selectedBanks = selectedBanks,
+            includeWrongBook = false,
+            includeStudyRecords = false
+        )
+    }
+
+    fun exportFullBackupZip(): ByteArray {
+        return buildBackupZip(
+            kind = "shiroha_quiz_full_backup",
+            selectedBanks = banks,
+            includeWrongBook = true,
+            includeStudyRecords = true
+        )
     }
 
     fun importBackupJson(context: Context, rawText: String): String {
+        return importBackupBytes(
+            context = context,
+            fileName = "backup.json",
+            bytes = rawText.toByteArray(Charsets.UTF_8)
+        )
+    }
+
+    fun importBackupBytes(context: Context, fileName: String, bytes: ByteArray): String {
+        appContext = context.applicationContext
+        if (bytes.isEmpty()) return "导入失败：文件内容为空。"
+        val lowerName = fileName.lowercase()
+        return if (lowerName.endsWith(".zip") || looksLikeZip(bytes)) {
+            importBackupZip(context, bytes)
+        } else {
+            importBackupJsonInternal(context, bytes.toString(Charsets.UTF_8), emptyMap())
+        }
+    }
+
+    private data class BackupAsset(
+        val backupPath: String,
+        val file: File
+    )
+
+    private fun buildBackupZip(
+        kind: String,
+        selectedBanks: List<QuizBank>,
+        includeWrongBook: Boolean,
+        includeStudyRecords: Boolean
+    ): ByteArray {
+        val assetMapping = mutableMapOf<String, BackupAsset>()
+        val root = buildBackupJson(
+            kind = kind,
+            selectedBanks = selectedBanks,
+            includeWrongBook = includeWrongBook,
+            includeStudyRecords = includeStudyRecords,
+            assetMapping = assetMapping
+        )
+        val output = ByteArrayOutputStream()
+        ZipOutputStream(output).use { zip ->
+            zip.putNextEntry(ZipEntry("backup.json"))
+            zip.write(root.toString(2).toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
+
+            assetMapping.values
+                .distinctBy { it.backupPath }
+                .forEach { asset ->
+                    if (asset.file.exists() && asset.file.isFile) {
+                        zip.putNextEntry(ZipEntry(asset.backupPath))
+                        asset.file.inputStream().use { input -> input.copyTo(zip) }
+                        zip.closeEntry()
+                    }
+                }
+        }
+        return output.toByteArray()
+    }
+
+    private fun buildBackupJson(
+        kind: String,
+        selectedBanks: List<QuizBank>,
+        includeWrongBook: Boolean,
+        includeStudyRecords: Boolean,
+        assetMapping: MutableMap<String, BackupAsset>?
+    ): JSONObject {
+        val root = JSONObject()
+        root.put("kind", kind)
+        root.put("version", 2)
+        root.put("exportedAt", System.currentTimeMillis())
+        root.put("activeBankId", activeBankId)
+        root.put("banks", JSONArray(banksToJson(selectedBanks, assetMapping)))
+        if (includeWrongBook) root.put("wrongBook", JSONArray(wrongBookToJson(wrongBook, assetMapping)))
+        if (includeStudyRecords) root.put("studyRecords", JSONArray(studyRecordsToJson(studyRecords, assetMapping)))
+        return root
+    }
+
+    private fun importBackupZip(context: Context, bytes: ByteArray): String {
+        val entries = mutableMapOf<String, ByteArray>()
+        runCatching {
+            ZipInputStream(bytes.inputStream()).use { zip ->
+                while (true) {
+                    val entry = zip.nextEntry ?: break
+                    if (!entry.isDirectory) entries[entry.name] = zip.readBytes()
+                    zip.closeEntry()
+                }
+            }
+        }.getOrElse { return "导入失败：ZIP 备份无法读取。" }
+
+        val jsonBytes = entries["backup.json"]
+            ?: entries.entries.firstOrNull { it.key.endsWith(".json", ignoreCase = true) }?.value
+            ?: return "导入失败：ZIP 备份中没有 backup.json。"
+        val assetEntries = entries.filterKeys { it.startsWith("assets/") }
+        return importBackupJsonInternal(context, jsonBytes.toString(Charsets.UTF_8), assetEntries)
+    }
+
+    private fun importBackupJsonInternal(
+        context: Context,
+        rawText: String,
+        zipAssets: Map<String, ByteArray>
+    ): String {
         appContext = context.applicationContext
         val text = rawText.trim()
         if (text.isBlank()) return "导入失败：文件内容为空。"
 
+        val assetDir = File(context.filesDir, "question_assets/backup_${System.currentTimeMillis()}").apply { mkdirs() }
         val root = runCatching {
             if (text.startsWith("[")) {
                 JSONObject().put("banks", JSONArray(text))
             } else {
                 JSONObject(text)
             }
-        }.getOrElse { return "导入失败：不是有效的 JSON 备份文件。" }
+        }.getOrElse { return "导入失败：不是有效的备份文件。" }
 
         val bankArray = root.optJSONArray("banks") ?: return "导入失败：备份中没有题库数据。"
-        val importedBanks = runCatching { parseBanksJson(bankArray.toString()).map(::sanitizeBank) }
+        val importedBanks = runCatching { parseBanksJson(bankArray.toString()) }
             .getOrElse { return "导入失败：题库数据无法解析。" }
+            .map { bank -> remapBankAssets(bank, zipAssets, assetDir) }
+            .map(::sanitizeBank)
         if (importedBanks.isEmpty()) return "导入失败：备份中没有可用题库。"
 
         val idMap = mutableMapOf<String, String>()
@@ -660,7 +828,13 @@ object QuizRepository {
         val mappedWrongBook = importedWrongBook.mapNotNull { entry ->
             val mappedBankId = idMap[entry.bankId] ?: return@mapNotNull null
             val mappedBankName = addedBanks.firstOrNull { it.id == mappedBankId }?.name ?: entry.bankName
-            sanitizeWrongEntry(entry.copy(bankId = mappedBankId, bankName = mappedBankName))
+            sanitizeWrongEntry(
+                entry.copy(
+                    bankId = mappedBankId,
+                    bankName = mappedBankName,
+                    question = remapQuestionAssets(entry.question, zipAssets, assetDir)
+                )
+            )
         }
         wrongBook.addAll(0, mappedWrongBook)
 
@@ -671,7 +845,13 @@ object QuizRepository {
             val mappedBankId = record.bankId?.let { idMap[it] }
             val mappedBankName = mappedBankId?.let { id -> addedBanks.firstOrNull { it.id == id }?.name }
                 ?: record.bankName
-            record.copy(bankId = mappedBankId ?: record.bankId, bankName = mappedBankName)
+            record.copy(
+                bankId = mappedBankId ?: record.bankId,
+                bankName = mappedBankName,
+                questionResults = record.questionResults.map { result ->
+                    result.copy(question = remapQuestionAssets(result.question, zipAssets, assetDir))
+                }
+            )
         }
         studyRecords.addAll(0, mappedRecords)
 
@@ -680,6 +860,40 @@ object QuizRepository {
         persist()
         return "已导入 ${addedBanks.size} 个题库" +
             if (mappedWrongBook.isNotEmpty() || mappedRecords.isNotEmpty()) "，同时恢复 ${mappedWrongBook.size} 条错题、${mappedRecords.size} 条记录。" else "。"
+    }
+
+    private fun remapBankAssets(bank: QuizBank, zipAssets: Map<String, ByteArray>, assetDir: File): QuizBank {
+        return bank.copy(questions = bank.questions.map { remapQuestionAssets(it, zipAssets, assetDir) })
+    }
+
+    private fun remapQuestionAssets(question: Question, zipAssets: Map<String, ByteArray>, assetDir: File): Question {
+        if (question.images.isEmpty() || zipAssets.isEmpty()) return question
+        return question.copy(
+            images = question.images.map { image ->
+                val backupPath = image.localPath.replace("\\", "/").removePrefix("/")
+                val imageBytes = zipAssets[backupPath]
+                if (imageBytes == null) {
+                    image
+                } else {
+                    val outFile = File(assetDir, File(backupPath).name)
+                    runCatching { outFile.writeBytes(imageBytes) }
+                    image.copy(localPath = outFile.absolutePath, sizeBytes = outFile.length())
+                }
+            }
+        )
+    }
+
+    private fun looksLikeZip(bytes: ByteArray): Boolean {
+        return bytes.size >= 4 &&
+            bytes[0] == 'P'.code.toByte() &&
+            bytes[1] == 'K'.code.toByte() &&
+            bytes[2] == 3.toByte() &&
+            bytes[3] == 4.toByte()
+    }
+
+    fun findStudyRecord(recordId: String?): StudyRecord? {
+        if (recordId.isNullOrBlank()) return null
+        return studyRecords.firstOrNull { it.id == recordId }
     }
 
     fun clearAllLocalData(context: Context) {
@@ -704,6 +918,35 @@ object QuizRepository {
         resetExam()
     }
 
+
+    private fun finishPracticeSessionIfNeeded() {
+        if (practiceQuestions.isEmpty() || practiceAnswerResults.isEmpty()) return
+        val bank = activeBank()
+        val now = System.currentTimeMillis()
+        val startedAt = practiceStartedAt ?: now
+        val orderedResults = practiceQuestions.mapNotNull { question -> practiceAnswerResults[question.id] }
+        if (orderedResults.isEmpty()) return
+        val correctCount = orderedResults.count { it.correct }
+        studyRecords.add(
+            0,
+            StudyRecord(
+                id = "practice_${now}",
+                bankId = bank?.id,
+                bankName = bank?.name ?: "未命名题库",
+                source = if (practiceSourceLabel == "错题本") "错题练习" else "练习",
+                title = practiceSourceLabel.ifBlank { "练习记录" },
+                total = orderedResults.size,
+                correct = correctCount,
+                timestamp = now,
+                durationSeconds = ((now - startedAt) / 1000L).toInt().coerceAtLeast(0),
+                autoSubmitted = false,
+                startedAt = startedAt,
+                questionResults = orderedResults
+            )
+        )
+        persist()
+    }
+
     private fun resetPracticeState() {
         practiceQuestions = emptyList()
         practiceSourceLabel = "当前题库"
@@ -711,6 +954,8 @@ object QuizRepository {
         selectedAnswer = emptyList()
         practiceLastResult = null
         practiceSessionResults.clear()
+        practiceAnswerResults.clear()
+        practiceStartedAt = null
     }
 
     fun objectiveQuestionTypes(): Set<QuestionType> = setOf(
@@ -923,19 +1168,19 @@ object QuizRepository {
             .apply()
     }
 
-    private fun banksToJson(banks: List<QuizBank>): String {
+    private fun banksToJson(banks: List<QuizBank>, assetMapping: MutableMap<String, BackupAsset>? = null): String {
         val bankArray = JSONArray()
         banks.forEach { bank ->
             val bankJson = JSONObject()
             bankJson.put("id", bank.id)
             bankJson.put("name", bank.name)
-            bankJson.put("questions", questionsToJsonArray(bank.questions))
+            bankJson.put("questions", questionsToJsonArray(bank.questions, assetMapping))
             bankArray.put(bankJson)
         }
         return bankArray.toString()
     }
 
-    private fun wrongBookToJson(entries: List<WrongQuestionEntry>): String {
+    private fun wrongBookToJson(entries: List<WrongQuestionEntry>, assetMapping: MutableMap<String, BackupAsset>? = null): String {
         val array = JSONArray()
         entries.forEach { entry ->
             val item = JSONObject()
@@ -949,13 +1194,13 @@ object QuizRepository {
             item.put("lastWrongAt", entry.lastWrongAt)
             if (entry.lastCorrectAt != null) item.put("lastCorrectAt", entry.lastCorrectAt)
             item.put("status", entry.status)
-            item.put("question", questionToJson(entry.question))
+            item.put("question", questionToJson(entry.question, assetMapping))
             array.put(item)
         }
         return array.toString()
     }
 
-    private fun studyRecordsToJson(records: List<StudyRecord>): String {
+    private fun studyRecordsToJson(records: List<StudyRecord>, assetMapping: MutableMap<String, BackupAsset>? = null): String {
         val array = JSONArray()
         records.forEach { record ->
             val item = JSONObject()
@@ -969,9 +1214,29 @@ object QuizRepository {
             item.put("timestamp", record.timestamp)
             item.put("durationSeconds", record.durationSeconds)
             item.put("autoSubmitted", record.autoSubmitted)
+            item.put("startedAt", record.startedAt)
+            item.put("earnedScore", record.earnedScore)
+            item.put("totalScore", record.totalScore)
+            item.put("questionResults", studyQuestionResultsToJson(record.questionResults, assetMapping))
             array.put(item)
         }
         return array.toString()
+    }
+
+
+    private fun studyQuestionResultsToJson(results: List<StudyQuestionResult>, assetMapping: MutableMap<String, BackupAsset>? = null): JSONArray {
+        val array = JSONArray()
+        results.forEach { result ->
+            val item = JSONObject()
+            item.put("question", questionToJson(result.question, assetMapping))
+            item.put("userAnswer", JSONArray(result.userAnswer))
+            item.put("correct", result.correct)
+            item.put("answerText", result.answerText)
+            item.put("earnedScore", result.earnedScore)
+            item.put("maxScore", result.maxScore)
+            array.put(item)
+        }
+        return array
     }
 
     private fun parseBanksJson(text: String?): List<QuizBank> {
@@ -1045,7 +1310,43 @@ object QuizRepository {
                         } else {
                             null
                         },
-                        autoSubmitted = item.optBoolean("autoSubmitted")
+                        autoSubmitted = item.optBoolean("autoSubmitted"),
+                        startedAt = if (item.has("startedAt") && !item.isNull("startedAt")) {
+                            item.optLong("startedAt")
+                        } else {
+                            val durationSeconds = if (item.has("durationSeconds") && !item.isNull("durationSeconds")) item.optInt("durationSeconds") else 0
+                            item.optLong("timestamp") - durationSeconds * 1000L
+                        },
+                        earnedScore = if (item.has("earnedScore") && !item.isNull("earnedScore")) item.optDouble("earnedScore") else null,
+                        totalScore = if (item.has("totalScore") && !item.isNull("totalScore")) item.optDouble("totalScore") else null,
+                        questionResults = parseStudyQuestionResults(item.optJSONArray("questionResults"))
+                    )
+                )
+            }
+        }
+    }
+
+
+    private fun parseStudyQuestionResults(array: JSONArray?): List<StudyQuestionResult> {
+        if (array == null) return emptyList()
+        return buildList {
+            for (i in 0 until array.length()) {
+                val item = array.optJSONObject(i) ?: continue
+                val questionJson = item.optJSONObject("question") ?: continue
+                val userAnswerArray = item.optJSONArray("userAnswer") ?: JSONArray()
+                val userAnswer = buildList {
+                    for (index in 0 until userAnswerArray.length()) {
+                        add(userAnswerArray.optString(index))
+                    }
+                }
+                add(
+                    StudyQuestionResult(
+                        question = parseQuestion(questionJson),
+                        userAnswer = userAnswer,
+                        correct = item.optBoolean("correct"),
+                        answerText = item.optString("answerText"),
+                        earnedScore = if (item.has("earnedScore") && !item.isNull("earnedScore")) item.optDouble("earnedScore") else null,
+                        maxScore = if (item.has("maxScore") && !item.isNull("maxScore")) item.optDouble("maxScore") else null
                     )
                 )
             }
@@ -1122,15 +1423,15 @@ object QuizRepository {
         )
     }
 
-    private fun questionsToJsonArray(questions: List<Question>): JSONArray {
+    private fun questionsToJsonArray(questions: List<Question>, assetMapping: MutableMap<String, BackupAsset>? = null): JSONArray {
         val questionsArray = JSONArray()
         questions.forEach { question ->
-            questionsArray.put(questionToJson(question))
+            questionsArray.put(questionToJson(question, assetMapping))
         }
         return questionsArray
     }
 
-    private fun questionToJson(question: Question): JSONObject {
+    private fun questionToJson(question: Question, assetMapping: MutableMap<String, BackupAsset>? = null): JSONObject {
         val questionJson = JSONObject()
         questionJson.put("id", question.id)
         questionJson.put("number", question.number)
@@ -1157,7 +1458,8 @@ object QuizRepository {
         question.images.forEach { image ->
             val imageJson = JSONObject()
             imageJson.put("id", image.id)
-            imageJson.put("localPath", image.localPath)
+            val exportPath = registerBackupAsset(image, assetMapping)
+            imageJson.put("localPath", exportPath ?: image.localPath)
             imageJson.put("sourceName", image.sourceName)
             imageJson.put("order", image.order)
             imageJson.put("width", image.width)
@@ -1168,4 +1470,18 @@ object QuizRepository {
         questionJson.put("images", imagesArray)
         return questionJson
     }
+    private fun registerBackupAsset(image: QuestionImage, assetMapping: MutableMap<String, BackupAsset>?): String? {
+        if (assetMapping == null || image.localPath.isBlank()) return null
+        val file = File(image.localPath)
+        if (!file.exists() || !file.isFile) return null
+        val ext = file.extension.ifBlank { File(image.sourceName).extension.ifBlank { "bin" } }
+        val safeId = image.id.ifBlank { file.nameWithoutExtension }
+            .replace(Regex("[^A-Za-z0-9_.-]"), "_")
+            .take(80)
+            .ifBlank { "asset" }
+        val backupPath = "assets/${safeId}.${ext}"
+        assetMapping[image.localPath] = BackupAsset(backupPath = backupPath, file = file)
+        return backupPath
+    }
+
 }

@@ -425,170 +425,172 @@ fun ImportScreen(
         if (isImportBusy) {
             LoadingIllustration(
                 text = busyText.ifBlank { "正在处理导入任务……" },
-                imageRes = R.drawable.illus_loading_state
+                imageRes = R.drawable.illus_loading_state_webp
             )
-        }
-
-        GlassCard {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = if (useDualImport) "题目文本" else "原始文本",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold
-                )
-                ActionPillButton(
-                    icon = Icons.Rounded.PlayArrow,
-                    text = "开始解析",
-                    primary = true,
-                    onClick = { startParse() }
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-            if (!rawTextEditorExpanded && rawText.length > LARGE_TEXT_PREVIEW_THRESHOLD) {
-                LargeImportTextPreview(
-                    text = rawText,
-                    label = "题目文本较长，已收起全文编辑以减少卡顿。",
-                    onEditFullText = { rawTextEditorExpanded = true }
-                )
-            } else {
-                OutlinedTextField(
-                    value = rawText,
-                    onValueChange = {
-                        rawText = it
-                        if (importResult != null || editableQuestions.isNotEmpty() || reviewMode || importedImages.isNotEmpty()) {
-                            clearParsedResult(clearImages = true)
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(if (useDualImport) 180.dp else 220.dp),
-                    enabled = !isImportBusy,
-                    minLines = if (useDualImport) 8 else 10,
-                    textStyle = MaterialTheme.typography.bodyMedium,
-                    placeholder = { Text("把标准题库文本粘贴到这里，或通过上方选择文件导入。") }
-                )
-            }
-
-            if (useDualImport) {
-                Spacer(Modifier.height(14.dp))
-                Text(
-                    text = "答案文本",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(Modifier.height(10.dp))
-                if (!answerTextEditorExpanded && answerText.length > LARGE_TEXT_PREVIEW_THRESHOLD) {
+        } else {
+            GlassCard {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = if (useDualImport) "题目文本" else "原始文本",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    ActionPillButton(
+                        icon = Icons.Rounded.PlayArrow,
+                        text = "开始解析",
+                        primary = true,
+                        onClick = { startParse() }
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                if (!rawTextEditorExpanded && rawText.length > LARGE_TEXT_PREVIEW_THRESHOLD) {
                     LargeImportTextPreview(
-                        text = answerText,
-                        label = "答案文本较长，已收起全文编辑以减少卡顿。",
-                        onEditFullText = { answerTextEditorExpanded = true }
+                        text = rawText,
+                        label = "题目文本较长，已收起全文编辑以减少卡顿。",
+                        onEditFullText = { rawTextEditorExpanded = true }
                     )
                 } else {
                     OutlinedTextField(
-                        value = answerText,
+                        value = rawText,
                         onValueChange = {
-                            answerText = it
-                            if (importResult != null || editableQuestions.isNotEmpty() || reviewMode) {
-                                clearParsedResult()
+                            rawText = it
+                            if (importResult != null || editableQuestions.isNotEmpty() || reviewMode || importedImages.isNotEmpty()) {
+                                clearParsedResult(clearImages = true)
                             }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(180.dp),
-                        enabled = !isImportBusy,
-                        minLines = 8,
+                            .height(if (useDualImport) 160.dp else 190.dp),
+                        enabled = true,
+                        minLines = if (useDualImport) 7 else 9,
                         textStyle = MaterialTheme.typography.bodyMedium,
-                        placeholder = { Text("粘贴答案文本，或通过上方按钮选择答案文件。") }
+                        placeholder = { Text("把标准题库文本粘贴到这里，或通过上方选择文件导入。") }
                     )
                 }
-            }
 
-        }
-
-        importResult?.let { result ->
-            val displayResult = result.copy(questions = editableQuestions)
-            NativeImportSummary(displayResult)
-
-            GlassCard {
-                Text(
-                    text = "核对与写入",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = "建议先进入沉浸核对页逐题检查。保存题库时会使用核对后的题目，而不是原始解析结果。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(14.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    ActionPillButton(
-                        icon = Icons.Rounded.Edit,
-                        text = "进入沉浸核对",
-                        primary = false,
-                        onClick = {
-                            if (editableQuestions.isNotEmpty()) {
-                                reviewFilterName = ReviewFilter.ALL.name
-                                reviewIndex = reviewIndex.coerceIn(0, editableQuestions.lastIndex)
-                                reviewMode = true
-                            }
-                        }
+                if (useDualImport) {
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        text = "答案文本",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold
                     )
-                    ActionPillButton(
-                        icon = Icons.Rounded.CheckCircle,
-                        text = "仅查看异常题",
-                        primary = false,
-                        onClick = {
-                            if (editableQuestions.isNotEmpty()) {
-                                val warnings = importResult?.warnings.orEmpty()
-                                reviewFilterName = ReviewFilter.ANOMALY.name
-                                reviewIndex = firstMatchingQuestionIndex(editableQuestions, warnings, ReviewFilter.ANOMALY) ?: 0
-                                reviewMode = true
-                            }
-                        }
-                    )
-                    ActionPillButton(
-                        icon = Icons.Rounded.Save,
-                        text = "保存为当前题库",
-                        primary = true,
-                        onClick = {
-                            val bankName = selectedFileName.substringBeforeLast('.').ifBlank { "导入题库" }
-                            QuizRepository.importBank(context, bankName, editableQuestions)
-                            statusText = "已写入原生题库：$bankName，共 ${editableQuestions.size} 题。现在可以切到首页、练习或考试查看。"
-                            isStatusWarn = false
-                            onImportSaved()
-                        }
-                    )
-                }
-            }
-
-            NativeImportPreview(
-                questions = editableQuestions,
-                onReviewClick = {
-                    if (editableQuestions.isNotEmpty()) {
-                        reviewFilterName = ReviewFilter.ALL.name
-                        reviewIndex = 0
-                        reviewMode = true
+                    Spacer(Modifier.height(10.dp))
+                    if (!answerTextEditorExpanded && answerText.length > LARGE_TEXT_PREVIEW_THRESHOLD) {
+                        LargeImportTextPreview(
+                            text = answerText,
+                            label = "答案文本较长，已收起全文编辑以减少卡顿。",
+                            onEditFullText = { answerTextEditorExpanded = true }
+                        )
+                    } else {
+                        OutlinedTextField(
+                            value = answerText,
+                            onValueChange = {
+                                answerText = it
+                                if (importResult != null || editableQuestions.isNotEmpty() || reviewMode) {
+                                    clearParsedResult()
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(160.dp),
+                            enabled = true,
+                            minLines = 7,
+                            textStyle = MaterialTheme.typography.bodyMedium,
+                            placeholder = { Text("粘贴答案文本，或通过上方按钮选择答案文件。") }
+                        )
                     }
                 }
-            )
-        }
+            }
 
-        if (!isImportBusy && importResult == null && rawText.isNotBlank()) {
-            LoadingIllustration("准备好以后，点击“开始解析”。")
+            importResult?.let { result ->
+                val displayResult = result.copy(questions = editableQuestions)
+                NativeImportSummary(displayResult)
+
+                GlassCard {
+                    Text(
+                        text = "核对与写入",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = "建议先进入沉浸核对页逐题检查。保存题库时会使用核对后的题目，而不是原始解析结果。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        ActionPillButton(
+                            icon = Icons.Rounded.Edit,
+                            text = "进入沉浸核对",
+                            primary = false,
+                            onClick = {
+                                if (editableQuestions.isNotEmpty()) {
+                                    reviewFilterName = ReviewFilter.ALL.name
+                                    reviewIndex = reviewIndex.coerceIn(0, editableQuestions.lastIndex)
+                                    reviewMode = true
+                                }
+                            }
+                        )
+                        ActionPillButton(
+                            icon = Icons.Rounded.CheckCircle,
+                            text = "仅查看异常题",
+                            primary = false,
+                            onClick = {
+                                if (editableQuestions.isNotEmpty()) {
+                                    val warnings = importResult?.warnings.orEmpty()
+                                    reviewFilterName = ReviewFilter.ANOMALY.name
+                                    reviewIndex = firstMatchingQuestionIndex(editableQuestions, warnings, ReviewFilter.ANOMALY) ?: 0
+                                    reviewMode = true
+                                }
+                            }
+                        )
+                        ActionPillButton(
+                            icon = Icons.Rounded.Save,
+                            text = "保存为当前题库",
+                            primary = true,
+                            onClick = {
+                                val bankName = selectedFileName.substringBeforeLast('.').ifBlank { "导入题库" }
+                                QuizRepository.importBank(context, bankName, editableQuestions)
+                                statusText = "已写入原生题库：$bankName，共 ${editableQuestions.size} 题。现在可以切到首页、练习或考试查看。"
+                                isStatusWarn = false
+                                onImportSaved()
+                            }
+                        )
+                    }
+                }
+
+                NativeImportPreview(
+                    questions = editableQuestions,
+                    onReviewClick = {
+                        if (editableQuestions.isNotEmpty()) {
+                            reviewFilterName = ReviewFilter.ALL.name
+                            reviewIndex = 0
+                            reviewMode = true
+                        }
+                    }
+                )
+            }
+
+            if (importResult == null && rawText.isNotBlank()) {
+                LoadingIllustration(
+                    text = "准备好以后，点击“开始解析”。",
+                    imageRes = R.drawable.illus_loading_state_webp
+                )
+            }
         }
     }
 }
 
-private const val LARGE_TEXT_PREVIEW_THRESHOLD = 12000
+private const val LARGE_TEXT_PREVIEW_THRESHOLD = 5000
 private const val LARGE_TEXT_PREVIEW_CHARS = 1200
 
 @Composable
@@ -1603,7 +1605,7 @@ private fun ImportStepHeroCard() {
                 ImportStepPill("3 创建题库", selected = false)
             }
             Image(
-                painter = painterResource(R.drawable.illus_import_hint),
+                painter = painterResource(R.drawable.illus_import_hint_webp),
                 contentDescription = null,
                 modifier = Modifier.size(134.dp),
                 contentScale = ContentScale.Fit
