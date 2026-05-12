@@ -1,6 +1,7 @@
 package com.yiqiu.shirohaquiz.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,6 +9,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -17,8 +20,10 @@ import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -26,9 +31,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.yiqiu.shirohaquiz.importer.model.QuestionType
 import com.yiqiu.shirohaquiz.state.QuizBank
@@ -37,6 +45,8 @@ import com.yiqiu.shirohaquiz.ui.components.ActionPillButton
 import com.yiqiu.shirohaquiz.ui.components.GlassCard
 import com.yiqiu.shirohaquiz.ui.components.ShirohaHeader
 import com.yiqiu.shirohaquiz.ui.components.StatusChip
+import com.yiqiu.shirohaquiz.ui.theme.ShirohaColors
+import com.yiqiu.shirohaquiz.ui.theme.ShirohaRadius
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaSpacing
 
 @Composable
@@ -112,51 +122,48 @@ fun BankListScreen(
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     StatusChip("${bank.questions.size} 题", selected = true)
-                    if (isActive) {
-                        StatusChip("当前题库", selected = true)
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    text = bank.name,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "单选 $singleCount · 多选 $multipleCount · 判断 $judgeCount · 主观 $subjectiveCount",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    ActionPillButton(
-                        icon = Icons.Rounded.Done,
-                        text = "当前",
-                        primary = isActive,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(40.dp),
-                        fillWidthContent = true,
+                    Spacer(Modifier.weight(1f))
+                    CompactBankStateChip(
+                        text = if (isActive) "当前" else "设为当前",
+                        selected = isActive,
                         onClick = {
                             if (!isActive) {
                                 QuizRepository.setActiveBank(context, bank.id)
                             }
                         }
                     )
+                }
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = bank.name,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "单选 $singleCount · 多选 $multipleCount · 判断 $judgeCount · 主观 $subjectiveCount",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(14.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     ActionPillButton(
                         icon = Icons.Rounded.Visibility,
                         text = "详情",
                         primary = false,
                         modifier = Modifier
                             .weight(1f)
-                            .height(40.dp),
+                            .height(42.dp),
                         fillWidthContent = true,
                         onClick = { onOpenBankDetail(bank.id) }
                     )
@@ -166,7 +173,7 @@ fun BankListScreen(
                         primary = false,
                         modifier = Modifier
                             .weight(1f)
-                            .height(40.dp),
+                            .height(42.dp),
                         fillWidthContent = true,
                         onClick = {
                             renameTarget = bank
@@ -179,7 +186,7 @@ fun BankListScreen(
                         primary = false,
                         modifier = Modifier
                             .weight(1f)
-                            .height(40.dp),
+                            .height(42.dp),
                         fillWidthContent = true,
                         onClick = {
                             if (bank.id != "demo-bank") {
@@ -189,6 +196,41 @@ fun BankListScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CompactBankStateChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.clickable(onClick = onClick),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(ShirohaRadius.Pill),
+        color = if (selected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.84f),
+        border = if (selected) null else BorderStroke(1.dp, ShirohaColors.LineStrong)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Done,
+                contentDescription = text,
+                modifier = Modifier.size(14.dp),
+                tint = if (selected) Color.White else MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.width(5.dp))
+            Text(
+                text = text,
+                color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1
+            )
         }
     }
 }

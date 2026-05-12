@@ -45,6 +45,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -79,6 +80,9 @@ import com.yiqiu.shirohaquiz.ui.theme.ShirohaColors
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaRadius
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaSpacing
 import androidx.compose.ui.res.painterResource
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -86,8 +90,9 @@ fun ImportScreen(
     onImportSaved: () -> Unit
 ) {
     val context = LocalContext.current
-    var rawText by rememberSaveable { mutableStateOf("") }
-    var answerText by rememberSaveable { mutableStateOf("") }
+    val importScope = rememberCoroutineScope()
+    var rawText by remember { mutableStateOf("") }
+    var answerText by remember { mutableStateOf("") }
     var importedImages by remember { mutableStateOf<List<QuestionImportAssetExtractor.ExtractedImportImage>>(emptyList()) }
     var selectedFileName by rememberSaveable { mutableStateOf("未选择文件") }
     var selectedAnswerFileName by rememberSaveable { mutableStateOf("未选择答案文件") }
@@ -101,6 +106,10 @@ fun ImportScreen(
     }
     var isStatusWarn by rememberSaveable { mutableStateOf(false) }
     var useDualImport by rememberSaveable { mutableStateOf(false) }
+    var isImportBusy by rememberSaveable { mutableStateOf(false) }
+    var busyText by rememberSaveable { mutableStateOf("") }
+    var rawTextEditorExpanded by rememberSaveable { mutableStateOf(true) }
+    var answerTextEditorExpanded by rememberSaveable { mutableStateOf(true) }
 
     fun clearParsedResult(clearImages: Boolean = false) {
         importResult = null
@@ -123,42 +132,68 @@ fun ImportScreen(
     }
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
+        if (uri == null || isImportBusy) return@rememberLauncherForActivityResult
         selectedFileName = queryFileName(context, uri)
-        val content = readImportedContent(context, uri, selectedFileName)
-        if (content == null || content.text.isBlank()) {
-            clearParsedResult(clearImages = true)
-            statusText = "当前导入还不能稳定读取这个文件。建议优先使用 docx / txt / json。"
-            isStatusWarn = true
-        } else {
-            rawText = content.text
-            importedImages = content.images
-            clearParsedResult()
-            statusText = if (content.images.isNotEmpty()) {
-                "已读取：$selectedFileName，含 ${content.images.size} 张图片。"
-            } else {
-                "已读取：$selectedFileName。"
+        isImportBusy = true
+        busyText = "正在读取题库文件……"
+        statusText = "正在读取：$selectedFileName"
+        isStatusWarn = false
+        clearParsedResult(clearImages = true)
+        importScope.launch {
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    readImportedContent(context, uri, selectedFileName)
+                }
             }
-            isStatusWarn = false
+            isImportBusy = false
+            val content = result.getOrNull()
+            if (content == null || content.text.isBlank()) {
+                statusText = "当前导入还不能稳定读取这个文件。建议优先使用 docx / txt / json。"
+                isStatusWarn = true
+            } else {
+                rawText = content.text
+                importedImages = content.images
+                rawTextEditorExpanded = content.text.length <= LARGE_TEXT_PREVIEW_THRESHOLD
+                statusText = if (content.images.isNotEmpty()) {
+                    "已读取：$selectedFileName，含 ${content.images.size} 张图片。"
+                } else {
+                    "已读取：$selectedFileName。"
+                }
+                isStatusWarn = false
+            }
         }
     }
 
     val answerFilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
+        if (uri == null || isImportBusy) return@rememberLauncherForActivityResult
         selectedAnswerFileName = queryFileName(context, uri)
-        val text = readImportedText(context, uri, selectedAnswerFileName)
-        if (text.isNullOrBlank()) {
-            statusText = "答案文件暂时还不能稳定读取，请优先使用 txt 或可复制文本的文档。"
-            isStatusWarn = true
-        } else {
-            answerText = text
-            clearParsedResult()
-            statusText = "已读取答案文件：$selectedAnswerFileName。"
-            isStatusWarn = false
+        isImportBusy = true
+        busyText = "正在读取答案文件……"
+        statusText = "正在读取答案文件：$selectedAnswerFileName"
+        isStatusWarn = false
+        importScope.launch {
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    readImportedText(context, uri, selectedAnswerFileName)
+                }
+            }
+            isImportBusy = false
+            val text = result.getOrNull()
+            if (text.isNullOrBlank()) {
+                statusText = "答案文件暂时还不能稳定读取，请优先使用 txt 或可复制文本的文档。"
+                isStatusWarn = true
+            } else {
+                answerText = text
+                answerTextEditorExpanded = text.length <= LARGE_TEXT_PREVIEW_THRESHOLD
+                clearParsedResult()
+                statusText = "已读取答案文件：$selectedAnswerFileName。"
+                isStatusWarn = false
+            }
         }
     }
 
     fun startParse() {
+        if (isImportBusy) return
         if (rawText.isBlank() || (useDualImport && answerText.isBlank())) {
             statusText = if (useDualImport) {
                 "请同时提供题目文本和答案文本，再开始双文件解析。"
@@ -169,17 +204,38 @@ fun ImportScreen(
             return
         }
 
-        val parsedResult = if (useDualImport) {
-            QuizImportParser.parseDualText(rawText, answerText)
-        } else {
-            QuizImportParser.parseStandardText(rawText)
+        val rawSnapshot = rawText
+        val answerSnapshot = answerText
+        val imagesSnapshot = importedImages
+        val dualSnapshot = useDualImport
+        isImportBusy = true
+        busyText = if (dualSnapshot) "正在合并题目和答案……" else "正在解析题库文本……"
+        statusText = busyText
+        isStatusWarn = false
+        clearParsedResult()
+        importScope.launch {
+            val result = runCatching {
+                withContext(Dispatchers.Default) {
+                    val parsedResult = if (dualSnapshot) {
+                        QuizImportParser.parseDualText(rawSnapshot, answerSnapshot)
+                    } else {
+                        QuizImportParser.parseStandardText(rawSnapshot)
+                    }
+                    if (!dualSnapshot && imagesSnapshot.isNotEmpty()) {
+                        QuestionImageBinder.attach(parsedResult, imagesSnapshot)
+                    } else {
+                        parsedResult
+                    }
+                }
+            }
+            isImportBusy = false
+            result.onSuccess { finalResult ->
+                applyParsedResult(finalResult)
+            }.onFailure { error ->
+                statusText = "解析失败：${error.message ?: "请检查题库文件格式"}"
+                isStatusWarn = true
+            }
         }
-        val finalResult = if (!useDualImport && importedImages.isNotEmpty()) {
-            QuestionImageBinder.attach(parsedResult, importedImages)
-        } else {
-            parsedResult
-        }
-        applyParsedResult(finalResult)
     }
 
     if (reviewMode && importResult != null) {
@@ -296,10 +352,12 @@ fun ImportScreen(
                         .height(50.dp),
                     fillWidthContent = true,
                     onClick = {
-                        if (shouldPickAnswerFile) {
-                            answerFilePicker.launch(arrayOf("*/*"))
-                        } else {
-                            filePicker.launch(arrayOf("*/*"))
+                        if (!isImportBusy) {
+                            if (shouldPickAnswerFile) {
+                                answerFilePicker.launch(arrayOf("*/*"))
+                            } else {
+                                filePicker.launch(arrayOf("*/*"))
+                            }
                         }
                     }
                 )
@@ -312,13 +370,17 @@ fun ImportScreen(
                         .height(50.dp),
                     fillWidthContent = true,
                     onClick = {
-                        useDualImport = false
-                        selectedFileName = "示例题库"
-                        rawText = sampleImportText()
-                        importedImages = emptyList()
-                        clearParsedResult()
-                        statusText = "已填入示例题库。"
-                        isStatusWarn = false
+                        if (!isImportBusy) {
+                            useDualImport = false
+                            selectedFileName = "示例题库"
+                            rawText = sampleImportText()
+                            rawTextEditorExpanded = true
+                            answerTextEditorExpanded = true
+                            importedImages = emptyList()
+                            clearParsedResult()
+                            statusText = "已填入示例题库。"
+                            isStatusWarn = false
+                        }
                     }
                 )
             }
@@ -335,9 +397,11 @@ fun ImportScreen(
                         .weight(1f)
                         .height(50.dp),
                     onClick = {
-                        useDualImport = false
-                        clearParsedResult()
-                        statusText = "已切换到标准导入。"
+                        if (!isImportBusy) {
+                            useDualImport = false
+                            clearParsedResult()
+                            statusText = "已切换到标准导入。"
+                        }
                     }
                 )
                 ImportModeChip(
@@ -348,12 +412,21 @@ fun ImportScreen(
                         .weight(1f)
                         .height(50.dp),
                     onClick = {
-                        useDualImport = true
-                        clearParsedResult()
-                        statusText = "已切换到双文件导入。先选择题库文件，再选择答案文件。"
+                        if (!isImportBusy) {
+                            useDualImport = true
+                            clearParsedResult()
+                            statusText = "已切换到双文件导入。先选择题库文件，再选择答案文件。"
+                        }
                     }
                 )
             }
+        }
+
+        if (isImportBusy) {
+            LoadingIllustration(
+                text = busyText.ifBlank { "正在处理导入任务……" },
+                imageRes = R.drawable.illus_loading_state
+            )
         }
 
         GlassCard {
@@ -375,19 +448,30 @@ fun ImportScreen(
                 )
             }
             Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
-                value = rawText,
-                onValueChange = {
-                    rawText = it
-                    clearParsedResult(clearImages = true)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(if (useDualImport) 180.dp else 220.dp),
-                minLines = if (useDualImport) 8 else 10,
-                textStyle = MaterialTheme.typography.bodyMedium,
-                placeholder = { Text("把标准题库文本粘贴到这里，或通过上方选择文件导入。") }
-            )
+            if (!rawTextEditorExpanded && rawText.length > LARGE_TEXT_PREVIEW_THRESHOLD) {
+                LargeImportTextPreview(
+                    text = rawText,
+                    label = "题目文本较长，已收起全文编辑以减少卡顿。",
+                    onEditFullText = { rawTextEditorExpanded = true }
+                )
+            } else {
+                OutlinedTextField(
+                    value = rawText,
+                    onValueChange = {
+                        rawText = it
+                        if (importResult != null || editableQuestions.isNotEmpty() || reviewMode || importedImages.isNotEmpty()) {
+                            clearParsedResult(clearImages = true)
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(if (useDualImport) 180.dp else 220.dp),
+                    enabled = !isImportBusy,
+                    minLines = if (useDualImport) 8 else 10,
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    placeholder = { Text("把标准题库文本粘贴到这里，或通过上方选择文件导入。") }
+                )
+            }
 
             if (useDualImport) {
                 Spacer(Modifier.height(14.dp))
@@ -397,19 +481,30 @@ fun ImportScreen(
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(Modifier.height(10.dp))
-                OutlinedTextField(
-                    value = answerText,
-                    onValueChange = {
-                        answerText = it
-                        clearParsedResult()
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(180.dp),
-                    minLines = 8,
-                    textStyle = MaterialTheme.typography.bodyMedium,
-                    placeholder = { Text("粘贴答案文本，或通过上方按钮选择答案文件。") }
-                )
+                if (!answerTextEditorExpanded && answerText.length > LARGE_TEXT_PREVIEW_THRESHOLD) {
+                    LargeImportTextPreview(
+                        text = answerText,
+                        label = "答案文本较长，已收起全文编辑以减少卡顿。",
+                        onEditFullText = { answerTextEditorExpanded = true }
+                    )
+                } else {
+                    OutlinedTextField(
+                        value = answerText,
+                        onValueChange = {
+                            answerText = it
+                            if (importResult != null || editableQuestions.isNotEmpty() || reviewMode) {
+                                clearParsedResult()
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp),
+                        enabled = !isImportBusy,
+                        minLines = 8,
+                        textStyle = MaterialTheme.typography.bodyMedium,
+                        placeholder = { Text("粘贴答案文本，或通过上方按钮选择答案文件。") }
+                    )
+                }
             }
 
         }
@@ -487,8 +582,52 @@ fun ImportScreen(
             )
         }
 
-        if (importResult == null && rawText.isNotBlank()) {
+        if (!isImportBusy && importResult == null && rawText.isNotBlank()) {
             LoadingIllustration("准备好以后，点击“开始解析”。")
+        }
+    }
+}
+
+private const val LARGE_TEXT_PREVIEW_THRESHOLD = 12000
+private const val LARGE_TEXT_PREVIEW_CHARS = 1200
+
+@Composable
+private fun LargeImportTextPreview(
+    text: String,
+    label: String,
+    onEditFullText: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = Color.White.copy(alpha = 0.62f),
+        border = BorderStroke(1.dp, ShirohaColors.LineSoft)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "$label 共 ${text.length} 字，解析仍会使用完整文本。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            SelectionContainer {
+                Text(
+                    text = text.take(LARGE_TEXT_PREVIEW_CHARS).trimEnd() + if (text.length > LARGE_TEXT_PREVIEW_CHARS) "\n……" else "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 8,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            ActionPillButton(
+                icon = Icons.Rounded.Edit,
+                text = "编辑全文",
+                primary = false,
+                onClick = onEditFullText
+            )
         }
     }
 }
