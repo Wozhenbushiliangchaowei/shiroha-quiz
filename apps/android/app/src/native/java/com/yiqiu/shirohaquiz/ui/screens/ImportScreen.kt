@@ -1611,18 +1611,25 @@ private fun ImportStepPill(
         color = if (selected) ShirohaColors.BrandPrimarySoft else ShirohaColors.CardMuted,
         border = BorderStroke(1.dp, if (selected) ShirohaColors.LineSelected else ShirohaColors.LineSoft),
         modifier = Modifier
-            .fillMaxWidth()
-            .defaultMinSize(minHeight = 28.dp)
+            .width(144.dp)
+            .defaultMinSize(minHeight = 34.dp)
     ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-            color = if (selected) MaterialTheme.colorScheme.primary else ShirohaColors.TextSecondary,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = text,
+                color = if (selected) MaterialTheme.colorScheme.primary else ShirohaColors.TextSecondary,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 

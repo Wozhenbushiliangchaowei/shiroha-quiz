@@ -7,14 +7,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.AutoStories
@@ -38,7 +37,6 @@ import com.yiqiu.shirohaquiz.state.QuizRepository
 import com.yiqiu.shirohaquiz.ui.components.ActionPillButton
 import com.yiqiu.shirohaquiz.ui.components.GlassCard
 import com.yiqiu.shirohaquiz.ui.components.IllustrationHeroCard
-import com.yiqiu.shirohaquiz.ui.components.ShirohaHeader
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaColors
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaRadius
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaSpacing
@@ -65,22 +63,30 @@ fun HomeScreen(
 
     Column(
         modifier = Modifier
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = ShirohaSpacing.Xl, vertical = 2.dp),
+            .fillMaxSize()
+            .padding(horizontal = ShirohaSpacing.Xl, vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text(
-            text = "Shiroha Quiz",
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.labelLarge
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(ShirohaSpacing.Sm)) {
+            Text(
+                text = "Shiroha Quiz",
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelLarge
+            )
+            Text(
+                text = "首页",
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
 
         IllustrationHeroCard(
             title = "欢迎回来",
             subtitle = "继续练习、考试或查看学习记录。",
             imageRes = R.drawable.illus_home_welcome_v2,
-            imageSize = 82.dp
+            modifier = Modifier.height(132.dp),
+            imageSize = 92.dp
         )
 
         TodayStatusCard(
@@ -239,7 +245,7 @@ private fun HomeShortcutCard(
 ) {
     Surface(
         modifier = modifier
-            .height(110.dp)
+            .height(100.dp)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(26.dp),
         color = Color.White.copy(alpha = 0.72f),
