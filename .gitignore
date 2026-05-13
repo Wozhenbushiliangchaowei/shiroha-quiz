@@ -41,9 +41,6 @@ shiroha_quiz_*.zip
 apps/android/app/src/main.zip
 
 # Source design assets (PNG source files, WebP equivalents already committed)
-assets/shiroha_quiz_ui_assets_v2/
-assets/shiroha_quiz_ui_assets_v2_cutout/
-
 # Local build scripts
 build-release.cmd
 build-release.ps1
