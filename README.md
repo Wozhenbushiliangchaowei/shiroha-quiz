@@ -242,7 +242,7 @@ shiroha-quiz/
 │   ├── native/                      # 原生 Android 相关文档
 │   └── universal/                   # 通用架构建议
 ├── assets/                          # 宣传图与素材源文件
-├── packages/                        # 规划中的共享模块
+├── packages/                        # 跨端接口契约与设计文档
 ├── CHANGELOG.md
 ├── CONTRIBUTING.md
 ├── LICENSE
@@ -323,10 +323,7 @@ apps/android/app/build/outputs/
 
 ## 开发计划
 
-- 原生版继续完善填空/简答交互、夜间模式、docx/pdf 导入
-- Web 版与原生版共享解析逻辑，逐步沉淀通用模块
-- 增加核心流程自动化测试
-- 持续优化大题库性能与移动端体验
+详见 [下阶段开发计划](docs/下阶段开发计划.md)。
 
 ---
 
