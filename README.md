@@ -276,11 +276,11 @@ apps/android/app/build/outputs/
 - [GitHub Releases](https://github.com/reiqr/shiroha-quiz/releases)
 - [在线体验](https://reiqr.github.io/shiroha-quiz)
 
-最新发布版本：Web `v0.4.4-alpha` / 原生 `v0.2.7-native`。详见 [Releases](https://github.com/reiqr/shiroha-quiz/releases)。
+最新发布版本：`v1.0.0-beta`（含 Web `v0.4.4-alpha` / 原生 `v0.2.7-native`）。详见 [Releases](https://github.com/reiqr/shiroha-quiz/releases)。
 
 每次发布包含 Android APK 及相关说明文档。
 
-> 当前仍为 alpha 测试阶段，不建议用于正式考试、生产培训或高风险场景。
+> 当前为 beta 测试阶段，功能尚在完善中，不建议用于高风险正式考试场景。
 
 ---
 
