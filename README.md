@@ -2,6 +2,10 @@
   <img src="assets/promo.png" width="800" alt="Shiroha Quiz">
 </div>
 
+<br>
+
+<img src="assets/mascot.png" width="160" align="right" alt="看板娘" />
+
 # Shiroha Quiz
 
 Shiroha Quiz 是一个轻量、开源的通用刷题工具，支持自导入题库、练习、考试、错题复习与多端使用。
@@ -99,6 +103,9 @@ Shiroha Quiz 解决一个很实际的问题：
 ---
 
 ## Android 双版本说明
+
+<!-- ![WebView 壳版截图](assets/screenshot-web.png) -->
+<!-- ![原生 Compose 版截图](assets/screenshot-native.png) -->
 
 Releases 页面提供两个 APK，根据需求选择：
 
