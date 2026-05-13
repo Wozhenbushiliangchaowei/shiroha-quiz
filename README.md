@@ -4,7 +4,7 @@
 
 <br>
 
-<img src="assets/mascot.png" width="160" align="right" alt="看板娘" />
+<img src="assets/shiroha_quiz_ui_assets_v2_cutout/illus_home_welcome.png" width="160" align="right" alt="看板娘" />
 
 # Shiroha Quiz
 
