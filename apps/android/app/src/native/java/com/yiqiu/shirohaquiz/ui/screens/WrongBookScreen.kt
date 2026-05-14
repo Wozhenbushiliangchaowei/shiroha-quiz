@@ -82,7 +82,7 @@ fun WrongBookScreen(
         ShirohaHeader(
             kicker = "Wrong Book",
             title = "错题本",
-            subtitle = "按掌握程度沉淀错题，再集中复习。"
+            subtitle = ""
         )
 
         if (wrongBook.isEmpty()) {
@@ -105,7 +105,7 @@ fun WrongBookScreen(
 
         IllustrationHeroCard(
             title = "错题需要慢慢消化。",
-            subtitle = "筛选错题、集中复盘，再回到练习中巩固。",
+            subtitle = "筛错题，集中复盘",
             imageRes = R.drawable.illus_wrongbook_hint_webp,
             modifier = Modifier.height(132.dp),
             imageSize = 92.dp
@@ -146,12 +146,19 @@ fun WrongBookScreen(
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(Modifier.height(8.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 WrongBookFilter.entries.forEach { item ->
                     ActionPillButton(
                         icon = Icons.Rounded.CheckCircle,
                         text = item.label,
                         primary = filter == item,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        fillWidthContent = true,
                         onClick = { filter = item }
                     )
                 }
@@ -164,12 +171,19 @@ fun WrongBookScreen(
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(Modifier.height(8.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 WrongBookSort.entries.forEach { item ->
                     ActionPillButton(
                         icon = Icons.Rounded.PlayArrow,
                         text = item.label,
                         primary = sort == item,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        fillWidthContent = true,
                         onClick = { sort = item }
                     )
                 }
