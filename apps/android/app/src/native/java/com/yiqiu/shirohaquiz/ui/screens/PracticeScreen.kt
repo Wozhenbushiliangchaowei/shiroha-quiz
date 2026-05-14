@@ -385,7 +385,7 @@ private fun PracticeSetupPanel(
     GlassCard {
         Text(
             text = bankName,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
