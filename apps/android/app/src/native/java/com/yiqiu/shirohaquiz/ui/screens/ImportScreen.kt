@@ -1579,8 +1579,7 @@ private fun sampleAnswerText(): String = """
 private fun ImportStepHeroCard() {
     GlassCard(
         modifier = Modifier.height(132.dp),
-        animated = true,
-        contentPadding = 16.dp
+        contentPadding = 12.dp
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1589,8 +1588,8 @@ private fun ImportStepHeroCard() {
         ) {
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 ImportStepPill("1 导入文件", selected = true)
                 ImportStepPill("2 核对结果", selected = false)
@@ -1599,7 +1598,7 @@ private fun ImportStepHeroCard() {
             Image(
                 painter = painterResource(R.drawable.illus_import_hint_webp),
                 contentDescription = null,
-                modifier = Modifier.size(92.dp),
+                modifier = Modifier.size(104.dp),
                 contentScale = ContentScale.Fit
             )
         }
@@ -1616,25 +1615,18 @@ private fun ImportStepPill(
         color = if (selected) ShirohaColors.BrandPrimarySoft else ShirohaColors.CardMuted,
         border = BorderStroke(1.dp, if (selected) ShirohaColors.LineSelected else ShirohaColors.LineSoft),
         modifier = Modifier
-            .width(144.dp)
+            .width(136.dp)
             .defaultMinSize(minHeight = 30.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = text,
-                color = if (selected) MaterialTheme.colorScheme.primary else ShirohaColors.TextSecondary,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            color = if (selected) MaterialTheme.colorScheme.primary else ShirohaColors.TextSecondary,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

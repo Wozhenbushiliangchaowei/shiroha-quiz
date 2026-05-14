@@ -107,8 +107,8 @@ fun PracticeScreen(
     Column(
         modifier = Modifier
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = ShirohaSpacing.Xl, vertical = ShirohaSpacing.Sm),
-        verticalArrangement = Arrangement.spacedBy(ShirohaSpacing.Lg)
+            .padding(horizontal = ShirohaSpacing.Xl, vertical = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(ShirohaSpacing.Sm)) {
             Text(
@@ -496,7 +496,10 @@ private fun PracticeSetupPanel(
 
 @Composable
 private fun CompactPracticeSetupHero() {
-    GlassCard(modifier = Modifier.height(132.dp), animated = true) {
+    GlassCard(
+        modifier = Modifier.height(132.dp),
+        contentPadding = 12.dp
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -509,8 +512,8 @@ private fun CompactPracticeSetupHero() {
             ) {
                 PracticeSetupStepCard(index = "1", text = "选好参数")
                 PracticeSetupStepCard(index = "2", text = "开始练习")
+                PracticeSetupStepCard(index = "3", text = "记录结果")
             }
-            Spacer(Modifier.width(10.dp))
             Image(
                 painter = painterResource(R.drawable.illus_practice_hint_webp),
                 contentDescription = "练习提示",
