@@ -550,6 +550,7 @@ private fun AiSettingsPanel(context: Context) {
     var timeoutSeconds by remember { mutableStateOf(QuizRepository.aiTimeoutSeconds.toString()) }
     var refactorMaxChars by remember { mutableStateOf(QuizRepository.aiRefactorMaxChars.toString()) }
     var statusText by remember { mutableStateOf<String?>(null) }
+    var limitStatusText by remember { mutableStateOf<String?>(null) }
     var statusWarning by remember { mutableStateOf(false) }
     var isTestingConnection by remember { mutableStateOf(false) }
     val aiScope = rememberCoroutineScope()
@@ -761,6 +762,12 @@ private fun AiSettingsPanel(context: Context) {
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "保存范围：单次题数 5–100，超时 15–180 秒，AI重构原文上限 5000–80000 字；超出范围会自动修正。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Spacer(Modifier.height(10.dp))
         TextButton(
             onClick = {
@@ -776,11 +783,18 @@ private fun AiSettingsPanel(context: Context) {
                 maxQuestions = QuizRepository.aiMaxQuestions.toString()
                 timeoutSeconds = QuizRepository.aiTimeoutSeconds.toString()
                 refactorMaxChars = QuizRepository.aiRefactorMaxChars.toString()
-                statusText = "AI 处理限制已保存。"
-                statusWarning = false
+                limitStatusText = "处理限制已保存：单次 ${QuizRepository.aiMaxQuestions} 题，超时 ${QuizRepository.aiTimeoutSeconds} 秒，AI重构原文上限 ${QuizRepository.aiRefactorMaxChars} 字。"
             }
         ) {
             Text("保存处理限制")
+        }
+        limitStatusText?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary
+            )
         }
         Spacer(Modifier.height(8.dp))
         NoticeCard(

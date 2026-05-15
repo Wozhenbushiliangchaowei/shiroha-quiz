@@ -63,14 +63,15 @@ fun HomeScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = ShirohaSpacing.Xl, vertical = ShirohaSpacing.Sm),
-        verticalArrangement = Arrangement.spacedBy(ShirohaSpacing.Lg)
+            .padding(horizontal = ShirohaSpacing.Xl, vertical = ShirohaSpacing.Sm)
     ) {
         ShirohaHeader(
             kicker = "Shiroha Quiz",
             title = "首页",
             subtitle = ""
         )
+
+        Spacer(Modifier.height(ShirohaSpacing.Lg))
 
         IllustrationHeroCard(
             title = "欢迎回来",
@@ -79,6 +80,8 @@ fun HomeScreen(
             modifier = Modifier.height(ShirohaDimens.HeroCardHeight),
             imageSize = ShirohaDimens.HeroImageSize
         )
+
+        Spacer(Modifier.height(ShirohaSpacing.Lg))
 
         TodayStatusCard(
             bankName = bankName,
