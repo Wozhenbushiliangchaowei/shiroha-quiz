@@ -1769,6 +1769,7 @@ private fun NativeQuestionReviewScreen(
 }
 
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AiReviewSuggestionCard(
     suggestion: AiReviewSuggestion,
