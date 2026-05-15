@@ -33,9 +33,8 @@ fun AboutScreen(
         ShirohaHeader(
             kicker = "About",
             title = "关于 Shiroha Quiz",
-            subtitle = "我是Shiroha，欢迎关注。"
+            subtitle = "我是 Shiroha，欢迎关注。"
         )
-
 
         GlassCard {
             Text(
