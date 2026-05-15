@@ -9,7 +9,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,6 +43,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.automirrored.rounded.TextSnippet
+import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Timer
@@ -58,6 +62,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -361,6 +366,7 @@ fun PracticeScreen(
         val displayedSelection = effectiveResult?.userAnswer ?: QuizRepository.selectedAnswer
         val batchDraftAnsweredCount = QuizRepository.practiceDraftAnsweredCount()
         var showBatchSubmitConfirm by rememberSaveable(practiceQuestions.size, QuizRepository.practiceBatchSubmitted, batchGroupStart) { mutableStateOf(false) }
+        var showExitPracticeConfirm by rememberSaveable(practiceQuestions.size) { mutableStateOf(false) }
         var showBatchAnswerSheet by rememberSaveable(practiceQuestions.size, QuizRepository.practiceBatchSubmitted, batchGroupStart) { mutableStateOf(false) }
         var batchReviewWrongOnly by rememberSaveable(practiceQuestions.size, QuizRepository.practiceBatchSubmitted, batchGroupStart) { mutableStateOf(false) }
         val batchWrongIndexes = if (isBatchSubmitted) QuizRepository.practiceWrongQuestionIndexes() else emptyList()
@@ -654,14 +660,26 @@ fun PracticeScreen(
             ) {
                 Spacer(Modifier.weight(1f))
                 ActionPillButton(
-                    Icons.AutoMirrored.Rounded.ArrowBack,
+                    Icons.Rounded.Alarm,
                     "退出练习",
                     primary = false,
                     modifier = Modifier
                         .weight(1f)
                         .height(50.dp),
                     fillWidthContent = true,
-                    onClick = { QuizRepository.endPracticeSession() }
+                    onClick = { showExitPracticeConfirm = true }
+                )
+            }
+
+
+
+            if (showExitPracticeConfirm) {
+                PracticeExitConfirmDialog(
+                    onDismiss = { showExitPracticeConfirm = false },
+                    onConfirm = {
+                        showExitPracticeConfirm = false
+                        QuizRepository.endPracticeSession()
+                    }
                 )
             }
 
@@ -1104,6 +1122,22 @@ private fun CompactPracticeChip(
 }
 
 @Composable
+private fun Modifier.practiceNoRipplePillClick(
+    enabled: Boolean = true,
+    onClick: () -> Unit
+): Modifier {
+    val shape = RoundedCornerShape(ShirohaRadius.Pill)
+    return this
+        .clip(shape)
+        .clickable(
+            enabled = enabled,
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            onClick = onClick
+        )
+}
+
+@Composable
 private fun CompactPracticeActionChip(
     text: String,
     onClick: () -> Unit
@@ -1111,7 +1145,7 @@ private fun CompactPracticeActionChip(
     Surface(
         modifier = Modifier
             .defaultMinSize(minHeight = 32.dp)
-            .clickable(onClick = onClick),
+            .practiceNoRipplePillClick(onClick = onClick),
         shape = RoundedCornerShape(ShirohaRadius.Pill),
         color = ShirohaColors.CardWhite86,
         border = BorderStroke(ShirohaDimens.Hairline, ShirohaColors.LineStrong)
@@ -1134,7 +1168,7 @@ private fun CompactExitPracticeButton(onClick: () -> Unit) {
     Surface(
         modifier = Modifier
             .defaultMinSize(minHeight = 34.dp)
-            .clickable(onClick = onClick),
+            .practiceNoRipplePillClick(onClick = onClick),
         shape = RoundedCornerShape(ShirohaRadius.Pill),
         color = ShirohaColors.CardWhite86,
         border = BorderStroke(ShirohaDimens.Hairline, ShirohaColors.LineStrong)
@@ -1317,23 +1351,36 @@ private fun PracticeProgressCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    if (batchBeforeSubmit) "批量做题 · 第 $batchGroupNumber / $batchGroupCount 组" else if (batchSubmitted) "批量复盘 · 第 $batchGroupNumber / $batchGroupCount 组" else "正确率",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = when {
-                        batchBeforeSubmit -> "本组已答 $answered / $total 题 · 提交后统一判分"
-                        batchSubmitted -> "本组已提交 $answered / $total 题 · 正确率 $accuracy% · 错题 $wrongCount 题"
-                        else -> "已提交 $answered / $total 题 · 正确率 $accuracy%"
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                if (batchSubmitted) {
+                    Text(
+                        text = "批量复盘",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "第 $batchGroupNumber / $batchGroupCount 组",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                } else {
+                    Text(
+                        text = if (batchBeforeSubmit) "批量做题 · 第 $batchGroupNumber / $batchGroupCount 组" else "正确率",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (!batchBeforeSubmit) {
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = "已提交 $answered / $total 题 · 正确率 $accuracy%",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1367,7 +1414,7 @@ private fun PracticePanelCapsule(
     Surface(
         modifier = Modifier
             .defaultMinSize(minHeight = 32.dp)
-            .clickable(enabled = enabled, onClick = onClick),
+            .practiceNoRipplePillClick(enabled = enabled, onClick = onClick),
         shape = RoundedCornerShape(ShirohaRadius.Pill),
         color = if (enabled) ShirohaColors.CardWhite86 else ShirohaColors.CardMuted,
         border = BorderStroke(ShirohaDimens.Hairline, if (enabled) ShirohaColors.LineStrong else ShirohaColors.LineSoft)
@@ -1392,7 +1439,7 @@ private fun PracticeAccuracyCapsule(
     Box(
         modifier = modifier
             .width(38.dp)
-            .clickable(onClick = onClick),
+            .practiceNoRipplePillClick(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -1411,10 +1458,16 @@ private fun Modifier.questionSwipeNavigation(
     onSwipeLeft: () -> Unit,
     onSwipeRight: () -> Unit
 ): Modifier {
-    val thresholdPx = with(LocalDensity.current) { 80.dp.toPx() }
+    val thresholdPx = with(LocalDensity.current) { 62.dp.toPx() }
     val maxOffsetPx = with(LocalDensity.current) { 34.dp.toPx() }
     val swipeOffset = remember { Animatable(0f) }
     val swipeScope = rememberCoroutineScope()
+    var dragAmount by remember { mutableStateOf(0f) }
+    val dragState = rememberDraggableState { dragDelta ->
+        dragAmount += dragDelta
+        val visualOffset = (dragAmount * 0.42f).coerceIn(-maxOffsetPx, maxOffsetPx)
+        swipeScope.launch { swipeOffset.snapTo(visualOffset) }
+    }
 
     fun resetSwipeOffset() {
         swipeScope.launch { swipeOffset.animateTo(0f, animationSpec = tween(durationMillis = 140)) }
@@ -1431,33 +1484,24 @@ private fun Modifier.questionSwipeNavigation(
             translationX = swipeOffset.value
             alpha = 1f - offsetFraction * 0.05f
         }
-        .pointerInput(onSwipeLeft, onSwipeRight, thresholdPx, maxOffsetPx) {
-            var dragAmount = 0f
-            detectHorizontalDragGestures(
-                onDragStart = {
-                    dragAmount = 0f
-                    swipeScope.launch { swipeOffset.stop() }
-                },
-                onHorizontalDrag = { _, dragDelta ->
-                    dragAmount += dragDelta
-                    val visualOffset = (dragAmount * 0.42f).coerceIn(-maxOffsetPx, maxOffsetPx)
-                    swipeScope.launch { swipeOffset.snapTo(visualOffset) }
-                },
-                onDragCancel = {
-                    dragAmount = 0f
-                    resetSwipeOffset()
-                },
-                onDragEnd = {
-                    when {
-                        dragAmount <= -thresholdPx -> onSwipeLeft()
-                        dragAmount >= thresholdPx -> onSwipeRight()
-                    }
-                    dragAmount = 0f
-                    resetSwipeOffset()
+        .draggable(
+            state = dragState,
+            orientation = Orientation.Horizontal,
+            onDragStarted = {
+                dragAmount = 0f
+                swipeScope.launch { swipeOffset.stop() }
+            },
+            onDragStopped = {
+                when {
+                    dragAmount <= -thresholdPx -> onSwipeLeft()
+                    dragAmount >= thresholdPx -> onSwipeRight()
                 }
-            )
-        }
+                dragAmount = 0f
+                resetSwipeOffset()
+            }
+        )
 }
+
 
 @Composable
 private fun BatchPracticeAnswerSheetDialog(
@@ -1593,7 +1637,7 @@ private fun BatchAnswerNumberChip(
     Surface(
         modifier = modifier
             .height(36.dp)
-            .clickable(onClick = onClick),
+            .practiceNoRipplePillClick(onClick = onClick),
         shape = RoundedCornerShape(ShirohaRadius.Pill),
         color = background,
         border = BorderStroke(ShirohaDimens.Hairline, borderColor)
@@ -1608,6 +1652,30 @@ private fun BatchAnswerNumberChip(
             )
         }
     }
+}
+
+@Composable
+private fun PracticeExitConfirmDialog(
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("确定要退出练习吗？") },
+        text = {
+            Text(
+                text = "退出后将结束当前练习进度。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text("退出") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
 }
 
 @Composable
