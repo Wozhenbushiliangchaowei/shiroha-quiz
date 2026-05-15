@@ -134,6 +134,7 @@ fun ImportScreen(
     var answerFullEditorMode by rememberSaveable { mutableStateOf(false) }
     var aiReviewedQuestionIds by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
     var aiAnalyzedQuestionIds by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
+    var aiReviewSuggestions by remember { mutableStateOf<List<AiReviewSuggestion>>(emptyList()) }
 
     fun clearParsedResult(clearImages: Boolean = false) {
         importResult = null
@@ -144,19 +145,24 @@ fun ImportScreen(
         previewOnlyAnomaly = false
         aiReviewedQuestionIds = emptyList()
         aiAnalyzedQuestionIds = emptyList()
+        aiReviewSuggestions = emptyList()
         if (clearImages) importedImages = emptyList()
     }
 
     fun applyParsedResult(result: ImportResult) {
-        importResult = result
-        editableQuestions = result.questions
+        val resultWithExtraWarnings = result.copy(
+            warnings = result.warnings + duplicateQuestionNumberWarnings(result.questions)
+        )
+        importResult = resultWithExtraWarnings
+        editableQuestions = resultWithExtraWarnings.questions
         reviewIndex = 0
         reviewFilterName = ReviewFilter.ALL.name
         aiReviewedQuestionIds = emptyList()
         aiAnalyzedQuestionIds = emptyList()
-        val hardCount = result.warnings.count { it.level == WarningLevel.ERROR }
-        val softCount = result.warnings.count { it.level == WarningLevel.WARNING }
-        statusText = "已完成${if (useDualImport) "双文件" else "原生"}解析：${result.questions.size} 题，硬错误 $hardCount 条，可确认提示 $softCount 条。"
+        aiReviewSuggestions = emptyList()
+        val hardCount = resultWithExtraWarnings.warnings.count { it.level == WarningLevel.ERROR }
+        val softCount = resultWithExtraWarnings.warnings.count { it.level == WarningLevel.WARNING }
+        statusText = "已完成${if (useDualImport) "双文件" else "原生"}解析：${resultWithExtraWarnings.questions.size} 题，硬错误 $hardCount 条，可确认提示 $softCount 条。"
         isStatusWarn = hardCount > 0
     }
 
@@ -305,6 +311,7 @@ fun ImportScreen(
         NativeQuestionReviewScreen(
             questions = editableQuestions,
             warnings = warnings,
+            aiSuggestions = aiReviewSuggestions,
             filter = reviewFilter,
             currentIndex = reviewIndex.coerceIn(0, (editableQuestions.size - 1).coerceAtLeast(0)),
             onFilterChange = { filter ->
@@ -321,9 +328,32 @@ fun ImportScreen(
                     if (currentIndex == index) question else item
                 }
             },
+            onApplyAiSuggestion = { index, suggestion ->
+                val currentQuestion = editableQuestions.getOrNull(index)
+                if (currentQuestion != null && canApplyAiSuggestion(suggestion)) {
+                    val nextQuestion = applyAiReviewSuggestion(currentQuestion, suggestion)
+                    val nextQuestions = editableQuestions.mapIndexed { currentIndex, item ->
+                        if (currentIndex == index) nextQuestion else item
+                    }
+                    editableQuestions = nextQuestions
+                    importResult = importResult?.copy(
+                        questions = nextQuestions,
+                        warnings = importResult?.warnings.orEmpty().filterNot { warning ->
+                            isAiImportWarning(warning) && aiWarningBelongsToQuestion(warning, currentQuestion)
+                        }
+                    )
+                    aiReviewSuggestions = aiReviewSuggestions.filterNot { it.questionId == suggestion.questionId }
+                    statusText = "已采纳 1 条 AI 核对建议，保存题库前仍可继续人工调整。"
+                    isStatusWarn = false
+                }
+            },
             onDeleteQuestion = { index ->
+                val deletedQuestionId = editableQuestions.getOrNull(index)?.id
                 val nextQuestions = editableQuestions.filterIndexed { currentIndex, _ -> currentIndex != index }
                 editableQuestions = nextQuestions
+                if (deletedQuestionId != null) {
+                    aiReviewSuggestions = aiReviewSuggestions.filterNot { it.questionId == deletedQuestionId }
+                }
                 reviewIndex = index.coerceAtMost((nextQuestions.size - 1).coerceAtLeast(0))
                 firstMatchingQuestionIndex(nextQuestions, warnings, reviewFilterFromName(reviewFilterName))?.let { reviewIndex = it }
                 statusText = "已从核对列表中移除 1 题。保存题库时会使用当前核对后的题目。"
@@ -754,6 +784,7 @@ fun ImportScreen(
                                             )
                                         }
                                     }.onSuccess { suggestions ->
+                                        aiReviewSuggestions = mergeAiReviewSuggestions(aiReviewSuggestions, suggestions, limitedQuestions)
                                         val aiWarnings = suggestionsToImportWarnings(suggestions, editableQuestions)
                                         importResult = displayResult.copy(
                                             warnings = mergeAiWarnings(
@@ -801,28 +832,27 @@ fun ImportScreen(
                                 }
                                 val allAnalysisTargets = editableQuestions.filter(::shouldApplyAiAnalysis)
                                 val anomalyAnalysisTargets = anomalyQuestions.filter(::shouldApplyAiAnalysis)
-                                val usingFallbackTargets = QuizRepository.aiOnlyAnomaly && anomalyAnalysisTargets.isEmpty() && allAnalysisTargets.isNotEmpty()
-                                val analysisTargetPool = if (QuizRepository.aiOnlyAnomaly && anomalyAnalysisTargets.isNotEmpty()) {
-                                    anomalyAnalysisTargets
-                                } else {
-                                    allAnalysisTargets
-                                }
-                                if (analysisTargetPool.isEmpty()) {
+                                if (allAnalysisTargets.isEmpty()) {
                                     statusText = "AI 解析：当前没有缺少解析或解析过短的题目。"
                                     isStatusWarn = false
                                     return@ActionPillButton
                                 }
                                 val analyzedIdSet = aiAnalyzedQuestionIds.toSet()
-                                val remainingAnalysisTargets = analysisTargetPool.filterNot { it.id in analyzedIdSet }
+                                val remainingAnomalyTargets = anomalyAnalysisTargets.filterNot { it.id in analyzedIdSet }
+                                val remainingAllTargets = allAnalysisTargets.filterNot { it.id in analyzedIdSet }
+                                val useAnomalyScope = QuizRepository.aiOnlyAnomaly && remainingAnomalyTargets.isNotEmpty()
+                                val usingFallbackTargets = QuizRepository.aiOnlyAnomaly && !useAnomalyScope && remainingAllTargets.isNotEmpty()
+                                val analysisTargetPool = if (useAnomalyScope) anomalyAnalysisTargets else allAnalysisTargets
+                                val remainingAnalysisTargets = if (useAnomalyScope) remainingAnomalyTargets else remainingAllTargets
                                 if (remainingAnalysisTargets.isEmpty()) {
-                                    statusText = "AI 解析：当前范围已全部尝试。若仍有题目缺解析，可能是模型未返回对应结果；可重新解析题库或调整单次题数后重试。"
+                                    statusText = "AI 解析：当前缺解析题已全部尝试。若仍有题目缺解析，可能是模型未返回对应结果；可重新解析题库或调整单次题数后重试。"
                                     isStatusWarn = false
                                     return@ActionPillButton
                                 }
                                 val aiTargetQuestions = remainingAnalysisTargets.take(QuizRepository.aiMaxQuestions)
                                 val processedBefore = analysisTargetPool.count { it.id in analyzedIdSet }.coerceAtMost(analysisTargetPool.size)
                                 statusText = if (usingFallbackTargets) {
-                                    "AI 解析中：当前没有异常题，已改为处理缺解析题；本次处理 ${aiTargetQuestions.size} 道，进度 ${processedBefore + 1}-${processedBefore + aiTargetQuestions.size}/${analysisTargetPool.size}。"
+                                    "AI 解析中：异常题范围已无未尝试解析目标，已改为处理全部缺解析题；本次处理 ${aiTargetQuestions.size} 道，进度 ${processedBefore + 1}-${processedBefore + aiTargetQuestions.size}/${analysisTargetPool.size}。"
                                 } else {
                                     "AI 解析中：本次处理 ${aiTargetQuestions.size} 道缺解析题，进度 ${processedBefore + 1}-${processedBefore + aiTargetQuestions.size}/${analysisTargetPool.size}。"
                                 }
@@ -847,7 +877,7 @@ fun ImportScreen(
                                         editableQuestions = editableQuestions.map { question ->
                                             val suggestion = suggestionMap[question.id]
                                             if (suggestion != null && shouldApplyAiAnalysis(question)) {
-                                                question.copy(analysis = suggestion.analysis)
+                                                applyAiAnalysisSuggestion(question, suggestion.analysis)
                                             } else {
                                                 question
                                             }
@@ -950,6 +980,7 @@ fun ImportScreen(
 }
 
 private const val LARGE_TEXT_PREVIEW_THRESHOLD = 5000
+private const val AI_WARNING_ID_MARKER = "__AI_QID__="
 private const val LARGE_TEXT_PREVIEW_CHARS = 1200
 
 @Composable
@@ -1189,7 +1220,7 @@ private fun NativeImportSummary(result: ImportResult) {
         if (result.warnings.isNotEmpty()) {
             Spacer(Modifier.height(14.dp))
             result.warnings.take(6).forEach { warning ->
-                NoticeCard("第 ${warning.questionNumber ?: "-"} 题：${warning.message}")
+                NoticeCard("第 ${warning.questionNumber ?: "-"} 题：${displayImportWarningMessage(warning.message)}")
                 Spacer(Modifier.height(8.dp))
             }
         }
@@ -1292,11 +1323,13 @@ private fun NativeImportPreview(
 private fun NativeQuestionReviewScreen(
     questions: List<Question>,
     warnings: List<ImportWarning>,
+    aiSuggestions: List<AiReviewSuggestion>,
     filter: ReviewFilter,
     currentIndex: Int,
     onFilterChange: (ReviewFilter) -> Unit,
     onIndexChange: (Int) -> Unit,
     onQuestionChange: (Int, Question) -> Unit,
+    onApplyAiSuggestion: (Int, AiReviewSuggestion) -> Unit,
     onDeleteQuestion: (Int) -> Unit,
     onBack: () -> Unit
 ) {
@@ -1336,6 +1369,7 @@ private fun NativeQuestionReviewScreen(
     }
     val question = questions[safeIndex]
     val questionWarnings = warningsForQuestion(question, warnings)
+    val questionAiSuggestions = aiSuggestions.filter { it.questionId == question.id && isActionableAiSuggestion(it) }
     val visiblePosition = visibleIndices.indexOf(safeIndex).takeIf { it >= 0 } ?: 0
     val anomalyIndices = questions.indices.filter { index ->
         questionMatchesFilter(questions[index], warningsForQuestion(questions[index], warnings), ReviewFilter.ANOMALY)
@@ -1494,8 +1528,26 @@ private fun NativeQuestionReviewScreen(
                 )
                 Spacer(Modifier.height(10.dp))
                 questionWarnings.forEach { warning ->
-                    NoticeCard(warning.message, warning = warning.level != WarningLevel.NORMAL)
+                    NoticeCard(displayImportWarningMessage(warning.message), warning = warning.level != WarningLevel.NORMAL)
                     Spacer(Modifier.height(8.dp))
+                }
+            }
+        }
+
+        if (questionAiSuggestions.isNotEmpty()) {
+            GlassCard {
+                Text(
+                    text = "AI 核对建议",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.height(10.dp))
+                questionAiSuggestions.forEach { suggestion ->
+                    AiReviewSuggestionCard(
+                        suggestion = suggestion,
+                        onApply = { onApplyAiSuggestion(safeIndex, suggestion) }
+                    )
+                    Spacer(Modifier.height(10.dp))
                 }
             }
         }
@@ -1717,6 +1769,77 @@ private fun NativeQuestionReviewScreen(
 }
 
 
+@Composable
+private fun AiReviewSuggestionCard(
+    suggestion: AiReviewSuggestion,
+    onApply: () -> Unit
+) {
+    val riskText = when (suggestion.riskLevel.lowercase()) {
+        "auto_safe" -> "低风险"
+        "hard_error" -> "硬错误"
+        else -> "需确认"
+    }
+    val issueText = suggestion.issueTypes.takeIf { it.isNotEmpty() }?.joinToString("、").orEmpty()
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = ShirohaColors.CardWhite62,
+        border = BorderStroke(ShirohaDimens.Hairline, ShirohaColors.LineSoft)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = buildString {
+                    append("AI 建议")
+                    append(" · ").append(riskText)
+                    if (suggestion.confidence > 0.0) append(" · 置信度 ").append((suggestion.confidence * 100).toInt()).append("%")
+                    if (issueText.isNotBlank()) append(" · ").append(issueText)
+                },
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold
+            )
+            if (suggestion.reason.isNotBlank()) {
+                Text(
+                    text = suggestion.reason,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (suggestion.suggestion.isNotBlank()) {
+                Text(
+                    text = "建议：${suggestion.suggestion}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            val applySummary = aiSuggestionApplySummary(suggestion)
+            if (applySummary.isNotBlank()) {
+                Text(
+                    text = "可采纳内容：$applySummary",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ActionPillButton(
+                    icon = Icons.Rounded.CheckCircle,
+                    text = if (canApplyAiSuggestion(suggestion)) "采纳 AI 建议" else "仅提示，需手动处理",
+                    primary = canApplyAiSuggestion(suggestion),
+                    enabled = canApplyAiSuggestion(suggestion),
+                    onClick = onApply
+                )
+            }
+        }
+    }
+}
+
+
 private fun shouldShowAiStatusInImport(text: String): Boolean {
     return text.startsWith("AI ") ||
         text.startsWith("AI核对") ||
@@ -1731,20 +1854,28 @@ private fun suggestionsToImportWarnings(
 ): List<ImportWarning> {
     val questionById = questions.associateBy { it.id }
     return suggestions
-        .filter { suggestion -> suggestion.status.lowercase() != "ok" || suggestion.needHumanReview }
+        .filter(::isActionableAiSuggestion)
         .mapNotNull { suggestion ->
             val question = questionById[suggestion.questionId] ?: return@mapNotNull null
             val issueText = suggestion.issueTypes.takeIf { it.isNotEmpty() }?.joinToString("、").orEmpty()
             val message = buildString {
                 append("AI建议")
-                if (issueText.isNotBlank()) append("[$issueText]")
+                if (issueText.isNotBlank()) append("[").append(issueText).append("]")
                 if (suggestion.reason.isNotBlank()) append("：").append(suggestion.reason)
                 if (suggestion.suggestion.isNotBlank()) append("；建议：").append(suggestion.suggestion)
+                val applySummary = aiSuggestionApplySummary(suggestion)
+                if (applySummary.isNotBlank()) {
+                    append(if (canApplyAiSuggestion(suggestion)) "；可采纳：" else "；建议内容：")
+                    append(applySummary)
+                }
+                append("；").append(AI_WARNING_ID_MARKER).append(question.id)
             }
+            val hard = suggestion.status.equals("error", ignoreCase = true) ||
+                suggestion.riskLevel.equals("hard_error", ignoreCase = true)
             ImportWarning(
-                level = if (suggestion.status.lowercase() == "error") WarningLevel.ERROR else WarningLevel.WARNING,
+                level = if (hard) WarningLevel.ERROR else WarningLevel.WARNING,
                 questionNumber = question.number,
-                message = message.ifBlank { "AI 建议人工确认本题。" }
+                message = message.ifBlank { "AI 建议人工确认本题；$AI_WARNING_ID_MARKER${question.id}" }
             )
         }
 }
@@ -1754,15 +1885,147 @@ private fun mergeAiWarnings(
     aiWarnings: List<ImportWarning>,
     processedQuestions: List<Question>
 ): List<ImportWarning> {
-    val processedNumbers = processedQuestions.map { it.number }.toSet()
+    val processedIds = processedQuestions.map { it.id }.toSet()
+    val processedNumbers = processedQuestions.map { normalizeQuestionNumber(it.number) }.toSet()
     val keptWarnings = currentWarnings.filterNot { warning ->
-        warning.questionNumber in processedNumbers && isAiImportWarning(warning)
+        if (!isAiImportWarning(warning)) return@filterNot false
+        val warningQuestionId = aiWarningQuestionId(warning)
+        if (warningQuestionId != null) warningQuestionId in processedIds
+        else normalizeQuestionNumber(warning.questionNumber.orEmpty()) in processedNumbers
     }
     return keptWarnings + aiWarnings
 }
 
 private fun isAiImportWarning(warning: ImportWarning): Boolean {
     return warning.message.startsWith("AI建议") || warning.message.startsWith("AI 建议")
+}
+
+private fun aiWarningQuestionId(warning: ImportWarning): String? {
+    val markerIndex = warning.message.indexOf(AI_WARNING_ID_MARKER)
+    if (markerIndex < 0) return null
+    return warning.message.substring(markerIndex + AI_WARNING_ID_MARKER.length)
+        .substringBefore(' ')
+        .substringBefore('；')
+        .substringBefore(';')
+        .trim()
+        .takeIf { it.isNotBlank() }
+}
+
+private fun aiWarningBelongsToQuestion(warning: ImportWarning, question: Question): Boolean {
+    val warningQuestionId = aiWarningQuestionId(warning)
+    if (warningQuestionId != null) return warningQuestionId == question.id
+    return normalizeQuestionNumber(warning.questionNumber.orEmpty()) == normalizeQuestionNumber(question.number)
+}
+
+private fun displayImportWarningMessage(message: String): String {
+    val markerIndex = message.indexOf(AI_WARNING_ID_MARKER)
+    if (markerIndex < 0) return message
+    return message.substring(0, markerIndex).trimEnd('；', ';', ' ', '\n', '\t')
+}
+
+private fun canApplyAiSuggestion(suggestion: AiReviewSuggestion): Boolean {
+    return suggestion.canApply && !suggestion.riskLevel.equals("hard_error", ignoreCase = true)
+}
+
+private fun isActionableAiSuggestion(suggestion: AiReviewSuggestion): Boolean {
+    val hasStructuredSuggestion = suggestion.suggestedType != null ||
+        suggestion.suggestedAnswer.isNotEmpty() ||
+        suggestion.suggestedQuestion != null ||
+        suggestion.suggestedOptions.isNotEmpty() ||
+        suggestion.suggestedAnalysis != null
+    val pureOk = suggestion.status.equals("ok", ignoreCase = true) &&
+        suggestion.issueTypes.isEmpty() &&
+        !suggestion.needHumanReview &&
+        !canApplyAiSuggestion(suggestion) &&
+        !hasStructuredSuggestion
+    return !pureOk && (
+        !suggestion.status.equals("ok", ignoreCase = true) ||
+            suggestion.needHumanReview ||
+            canApplyAiSuggestion(suggestion) ||
+            suggestion.issueTypes.isNotEmpty() ||
+            hasStructuredSuggestion
+        )
+}
+
+private fun mergeAiReviewSuggestions(
+    current: List<AiReviewSuggestion>,
+    incoming: List<AiReviewSuggestion>,
+    processedQuestions: List<Question>
+): List<AiReviewSuggestion> {
+    val processedIds = processedQuestions.map { it.id }.toSet()
+    val kept = current.filterNot { it.questionId in processedIds }
+    return kept + incoming.filter(::isActionableAiSuggestion)
+}
+
+private fun aiSuggestionApplySummary(suggestion: AiReviewSuggestion): String {
+    val parts = mutableListOf<String>()
+    suggestion.suggestedType?.let { parts += "题型→${suggestedTypeLabel(it)}" }
+    if (suggestion.suggestedAnswer.isNotEmpty()) parts += "答案→${suggestion.suggestedAnswer.joinToString("")}"
+    if (suggestion.suggestedQuestion != null) parts += "题干"
+    if (suggestion.suggestedOptions.isNotEmpty()) parts += "选项 ${suggestion.suggestedOptions.size} 项"
+    if (suggestion.suggestedAnalysis != null) parts += "解析"
+    return parts.joinToString("、")
+}
+
+private fun suggestedTypeLabel(type: String): String = when (type.lowercase()) {
+    "single" -> "单选题"
+    "multiple" -> "多选题"
+    "judge" -> "判断题"
+    "blank" -> "填空题"
+    "short" -> "简答题"
+    else -> type
+}
+
+private fun applyAiReviewSuggestion(question: Question, suggestion: AiReviewSuggestion): Question {
+    var next = question
+    suggestion.suggestedType?.let { typeText ->
+        suggestedQuestionType(typeText)?.let { targetType ->
+            next = normalizeAfterTypeChange(next, targetType)
+        }
+    }
+    suggestion.suggestedQuestion?.let { suggestedQuestion ->
+        next = next.copy(question = suggestedQuestion)
+    }
+    if (suggestion.suggestedOptions.isNotEmpty()) {
+        next = next.copy(options = suggestion.suggestedOptions)
+    } else if (next.type == QuestionType.JUDGE && next.options.isEmpty()) {
+        next = next.copy(options = defaultJudgeOptions())
+    }
+    if (suggestion.suggestedAnswer.isNotEmpty()) {
+        next = next.copy(answer = normalizeSuggestedAnswer(suggestion.suggestedAnswer, next.type))
+    }
+    suggestion.suggestedAnalysis?.let { suggestedAnalysis ->
+        next = next.copy(analysis = suggestedAnalysis)
+    }
+    return next
+}
+
+private fun suggestedQuestionType(type: String): QuestionType? = when (type.trim().lowercase()) {
+    "single", "单选", "单选题" -> QuestionType.SINGLE
+    "multiple", "multi", "多选", "多选题" -> QuestionType.MULTIPLE
+    "judge", "true_false", "判断", "判断题" -> QuestionType.JUDGE
+    "blank", "填空", "填空题" -> QuestionType.BLANK
+    "short", "essay", "简答", "简答题" -> QuestionType.SHORT
+    else -> null
+}
+
+private fun normalizeSuggestedAnswer(answer: List<String>, type: QuestionType): List<String> {
+    val normalized = answer
+        .flatMap { item -> item.split(',', '，', '、', '/', ' ') }
+        .map { it.trim().uppercase() }
+        .filter { it.isNotBlank() }
+    return when (type) {
+        QuestionType.SINGLE -> normalized.take(1)
+        QuestionType.JUDGE -> normalized.map { value ->
+            when (value) {
+                "正确", "对", "TRUE", "T" -> "A"
+                "错误", "错", "FALSE", "F" -> "B"
+                else -> value.take(1)
+            }
+        }.take(1)
+        QuestionType.MULTIPLE -> normalized.distinct().sorted()
+        else -> normalized
+    }
 }
 
 private fun analysisTargetQuestions(
@@ -1776,9 +2039,45 @@ private fun analysisTargetQuestions(
 
 private fun shouldApplyAiAnalysis(question: Question): Boolean {
     val clean = question.analysis.trim()
-    return clean.isBlank() || clean.length < 20 || clean == "无" || clean == "暂无解析"
+    val missingOrShortAnalysis = clean.isBlank() || clean.length < 20 || clean == "无" || clean == "暂无解析"
+    val subjectiveMissingAnswer = question.type == QuestionType.SHORT && question.answer.isEmpty() && question.options.isEmpty()
+    return missingOrShortAnalysis || subjectiveMissingAnswer
 }
 
+private fun applyAiAnalysisSuggestion(question: Question, generatedAnalysis: String): Question {
+    val clean = generatedAnalysis.trim()
+    if (clean.isBlank()) return question
+    return if (question.type == QuestionType.SHORT && question.answer.isEmpty() && question.options.isEmpty()) {
+        question.copy(
+            answer = listOf(clean),
+            analysis = clean
+        )
+    } else {
+        question.copy(analysis = clean)
+    }
+}
+
+
+
+private fun duplicateQuestionNumberWarnings(questions: List<Question>): List<ImportWarning> {
+    val duplicateGroups = questions
+        .filter { it.number.trim().isNotBlank() }
+        .groupBy { normalizeQuestionNumber(it.number) }
+        .filterValues { it.size > 1 }
+    return duplicateGroups.values.flatten().map { question ->
+        ImportWarning(
+            level = WarningLevel.WARNING,
+            questionNumber = question.number,
+            message = "题号重复：当前题号与其他题目重复，建议人工确认。AI 核对建议已按题目ID处理，避免误挂到同题号题目。"
+        )
+    }
+}
+
+private fun normalizeQuestionNumber(number: String): String {
+    val clean = number.trim()
+    val trimmedZero = clean.trimStart('0')
+    return trimmedZero.ifBlank { clean }
+}
 
 private enum class ReviewFilter {
     ALL,
@@ -1824,7 +2123,11 @@ private fun firstMatchingQuestionIndex(
 
 private fun warningsForQuestion(question: Question, warnings: List<ImportWarning>): List<ImportWarning> {
     return warnings.filter { warning ->
-        warning.questionNumber == question.number || warning.questionNumber == question.number.trimStart('0')
+        if (isAiImportWarning(warning)) {
+            aiWarningBelongsToQuestion(warning, question)
+        } else {
+            normalizeQuestionNumber(warning.questionNumber.orEmpty()) == normalizeQuestionNumber(question.number)
+        }
     }
 }
 
@@ -1843,17 +2146,31 @@ private fun questionMatchesFilter(
 }
 
 private fun hasReviewAnomaly(question: Question, warnings: List<ImportWarning>): Boolean {
-    return warnings.any { it.level != WarningLevel.NORMAL } ||
-        question.answer.isEmpty() ||
-        question.question.isBlank() ||
-        hasHardReviewError(question, warnings) ||
-        (question.type in listOf(QuestionType.SINGLE, QuestionType.MULTIPLE) && question.options.size < 2)
+    return hasSoftReviewWarning(question, warnings) || hasHardReviewError(question, warnings)
+}
+
+private fun hasSoftReviewWarning(question: Question, warnings: List<ImportWarning>): Boolean {
+    val hasWarning = warnings.any { it.level == WarningLevel.WARNING }
+    val choiceType = question.type in listOf(QuestionType.SINGLE, QuestionType.MULTIPLE)
+    val optionCountWarning = choiceType && question.options.size == 1
+    return hasWarning || question.answer.isEmpty() || optionCountWarning
 }
 
 private fun hasHardReviewError(question: Question, warnings: List<ImportWarning>): Boolean {
-    return warnings.any { it.level == WarningLevel.ERROR } ||
-        question.question.isBlank() ||
-        (question.type in listOf(QuestionType.SINGLE, QuestionType.MULTIPLE) && question.options.isEmpty())
+    if (warnings.any { it.level == WarningLevel.ERROR }) return true
+    if (question.question.isBlank()) return true
+    val choiceType = question.type in listOf(QuestionType.SINGLE, QuestionType.MULTIPLE)
+    if (choiceType && question.options.isEmpty()) return true
+    if (question.type == QuestionType.SINGLE && question.answer.size > 1) return true
+    if (choiceType && question.answer.isNotEmpty()) {
+        val optionKeys = question.options.map { it.key.uppercase() }.toSet()
+        if (optionKeys.isNotEmpty() && question.answer.any { it.uppercase() !in optionKeys }) return true
+    }
+    if (question.type == QuestionType.JUDGE && question.answer.isNotEmpty()) {
+        val allowed = setOf("A", "B", "正确", "错误", "对", "错")
+        if (question.answer.any { it.uppercase() !in allowed }) return true
+    }
+    return false
 }
 
 private fun previousIndexInList(indices: List<Int>, currentIndex: Int): Int? {

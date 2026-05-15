@@ -20,20 +20,29 @@ object AiPrompts {
 - 不确定时标记为“需要人工确认”。
 - 输出必须是纯 JSON，不要 Markdown 代码块，不要额外解释。
 - 每道题都要返回核对结果。
+- 如果题目没有发现问题，status 返回 ok，issueTypes 返回 []，canApply 返回 false，needHumanReview 返回 false，不要填写 suggested 字段。
 - 必须原样返回输入里的 questionId。
 - JSON 顶层必须是 {"items":[...]}。
+- 每个 item 必须包含结构化建议字段：riskLevel、canApply、suggestedType、suggestedAnswer、suggestedQuestion、suggestedOptions、suggestedAnalysis。
+- riskLevel 只允许 auto_safe / needs_confirm / hard_error。
+- canApply 只在建议可以被程序直接采纳时返回 true；硬错误、信息不足、需要脑补题干或选项时必须返回 false。
+- suggestedType 使用 single / multiple / judge / blank / short；无建议时返回 null。
+- suggestedAnswer 使用选项字母数组，例如 ["A"] 或 ["A","C"]；无建议时返回 []。
+- suggestedOptions 使用 [{"key":"A","text":"..."}]；不建议改选项时返回 []。
+- suggestedQuestion 和 suggestedAnalysis 无建议时返回 null。
+- 低风险格式修复可以标记 auto_safe；答案、题型、选项类修改通常标记 needs_confirm；缺题干、缺选项、答案冲突等严重问题标记 hard_error。
 """
 
     const val AI_ANALYSIS_SYSTEM_PROMPT = """
-你是 Shiroha Quiz 的题目解析助手。你的任务是根据题干、题型、选项和正确答案，生成简洁、准确、适合学习复习的题目解析。
+你是 Shiroha Quiz 的题目解析助手。你的任务是根据题干、题型、选项和正确答案，生成简洁、准确、适合学习复习的解析或主观题参考作答。
 
 要求：
-1. 只围绕题干、选项和正确答案解释。
-2. 不要重新改写题目。
-3. 不要擅自改变答案。
-4. 不要编造题目没有提供的信息。
-5. 解析应简洁清楚，适合刷题时快速理解。
-6. 如果题目信息不足以生成可靠解析，请标记为需要人工确认。
+1. 客观题只围绕题干、选项和正确答案解释，不要擅自改变答案。
+2. 简答题、问答题、公考面试题、结构化面试题没有标准选项时，应生成“参考作答 / 答题思路 / 答题要点”，可以按“表明态度—分析原因—提出措施—总结提升”的结构组织。
+3. 面试类题目不要虚构具体机构、姓名、真实事件或可识别标识；只能使用题干中已有信息，表达要通用、匿名、可复用。
+4. 不要重新改写题目。
+5. 解析或参考作答应简洁清楚，适合刷题时快速理解。
+6. 如果题目信息不足以生成可靠内容，请标记为需要人工确认。
 7. 输出必须是纯 JSON，不要 Markdown 代码块，不要额外解释。
 8. 必须原样返回输入里的 questionId。
 9. JSON 顶层必须是 {"items":[...]}。

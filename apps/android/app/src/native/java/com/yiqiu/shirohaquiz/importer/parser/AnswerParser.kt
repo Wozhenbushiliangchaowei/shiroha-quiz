@@ -69,7 +69,7 @@ object AnswerTokenParser {
             .removeSuffix("]")
             .removePrefix("(")
             .removeSuffix(")")
-            .replace(Regex("""^\s*(?:答案|正确答案|参考答案|标准答案|答)\s*[:：]?\s*"""), "")
+            .replace(Regex("""^\s*(?:答案|正确答案|参考答案|标准答案|参考要点|参考思路|答题要点|答题思路|作答思路|评分要点|参考作答|答)\s*[:：]?\s*"""), "")
             .trim()
     }
 }
@@ -98,6 +98,10 @@ object AnswerParser {
         """(?:第\s*)?(\d{1,4})\s*(?:题)?\s*[【\[]\s*(?:答案|正确答案|参考答案|标准答案)\s*[】\]]\s*([A-Ga-g]{1,7}|对|错|正确|错误|√|×|True|False)""",
         RegexOption.IGNORE_CASE
     )
+    private val subjectiveAnswerLineRegex = Regex(
+        """^\s*(?:(?:第\s*)?([一二三四五六七八九十百0-9]{1,4})\s*(?:题|问)?|(?:问题|题目)\s*([一二三四五六七八九十百0-9]{1,4}))\s*[.、．:：]?\s*(?:答案|正确答案|参考答案|标准答案|参考要点|参考思路|答题要点|答题思路|作答思路|评分要点|参考作答|答)\s*[:：]\s*(.+)$""",
+        RegexOption.IGNORE_CASE
+    )
 
 
     fun parse(text: String): List<ParsedAnswerEntry> {
@@ -108,6 +112,20 @@ object AnswerParser {
         text.lineSequence().forEach { rawLine ->
             val line = rawLine.trim()
             if (line.isBlank()) return@forEach
+
+            subjectiveAnswerLineRegex.find(line)?.let { match ->
+                val number = normalizeQuestionIndex(match.groupValues[1].ifBlank { match.groupValues[2] })
+                val answerText = match.groupValues[3].trim()
+                if (number.isNotBlank() && answerText.isNotBlank()) {
+                    entries += ParsedAnswerEntry(
+                        number = number,
+                        answer = listOf(answerText),
+                        type = currentType ?: QuestionType.SHORT,
+                        sequence = sequence++
+                    )
+                    return@forEach
+                }
+            }
 
             SectionTitleParser.parse(line)?.let { section ->
                 if (!section.isAnswerSection) currentType = section.forcedType
@@ -218,5 +236,32 @@ object AnswerParser {
         }
 
         return entries
+    }
+
+    private fun normalizeQuestionIndex(raw: String): String {
+        val clean = raw.trim()
+        if (clean.all { it.isDigit() }) return clean
+        return chineseNumberToInt(clean)?.toString().orEmpty()
+    }
+
+    private fun chineseNumberToInt(raw: String): Int? {
+        if (raw.isBlank()) return null
+        val digitMap = mapOf(
+            '零' to 0, '〇' to 0, '一' to 1, '二' to 2, '两' to 2, '三' to 3, '四' to 4,
+            '五' to 5, '六' to 6, '七' to 7, '八' to 8, '九' to 9
+        )
+        if ('百' in raw) {
+            val parts = raw.split('百', limit = 2)
+            val hundreds = parts.getOrNull(0)?.takeIf { it.isNotBlank() }?.let { digitMap[it.first()] } ?: 1
+            val tail = parts.getOrNull(1).orEmpty()
+            return hundreds * 100 + (chineseNumberToInt(tail) ?: 0)
+        }
+        if ('十' in raw) {
+            val parts = raw.split('十', limit = 2)
+            val tens = parts.getOrNull(0)?.takeIf { it.isNotBlank() }?.let { digitMap[it.first()] } ?: 1
+            val ones = parts.getOrNull(1)?.takeIf { it.isNotBlank() }?.let { digitMap[it.first()] } ?: 0
+            return tens * 10 + ones
+        }
+        return digitMap[raw.first()]
     }
 }

@@ -1,5 +1,6 @@
 package com.yiqiu.shirohaquiz.ai
 
+import com.yiqiu.shirohaquiz.importer.model.Option
 import com.yiqiu.shirohaquiz.importer.model.Question
 import org.json.JSONArray
 import org.json.JSONException
@@ -23,6 +24,11 @@ data class AiReviewSuggestion(
     val suggestion: String,
     val suggestedType: String?,
     val suggestedAnswer: List<String>,
+    val suggestedQuestion: String?,
+    val suggestedOptions: List<Option>,
+    val suggestedAnalysis: String?,
+    val riskLevel: String,
+    val canApply: Boolean,
     val needHumanReview: Boolean,
     val confidence: Double
 )
@@ -250,15 +256,51 @@ object ShirohaAiClient {
             val item = items.optJSONObject(index) ?: return@mapNotNull null
             val issueTypesJson = item.optJSONArray("issueTypes") ?: JSONArray()
             val suggestedAnswerJson = item.optJSONArray("suggestedAnswer") ?: JSONArray()
+            val suggestedOptionsJson = item.optJSONArray("suggestedOptions") ?: JSONArray()
+            val suggestedQuestion = item.optString("suggestedQuestion").nullIfBlankOrLiteralNull()
+            val suggestedType = item.optString("suggestedType").nullIfBlankOrLiteralNull()
+            val suggestedAnswer = (0 until suggestedAnswerJson.length())
+                .map { suggestedAnswerJson.optString(it).trim().uppercase() }
+                .filter { it.isNotBlank() }
+            val suggestedOptions = (0 until suggestedOptionsJson.length()).mapNotNull { optionIndex ->
+                val option = suggestedOptionsJson.optJSONObject(optionIndex) ?: return@mapNotNull null
+                val key = option.optString("key").trim().uppercase()
+                val value = option.optString("text").trim()
+                if (key.isBlank() && value.isBlank()) null else Option(key, value)
+            }
+            val suggestedAnalysis = item.optString("suggestedAnalysis").nullIfBlankOrLiteralNull()
+            val status = item.optString("status", "warning").ifBlank { "warning" }
+            val issueTypes = (0 until issueTypesJson.length())
+                .map { issueTypesJson.optString(it) }
+                .filter { it.isNotBlank() }
+            val riskLevel = item.optString("riskLevel", "needs_confirm").ifBlank { "needs_confirm" }
+            val hasStructuredSuggestion = suggestedType != null ||
+                suggestedAnswer.isNotEmpty() ||
+                suggestedQuestion != null ||
+                suggestedOptions.isNotEmpty() ||
+                suggestedAnalysis != null
+            val defaultCanApply = hasStructuredSuggestion && !riskLevel.equals("hard_error", ignoreCase = true)
+            val canApply = item.optBoolean("canApply", defaultCanApply) &&
+                !riskLevel.equals("hard_error", ignoreCase = true)
+            val defaultNeedHumanReview = !status.equals("ok", ignoreCase = true) ||
+                issueTypes.isNotEmpty() ||
+                riskLevel.equals("hard_error", ignoreCase = true) ||
+                hasStructuredSuggestion
+            val needHumanReview = item.optBoolean("needHumanReview", defaultNeedHumanReview)
             AiReviewSuggestion(
                 questionId = item.optString("questionId"),
-                status = item.optString("status", "warning"),
-                issueTypes = (0 until issueTypesJson.length()).map { issueTypesJson.optString(it) }.filter { it.isNotBlank() },
+                status = status,
+                issueTypes = issueTypes,
                 reason = item.optString("reason"),
                 suggestion = item.optString("suggestion"),
-                suggestedType = item.optString("suggestedType").takeIf { it.isNotBlank() && it != "null" },
-                suggestedAnswer = (0 until suggestedAnswerJson.length()).map { suggestedAnswerJson.optString(it) }.filter { it.isNotBlank() },
-                needHumanReview = item.optBoolean("needHumanReview", true),
+                suggestedType = suggestedType,
+                suggestedAnswer = suggestedAnswer,
+                suggestedQuestion = suggestedQuestion,
+                suggestedOptions = suggestedOptions,
+                suggestedAnalysis = suggestedAnalysis,
+                riskLevel = riskLevel,
+                canApply = canApply,
+                needHumanReview = needHumanReview,
                 confidence = item.optDouble("confidence", 0.0)
             ).takeIf { it.questionId.isNotBlank() }
         }
@@ -276,6 +318,11 @@ object ShirohaAiClient {
                 confidence = item.optDouble("confidence", 0.0)
             ).takeIf { it.questionId.isNotBlank() && it.analysis.isNotBlank() }
         }
+    }
+
+    private fun String.nullIfBlankOrLiteralNull(): String? {
+        val clean = trim()
+        return clean.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
     }
 
     private fun extractJsonObject(content: String): String {
@@ -303,8 +350,16 @@ object ShirohaAiClient {
                         .put("issueTypes", JSONArray().put("answer_mismatch"))
                         .put("reason", "发现问题的原因")
                         .put("suggestion", "建议如何人工核对或修改")
+                        .put("riskLevel", "auto_safe / needs_confirm / hard_error")
+                        .put("canApply", true)
                         .put("suggestedType", "single / multiple / judge / blank / short / null")
                         .put("suggestedAnswer", JSONArray().put("A"))
+                        .put("suggestedQuestion", "建议题干；无建议时返回 null")
+                        .put(
+                            "suggestedOptions",
+                            JSONArray().put(JSONObject().put("key", "A").put("text", "建议选项文本"))
+                        )
+                        .put("suggestedAnalysis", "建议解析；无建议时返回 null")
                         .put("needHumanReview", true)
                         .put("confidence", 0.82)
                 )
@@ -318,7 +373,7 @@ object ShirohaAiClient {
                 JSONArray().put(
                     JSONObject()
                         .put("questionId", "题目ID")
-                        .put("analysis", "生成的解析内容")
+                        .put("analysis", "生成的解析内容；简答/面试题可返回参考作答或答题思路")
                         .put("needHumanReview", false)
                         .put("confidence", 0.86)
                 )

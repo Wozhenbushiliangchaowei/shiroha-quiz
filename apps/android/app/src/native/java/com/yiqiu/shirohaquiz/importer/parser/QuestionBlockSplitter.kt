@@ -17,6 +17,9 @@ object QuestionBlockSplitter {
     private val bracketQuestionStartRegex = Regex(
         """^\s*[【\[]\s*(\d{1,4})\s*[】\]]\s*(.*)$"""
     )
+    private val interviewQuestionStartRegex = Regex(
+        """^\s*(?:(?:问题|题目)\s*([一二三四五六七八九十百0-9]{1,4})|第\s*([一二三四五六七八九十百0-9]{1,4})\s*(?:题|问|道题|个问题)|([一二三四五六七八九十百]+)\s*(?:、|．|\.))\s*[.、．:：)）]?\s*(.*)$"""
+    )
     private val spacedQuestionStartRegex = Regex(
         """^\s*(\d{1,3})\s+(.+)$"""
     )
@@ -24,9 +27,10 @@ object QuestionBlockSplitter {
         """^\s*(\d{1,2})(?=[\u4e00-\u9fa5A-Za-z])(.*)$"""
     )
     private val optionStartRegex = Regex("""^\s*[A-Ga-g]\s*[.、．:：)）]""")
-    private val answerLineRegex = Regex("""^\s*\[?\s*(?:答案|正确答案|参考答案|标准答案|答)\s*[:：]""")
-    private val analysisLineRegex = Regex("""^\s*\[?\s*(?:解析|答案解析|说明)\s*[:：]""")
-    private val embeddedAnswerRegex = Regex("""\[\s*(?:答案|正确答案|参考答案|标准答案)\s*[:：]""")
+    private val answerLineRegex = Regex("""^\s*\[?\s*(?:答案|正确答案|参考答案|标准答案|参考要点|参考思路|答题要点|答题思路|作答思路|评分要点|答)\s*[:：]""")
+    private val analysisLineRegex = Regex("""^\s*\[?\s*(?:解析|答案解析|说明|解题思路)\s*[:：]""")
+    private val embeddedAnswerRegex = Regex("""\[\s*(?:答案|正确答案|参考答案|标准答案|参考要点|参考思路|答题要点|答题思路|作答思路|评分要点)\s*[:：]""")
+    private val subjectiveAnswerMarkerRegex = Regex("""^\s*(?:答案|正确答案|参考答案|标准答案|参考要点|参考思路|答题要点|答题思路|作答思路|评分要点|参考作答|答)\s*[:：]""")
 
     fun split(
         text: String,
@@ -61,6 +65,11 @@ object QuestionBlockSplitter {
             if (line.isBlank()) return@forEach
             SectionTitleParser.parse(line)?.let { section ->
                 if (!section.isAnswerSection) return@forEach
+            }
+
+            if (currentNumber != null && shouldKeepAsSubjectiveAnswerContinuation(currentLines, line)) {
+                currentLines += line
+                return@forEach
             }
 
             val explicitStart = parseQuestionStart(line)
@@ -102,6 +111,17 @@ object QuestionBlockSplitter {
             return match.groupValues[1] to match.groupValues[2]
         }
 
+        interviewQuestionStartRegex.find(line)?.let { match ->
+            val rawNumber = listOf(match.groupValues[1], match.groupValues[2], match.groupValues[3])
+                .firstOrNull { it.isNotBlank() }
+                .orEmpty()
+            val number = normalizeQuestionIndex(rawNumber)
+            val rest = match.groupValues[4]
+            if (number.isNotBlank()) {
+                return number to rest
+            }
+        }
+
         strictQuestionStartRegex.find(line)?.let { match ->
             return match.groupValues[1] to match.groupValues[2]
         }
@@ -129,6 +149,40 @@ object QuestionBlockSplitter {
         return number.length == 4 && rest.startsWith("年")
     }
 
+    private fun normalizeQuestionIndex(raw: String): String {
+        val clean = raw.trim()
+        if (clean.all { it.isDigit() }) return clean
+        return chineseNumberToInt(clean)?.toString().orEmpty()
+    }
+
+    private fun chineseNumberToInt(raw: String): Int? {
+        if (raw.isBlank()) return null
+        val digitMap = mapOf(
+            '零' to 0, '〇' to 0, '一' to 1, '二' to 2, '两' to 2, '三' to 3, '四' to 4,
+            '五' to 5, '六' to 6, '七' to 7, '八' to 8, '九' to 9
+        )
+        if ('百' in raw) {
+            val parts = raw.split('百', limit = 2)
+            val hundreds = parts.getOrNull(0)?.takeIf { it.isNotBlank() }?.let { digitMap[it.first()] } ?: 1
+            val tail = parts.getOrNull(1).orEmpty()
+            return hundreds * 100 + (chineseNumberToInt(tail) ?: 0)
+        }
+        if ('十' in raw) {
+            val parts = raw.split('十', limit = 2)
+            val tens = parts.getOrNull(0)?.takeIf { it.isNotBlank() }?.let { digitMap[it.first()] } ?: 1
+            val ones = parts.getOrNull(1)?.takeIf { it.isNotBlank() }?.let { digitMap[it.first()] } ?: 0
+            return tens * 10 + ones
+        }
+        return digitMap[raw.first()]
+    }
+
+    private fun shouldKeepAsSubjectiveAnswerContinuation(currentLines: List<String>, line: String): Boolean {
+        if (currentLines.none { subjectiveAnswerMarkerRegex.containsMatchIn(it) }) return false
+        if (Regex("""^\s*(?:问题|题目|第\s*[一二三四五六七八九十百0-9]+\s*(?:题|问|道题|个问题))""").containsMatchIn(line)) return false
+        return Regex("""^\s*(?:\d{1,2}|[一二三四五六七八九十])\s*[.、．)）]""").containsMatchIn(line) ||
+            Regex("""^\s*(?:首先|其次|再次|最后|第一|第二|第三|第四|一是|二是|三是|四是)""").containsMatchIn(line)
+    }
+
     private fun shouldStartNextSyntheticBlock(currentLines: List<String>, nextLine: String): Boolean {
         if (!isLikelyUnnumberedQuestionLine(nextLine)) return false
         if (optionStartRegex.containsMatchIn(nextLine)) return false
@@ -154,6 +208,7 @@ object QuestionBlockSplitter {
         if (embeddedAnswerRegex.containsMatchIn(line)) return true
         if (Regex("""[（(]\s*(?:[A-Ga-g]{1,7}|对|错|正确|错误|√|×|True|False)\s*[)）]""", RegexOption.IGNORE_CASE).containsMatchIn(line)) return true
         if (Regex("""[（(]\s*[)）]""").containsMatchIn(line)) return true
+        if (Regex("""^(?:问题|题目|请回答|请谈谈|谈谈|你怎么看|你怎么处理)""").containsMatchIn(line)) return true
         if (Regex("""[?？。]$""").containsMatchIn(line)) return true
         return false
     }
