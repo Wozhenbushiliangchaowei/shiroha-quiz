@@ -58,8 +58,10 @@ object SectionTitleParser {
     private fun looksLikeTypeSectionRemainder(remainder: String): Boolean {
         val text = remainder.trim()
         if (text.isBlank()) return true
-        if (Regex("""^[（(].*(?:题|分|共|每题|小题|道)[）)]$""").containsMatchIn(text)) return true
-        return Regex("""^(?:共|共计|每题|本部分|以下|含)""").containsMatchIn(text)
+        val scoreOrCountKeywords = "题|小题|道|分|共|共计|每题|每小题|本题|本大题|本部分|满分"
+        if (Regex("""^[（(].*(?:$scoreOrCountKeywords).*[）)]$""").containsMatchIn(text)) return true
+        if (Regex("""^(?:共|共计|每题|每小题|本题|本大题|本部分|以下|含|满分)""").containsMatchIn(text)) return true
+        return Regex("""^(?:[，,、；;]\s*)?(?:共|共计|每题|每小题|本题|本大题|本部分|以下|含|满分)""").containsMatchIn(text)
     }
 
     private fun isInlineAnswerLine(title: String): Boolean {

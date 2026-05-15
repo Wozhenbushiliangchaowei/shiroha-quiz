@@ -6,9 +6,11 @@ import com.yiqiu.shirohaquiz.importer.model.QuestionType
 
 object StandardQuestionParser {
     private const val answerLabelPattern = "答案|正确答案|参考答案|标准答案|参考要点|参考思路|答题要点|答题思路|作答思路|评分要点|参考作答|答"
-    private const val answerSeparatorPattern = """(?:\s*[:：,，、.．;；]\s*|\s+|(?=\s*[\(（]))"""
-    private val answerLineRegex = Regex("""^\s*(?:(?:[\[【]\s*(?:$answerLabelPattern)\s*[\]】]\s*)|(?:(?:$answerLabelPattern)$answerSeparatorPattern))(.+?)\s*$""")
-    private val analysisLineRegex = Regex("""^\s*(?:(?:[\[【]\s*(?:解析|答案解析|说明|解题思路)\s*[\]】]\s*)|(?:(?:解析|答案解析|说明|解题思路)\s*[:：]\s*))(.*)$""")
+    private const val analysisLabelPattern = "答案解析|解题思路|解析思路|解题分析|参考解析|详解|分析|理由|解答|解析|说明"
+    private const val objectiveAnswerValuePattern = "[A-Ga-g]{1,7}|对|错|正确|错误|是|否|√|×|True|False"
+    private const val answerSeparatorPattern = """(?:\s*(?:[:：,，、.．;；]|为)\s*|\s+|(?=\s*[\(（]))"""
+    private val answerLineRegex = Regex("""^\s*(?:(?:[\[【]\s*(?:$answerLabelPattern)\s*[\]】]\s*)|(?:(?:本题)?(?:$answerLabelPattern)$answerSeparatorPattern))(.+?)\s*$""")
+    private val analysisLineRegex = Regex("""^\s*(?:(?:[\[【]\s*(?:$analysisLabelPattern)\s*[\]】]\s*)|(?:(?:$analysisLabelPattern)\s*[:：]\s*))(.*)$""")
     private val bracketAnswerRegex = Regex("""[\[【\(（]\s*(?:$answerLabelPattern)$answerSeparatorPattern([^\]】\)）]+)\s*[\]】\)）]""")
     private val embeddedChoiceAnswerRegex = Regex("""[\(（]\s*([A-Ga-g]{1,7}|对|错|正确|错误|是|否|√|×|True|False)\s*[\)）]""", RegexOption.IGNORE_CASE)
     private val shortKeywords = Regex("""(简答|问答|面试|结构化面试|公考面试|公务员面试|名词解释|论述|说明原因|谈谈|请谈|分析|阐述|为什么|如何|哪些|什么是|怎么看|怎么办|怎么处理|请回答|组织一次|群众反映|领导安排|突发|应急|人际|协调|沟通)""")
@@ -16,11 +18,11 @@ object StandardQuestionParser {
     private val judgeKeywords = Regex("""(判断|正确|错误|对错|是非|是否|√|×)""")
     private val shirohaImageMarkerRegex = Regex("""\[\[SHIROHA_IMAGE:img_\d{4}]]""")
     private val solutionChoiceRegex = Regex(
-        """^\s*(?:答|答案|解析|分析|思路(?:一|二|三|四|五|六|七|八|九|十)?)$answerSeparatorPattern(?:本题)?(?:应?选|选择)?\s*([A-Ga-g])\b[.。,:：，、;；]?\s*(.*)$""",
+        """^\s*(?:(?:本题)?(?:答案|正确答案|参考答案|标准答案|正确选项)\s*(?:为|是)|(?:本题)?(?:应选|故选))\s*($objectiveAnswerValuePattern)\b[.。,:：，、;；]?\s*(.*)$""",
         RegexOption.IGNORE_CASE
     )
     private val subjectiveAnswerLineRegex = Regex(
-        """^\s*(?:(?:[\[【]\s*(?:$answerLabelPattern)\s*[\]】]\s*)|(?:(?:$answerLabelPattern)$answerSeparatorPattern))(.*)$"""
+        """^\s*(?:(?:[\[【]\s*(?:$answerLabelPattern)\s*[\]】]\s*)|(?:(?:本题)?(?:$answerLabelPattern)$answerSeparatorPattern))(.*)$"""
     )
 
     private data class OptionMarker(val key: String, val markerStart: Int, val contentStart: Int)
@@ -183,7 +185,8 @@ object StandardQuestionParser {
         solutionChoiceRegex.find(clean)?.let { match ->
             answer = answer ?: match.groupValues[1].trim()
             val tail = match.groupValues.getOrElse(2) { "" }.trim()
-            analysis = tail.ifBlank { null }
+            analysis = cleanAnalysisTail(tail)
+            clean = ""
         }
 
         bracketAnswerRegex.find(clean)?.let { match ->
@@ -192,7 +195,7 @@ object StandardQuestionParser {
         }
 
         val answerWithAnalysis = Regex(
-            """^\s*(?:(?:[\[【]\s*(?:$answerLabelPattern)\s*[\]】]\s*)|(?:(?:$answerLabelPattern)$answerSeparatorPattern))(.+?)(?:\s*(?:解析|说明|解题思路)\s*[:：]\s*(.*))?\s*$"""
+            """^\s*(?:(?:[\[【]\s*(?:$answerLabelPattern)\s*[\]】]\s*)|(?:(?:本题)?(?:$answerLabelPattern)$answerSeparatorPattern))(.+?)(?:\s*(?:$analysisLabelPattern)\s*[:：]\s*(.*))?\s*$"""
         ).find(clean)
         if (answerWithAnalysis != null) {
             answer = answer ?: answerWithAnalysis.groupValues[1].trim()
@@ -200,6 +203,15 @@ object StandardQuestionParser {
         }
 
         return LineAnswerExtraction(cleanLine = clean, answerText = answer, analysisText = analysis)
+    }
+
+    private fun cleanAnalysisTail(raw: String): String? {
+        val tail = raw.trim().trimStart('。', '.', '，', ',', '；', ';', ':', '：').trim()
+        if (tail.isBlank()) return null
+        analysisLineRegex.find(tail)?.let { match ->
+            return match.groupValues.getOrElse(1) { "" }.trim().ifBlank { null }
+        }
+        return tail
     }
 
     private fun appendOptionsOrStem(
@@ -260,6 +272,20 @@ object StandardQuestionParser {
                 markerStart = match.range.first,
                 contentStart = match.range.last + 1
             )
+        }
+
+        val bracketOptionMatches = Regex("""[\(（\[【〔〖《]\s*([A-Ga-g])\s*[\)）\]】〕〗》]""").findAll(line).toList()
+        val bracketOptionsAreLikelyInlineOptions = bracketOptionMatches.size >= 2 &&
+            bracketOptionMatches.map { it.groupValues[1].uppercase() }.distinct().size >= 2
+        bracketOptionMatches.forEach { match ->
+            val isLeadingMarker = line.take(match.range.first).isBlank()
+            if (isLeadingMarker || bracketOptionsAreLikelyInlineOptions) {
+                markers += OptionMarker(
+                    key = match.groupValues[1].uppercase(),
+                    markerStart = match.range.first,
+                    contentStart = match.range.last + 1
+                )
+            }
         }
 
         Regex("""[;；]\s*([A-Ga-g])(?=\S)""").findAll(line).forEach { match ->
