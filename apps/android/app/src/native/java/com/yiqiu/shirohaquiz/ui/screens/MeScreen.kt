@@ -516,6 +516,13 @@ fun PersonalPreferenceScreen(
             )
             Spacer(Modifier.height(12.dp))
             PreferenceSwitchRow(
+                title = "记住上次考试设置",
+                desc = "进入考试页时恢复上次题量、时长和组题方式。",
+                checked = QuizRepository.rememberExamSettingsEnabled,
+                onCheckedChange = { enabled -> QuizRepository.setRememberExamSettingsEnabled(context, enabled) }
+            )
+            Spacer(Modifier.height(12.dp))
+            PreferenceSwitchRow(
                 title = "启用滑动切题",
                 desc = "在练习页和考试页左滑下一题、右滑上一题。",
                 checked = QuizRepository.swipeNavigationEnabled,

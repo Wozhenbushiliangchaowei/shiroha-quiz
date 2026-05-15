@@ -108,6 +108,13 @@ object QuizRepository {
     private const val KEY_PRACTICE_PREFERRED_CUSTOM_COUNT = "practice_preferred_custom_count"
     private const val KEY_PRACTICE_PREFERRED_ORDER_MODE = "practice_preferred_order_mode"
     private const val KEY_PRACTICE_PREFERRED_TYPE_NAMES = "practice_preferred_type_names"
+    private const val KEY_REMEMBER_EXAM_SETTINGS = "remember_exam_settings"
+    private const val KEY_EXAM_PREFERRED_COUNT_MODE = "exam_preferred_count_mode"
+    private const val KEY_EXAM_PREFERRED_CUSTOM_COUNT = "exam_preferred_custom_count"
+    private const val KEY_EXAM_PREFERRED_DURATION_MINUTES = "exam_preferred_duration_minutes"
+    private const val KEY_EXAM_PREFERRED_GROUP_MODE = "exam_preferred_group_mode"
+    private const val KEY_EXAM_PREFERRED_TYPE_COUNTS = "exam_preferred_type_counts"
+    private const val KEY_EXAM_PREFERRED_TYPE_SCORES = "exam_preferred_type_scores"
     private const val KEY_STARTUP_SPLASH_ENABLED = "startup_splash_enabled"
     private const val KEY_DARK_THEME_ENABLED = "dark_theme_enabled"
     private const val KEY_AI_PROVIDER = "ai_provider"
@@ -151,6 +158,18 @@ object QuizRepository {
     var preferredPracticeOrderMode by mutableStateOf("random")
         private set
     private var preferredPracticeTypeNames by mutableStateOf("")
+    var rememberExamSettingsEnabled by mutableStateOf(true)
+        private set
+    var preferredExamQuestionCountMode by mutableStateOf("100")
+        private set
+    var preferredExamCustomQuestionCount by mutableStateOf(20)
+        private set
+    var preferredExamDurationMinutes by mutableStateOf(30)
+        private set
+    var preferredExamGroupMode by mutableStateOf("random")
+        private set
+    private var preferredExamTypeCountsText by mutableStateOf("")
+    private var preferredExamTypeScoresText by mutableStateOf("")
     var startupSplashEnabled by mutableStateOf(true)
         private set
     var darkThemeEnabled by mutableStateOf(false)
@@ -240,6 +259,17 @@ object QuizRepository {
             prefs.getString(KEY_PRACTICE_PREFERRED_ORDER_MODE, "random") ?: "random"
         )
         preferredPracticeTypeNames = prefs.getString(KEY_PRACTICE_PREFERRED_TYPE_NAMES, "") ?: ""
+        rememberExamSettingsEnabled = prefs.getBoolean(KEY_REMEMBER_EXAM_SETTINGS, true)
+        preferredExamQuestionCountMode = normalizeExamCountMode(
+            prefs.getString(KEY_EXAM_PREFERRED_COUNT_MODE, "100") ?: "100"
+        )
+        preferredExamCustomQuestionCount = prefs.getInt(KEY_EXAM_PREFERRED_CUSTOM_COUNT, 20).coerceAtLeast(1)
+        preferredExamDurationMinutes = prefs.getInt(KEY_EXAM_PREFERRED_DURATION_MINUTES, 30).coerceIn(1, 999)
+        preferredExamGroupMode = normalizeExamGroupMode(
+            prefs.getString(KEY_EXAM_PREFERRED_GROUP_MODE, "random") ?: "random"
+        )
+        preferredExamTypeCountsText = prefs.getString(KEY_EXAM_PREFERRED_TYPE_COUNTS, "") ?: ""
+        preferredExamTypeScoresText = prefs.getString(KEY_EXAM_PREFERRED_TYPE_SCORES, "") ?: ""
         startupSplashEnabled = prefs.getBoolean(KEY_STARTUP_SPLASH_ENABLED, true)
         darkThemeEnabled = prefs.getBoolean(KEY_DARK_THEME_ENABLED, false)
         aiProvider = prefs.getString(KEY_AI_PROVIDER, "DeepSeek") ?: "DeepSeek"
@@ -536,6 +566,12 @@ object QuizRepository {
         persist()
     }
 
+    fun setRememberExamSettingsEnabled(context: Context, enabled: Boolean) {
+        appContext = context.applicationContext
+        rememberExamSettingsEnabled = enabled
+        persist()
+    }
+
     fun setSwipeNavigationEnabled(context: Context, enabled: Boolean) {
         appContext = context.applicationContext
         swipeNavigationEnabled = enabled
@@ -574,6 +610,43 @@ object QuizRepository {
                 .sorted()
                 .joinToString(",")
         }
+        persist()
+    }
+
+    fun preferredExamTypeCountTexts(typeAvailableCounts: Map<QuestionType, Int>): Map<QuestionType, String> {
+        val savedCounts = decodeQuestionTypeTextMap(preferredExamTypeCountsText)
+        return QuestionType.values().associateWith { type ->
+            val max = typeAvailableCounts[type] ?: 0
+            val count = savedCounts[type]?.toIntOrNull()?.coerceIn(0, max) ?: 0
+            count.toString()
+        }
+    }
+
+    fun preferredExamTypeScoreTexts(): Map<QuestionType, String> {
+        val savedScores = decodeQuestionTypeTextMap(preferredExamTypeScoresText)
+        return QuestionType.values().associateWith { type ->
+            val saved = savedScores[type]?.takeIf { it.toDoubleOrNull() != null }
+            saved ?: (defaultExamTypeScores()[type] ?: 1.0).toPreferenceNumberText()
+        }
+    }
+
+    fun rememberExamSettings(
+        context: Context,
+        questionCountMode: String? = null,
+        customQuestionCount: Int? = null,
+        durationMinutes: Int? = null,
+        groupMode: String? = null,
+        typeCountTexts: Map<QuestionType, String>? = null,
+        typeScoreTexts: Map<QuestionType, String>? = null
+    ) {
+        if (!rememberExamSettingsEnabled) return
+        appContext = context.applicationContext
+        questionCountMode?.let { preferredExamQuestionCountMode = normalizeExamCountMode(it) }
+        customQuestionCount?.let { preferredExamCustomQuestionCount = it.coerceAtLeast(1) }
+        durationMinutes?.let { preferredExamDurationMinutes = it.coerceIn(1, 999) }
+        groupMode?.let { preferredExamGroupMode = normalizeExamGroupMode(it) }
+        typeCountTexts?.let { preferredExamTypeCountsText = encodeQuestionTypeTextMap(it) }
+        typeScoreTexts?.let { preferredExamTypeScoresText = encodeQuestionTypeTextMap(it) }
         persist()
     }
 
@@ -1405,6 +1478,42 @@ object QuizRepository {
         }
     }
 
+    private fun normalizeExamCountMode(mode: String): String {
+        return when (mode) {
+            "50", "100", "all" -> mode
+            else -> "custom"
+        }
+    }
+
+    private fun normalizeExamGroupMode(mode: String): String {
+        return when (mode) {
+            "custom" -> "custom"
+            else -> "random"
+        }
+    }
+
+    private fun encodeQuestionTypeTextMap(values: Map<QuestionType, String>): String {
+        return values.entries
+            .sortedBy { it.key.name }
+            .joinToString(";") { (type, value) -> "${type.name}=${value.trim()}" }
+    }
+
+    private fun decodeQuestionTypeTextMap(raw: String): Map<QuestionType, String> {
+        if (raw.isBlank()) return emptyMap()
+        return raw.split(';')
+            .mapNotNull { pair ->
+                val index = pair.indexOf('=')
+                if (index <= 0) return@mapNotNull null
+                val type = runCatching { QuestionType.valueOf(pair.substring(0, index)) }.getOrNull() ?: return@mapNotNull null
+                type to pair.substring(index + 1)
+            }
+            .toMap()
+    }
+
+    private fun Double.toPreferenceNumberText(): String {
+        return if (this % 1.0 == 0.0) this.toInt().toString() else this.toString().trimEnd('0').trimEnd('.')
+    }
+
     private fun persist() {
         val context = appContext ?: return
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -1421,6 +1530,13 @@ object QuizRepository {
             .putInt(KEY_PRACTICE_PREFERRED_CUSTOM_COUNT, preferredPracticeCustomQuestionCount)
             .putString(KEY_PRACTICE_PREFERRED_ORDER_MODE, preferredPracticeOrderMode)
             .putString(KEY_PRACTICE_PREFERRED_TYPE_NAMES, preferredPracticeTypeNames)
+            .putBoolean(KEY_REMEMBER_EXAM_SETTINGS, rememberExamSettingsEnabled)
+            .putString(KEY_EXAM_PREFERRED_COUNT_MODE, preferredExamQuestionCountMode)
+            .putInt(KEY_EXAM_PREFERRED_CUSTOM_COUNT, preferredExamCustomQuestionCount)
+            .putInt(KEY_EXAM_PREFERRED_DURATION_MINUTES, preferredExamDurationMinutes)
+            .putString(KEY_EXAM_PREFERRED_GROUP_MODE, preferredExamGroupMode)
+            .putString(KEY_EXAM_PREFERRED_TYPE_COUNTS, preferredExamTypeCountsText)
+            .putString(KEY_EXAM_PREFERRED_TYPE_SCORES, preferredExamTypeScoresText)
             .putBoolean(KEY_STARTUP_SPLASH_ENABLED, startupSplashEnabled)
             .putBoolean(KEY_DARK_THEME_ENABLED, darkThemeEnabled)
             .putString(KEY_AI_PROVIDER, aiProvider)

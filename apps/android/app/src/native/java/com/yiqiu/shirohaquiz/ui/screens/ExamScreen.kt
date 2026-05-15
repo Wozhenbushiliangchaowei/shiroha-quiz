@@ -38,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -71,6 +72,7 @@ fun ExamScreen(
     onBackHome: () -> Unit,
     onGoPractice: () -> Unit
 ) {
+    val context = LocalContext.current
     val activeBank = QuizRepository.activeBank()
     val typeAvailableCounts = remember(activeBank?.id, activeBank?.questions?.size) {
         QuizRepository.questionTypeCounts(activeBank?.questions.orEmpty())
@@ -80,16 +82,67 @@ fun ExamScreen(
         examTypeOrder.filter { (typeAvailableCounts[it] ?: 0) > 0 }.toSet()
     }
     val availableExamCount = typeAvailableCounts.values.sum()
-    var selectedQuestionCount by remember(activeBank?.id) {
-        mutableIntStateOf(availableExamCount.coerceAtMost(100).coerceAtLeast(1))
+    val initialExamCountChoice = remember(
+        activeBank?.id,
+        availableExamCount,
+        QuizRepository.rememberExamSettingsEnabled,
+        QuizRepository.preferredExamQuestionCountMode,
+        QuizRepository.preferredExamCustomQuestionCount
+    ) {
+        if (QuizRepository.rememberExamSettingsEnabled) {
+            resolveExamQuestionCount(
+                mode = QuizRepository.preferredExamQuestionCountMode,
+                customCount = QuizRepository.preferredExamCustomQuestionCount,
+                availableCount = availableExamCount
+            )
+        } else {
+            resolveExamQuestionCount(
+                mode = if (availableExamCount >= 100) "100" else "custom",
+                customCount = availableExamCount.coerceAtMost(100).coerceAtLeast(1),
+                availableCount = availableExamCount
+            )
+        }
     }
-    var selectedQuestionCountMode by remember(activeBank?.id) {
-        mutableStateOf(if (availableExamCount >= 100) "100" else "custom")
+    var selectedQuestionCount by remember(activeBank?.id, initialExamCountChoice.count) {
+        mutableIntStateOf(initialExamCountChoice.count)
     }
-    var selectedDurationMinutes by remember { mutableIntStateOf(30) }
-    var groupMode by remember(activeBank?.id) { mutableStateOf(ExamGroupMode.RANDOM) }
-    var typeCountTexts by remember(activeBank?.id) { mutableStateOf(defaultTypeCountTextMap()) }
-    var typeScoreTexts by remember(activeBank?.id) { mutableStateOf(defaultTypeScoreTextMap()) }
+    var selectedQuestionCountMode by remember(activeBank?.id, initialExamCountChoice.mode) {
+        mutableStateOf(initialExamCountChoice.mode)
+    }
+    var selectedDurationMinutes by remember(
+        activeBank?.id,
+        QuizRepository.rememberExamSettingsEnabled,
+        QuizRepository.preferredExamDurationMinutes
+    ) {
+        mutableIntStateOf(if (QuizRepository.rememberExamSettingsEnabled) QuizRepository.preferredExamDurationMinutes else 30)
+    }
+    var groupMode by remember(activeBank?.id, QuizRepository.rememberExamSettingsEnabled, QuizRepository.preferredExamGroupMode) {
+        mutableStateOf(
+            if (QuizRepository.rememberExamSettingsEnabled && QuizRepository.preferredExamGroupMode == "custom") {
+                ExamGroupMode.CUSTOM
+            } else {
+                ExamGroupMode.RANDOM
+            }
+        )
+    }
+    var typeCountTexts by remember(activeBank?.id, QuizRepository.rememberExamSettingsEnabled, typeAvailableCounts) {
+        mutableStateOf(
+            if (QuizRepository.rememberExamSettingsEnabled) {
+                QuizRepository.preferredExamTypeCountTexts(typeAvailableCounts)
+            } else {
+                defaultTypeCountTextMap()
+            }
+        )
+    }
+    var typeScoreTexts by remember(activeBank?.id, QuizRepository.rememberExamSettingsEnabled) {
+        mutableStateOf(
+            if (QuizRepository.rememberExamSettingsEnabled) {
+                QuizRepository.preferredExamTypeScoreTexts()
+            } else {
+                defaultTypeScoreTextMap()
+            }
+        )
+    }
     var showGroupSettings by remember { mutableStateOf(false) }
 
     val examQuestion = QuizRepository.currentExamQuestion()
@@ -164,11 +217,22 @@ fun ExamScreen(
                 onSelectQuestionCount = { count, mode ->
                     selectedQuestionCount = count
                     selectedQuestionCountMode = mode
+                    QuizRepository.rememberExamSettings(
+                        context = context,
+                        questionCountMode = mode,
+                        customQuestionCount = if (mode == "custom") count else selectedQuestionCount
+                    )
                 },
                 selectedDurationMinutes = selectedDurationMinutes,
-                onSelectDuration = { selectedDurationMinutes = it },
+                onSelectDuration = { minutes ->
+                    selectedDurationMinutes = minutes
+                    QuizRepository.rememberExamSettings(context = context, durationMinutes = minutes)
+                },
                 groupMode = groupMode,
-                onSelectGroupMode = { groupMode = it },
+                onSelectGroupMode = { mode ->
+                    groupMode = mode
+                    QuizRepository.rememberExamSettings(context = context, groupMode = mode.preferenceKey())
+                },
                 typeCountTexts = typeCountTexts,
                 typeScoreTexts = typeScoreTexts,
                 showGroupSettings = showGroupSettings,
@@ -178,12 +242,25 @@ fun ExamScreen(
                     val max = typeAvailableCounts[type] ?: 0
                     val clean = value.filter { it.isDigit() }.take(4)
                     val bounded = clean.toIntOrNull()?.coerceIn(0, max)?.toString() ?: clean
-                    typeCountTexts = typeCountTexts + (type to bounded)
+                    val updated = typeCountTexts + (type to bounded)
+                    typeCountTexts = updated
+                    QuizRepository.rememberExamSettings(context = context, typeCountTexts = updated)
                 },
                 onUpdateTypeScore = { type, value ->
-                    typeScoreTexts = typeScoreTexts + (type to value.filter { it.isDigit() || it == '.' }.take(4))
+                    val updated = typeScoreTexts + (type to value.filter { it.isDigit() || it == '.' }.take(4))
+                    typeScoreTexts = updated
+                    QuizRepository.rememberExamSettings(context = context, typeScoreTexts = updated)
                 },
                 onStartExam = {
+                    QuizRepository.rememberExamSettings(
+                        context = context,
+                        questionCountMode = selectedQuestionCountMode,
+                        customQuestionCount = selectedQuestionCount,
+                        durationMinutes = selectedDurationMinutes,
+                        groupMode = groupMode.preferenceKey(),
+                        typeCountTexts = typeCountTexts,
+                        typeScoreTexts = typeScoreTexts
+                    )
                     if (groupMode == ExamGroupMode.RANDOM) {
                         val finalCount = selectedQuestionCount.coerceIn(1, availableExamCount)
                         val autoScore = 100.0 / finalCount
@@ -539,86 +616,88 @@ private fun ActiveExamPanel() {
     val answeredCount = QuizRepository.examAnsweredCount()
     val unansweredCount = QuizRepository.examQuestions.size - answeredCount
 
-    Column(verticalArrangement = Arrangement.spacedBy(if (examStatusExpanded) ShirohaSpacing.Lg else 6.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(if (examStatusExpanded) 8.dp else 6.dp)) {
     if (examStatusExpanded) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            GlassCard(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(128.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            formatExamSeconds(QuizRepository.examRemainingSeconds),
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Text("剩余时间", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    }
-                    TextButton(onClick = { examStatusExpanded = false }) { Text("收起") }
-                }
-            }
-            GlassCard(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(128.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Text("已答题", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(answeredCount.toString(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                }
-                Spacer(Modifier.height(8.dp))
-                ActionPillButton(
-                    icon = Icons.AutoMirrored.Rounded.ListAlt,
-                    text = "答题卡",
-                    primary = false,
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                GlassCard(
                     modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .width(108.dp)
-                        .height(38.dp),
-                    fillWidthContent = true,
-                    onClick = { showAnswerCard = true }
-                )
+                        .weight(1f)
+                        .height(128.dp)
+                ) {
+                    Text(
+                        formatExamSeconds(QuizRepository.examRemainingSeconds),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text("剩余时间", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                }
+                GlassCard(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(128.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text("已答题", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(answeredCount.toString(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    ActionPillButton(
+                        icon = Icons.AutoMirrored.Rounded.ListAlt,
+                        text = "答题卡",
+                        primary = false,
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .width(108.dp)
+                            .height(38.dp),
+                        fillWidthContent = true,
+                        onClick = { showAnswerCard = true }
+                    )
+                }
             }
+            ActionPillButton(
+                icon = Icons.Rounded.Timer,
+                text = "收起",
+                primary = false,
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .width(82.dp)
+                    .height(32.dp),
+                fillWidthContent = true,
+                onClick = { examStatusExpanded = false }
+            )
         }
     } else {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier.align(Alignment.Center),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                ActionPillButton(
-                    icon = Icons.Rounded.Timer,
-                    text = formatExamSeconds(QuizRepository.examRemainingSeconds),
-                    primary = false,
-                    modifier = Modifier
-                        .width(112.dp)
-                        .height(34.dp),
-                    fillWidthContent = true,
-                    onClick = { examStatusExpanded = true }
-                )
-                ActionPillButton(
-                    icon = Icons.AutoMirrored.Rounded.ListAlt,
-                    text = "答题卡",
-                    primary = false,
-                    modifier = Modifier
-                        .width(92.dp)
-                        .height(34.dp),
-                    fillWidthContent = true,
-                    onClick = { showAnswerCard = true }
-                )
-            }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ActionPillButton(
+                icon = Icons.Rounded.Timer,
+                text = formatExamSeconds(QuizRepository.examRemainingSeconds),
+                primary = false,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(54.dp),
+                fillWidthContent = true,
+                onClick = { examStatusExpanded = true }
+            )
+            ActionPillButton(
+                icon = Icons.AutoMirrored.Rounded.ListAlt,
+                text = "答题卡 $answeredCount/${QuizRepository.examQuestions.size}",
+                primary = false,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(54.dp),
+                fillWidthContent = true,
+                onClick = { showAnswerCard = true }
+            )
         }
     }
 
@@ -942,6 +1021,37 @@ private fun CustomQuestionCountDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
+}
+
+private data class ExamQuestionCountChoice(
+    val count: Int,
+    val mode: String
+)
+
+private fun resolveExamQuestionCount(
+    mode: String,
+    customCount: Int,
+    availableCount: Int
+): ExamQuestionCountChoice {
+    val safeAvailable = availableCount.coerceAtLeast(1)
+    return when (mode) {
+        "50" -> if (safeAvailable >= 50) {
+            ExamQuestionCountChoice(50, "50")
+        } else {
+            ExamQuestionCountChoice(customCount.coerceIn(1, safeAvailable), "custom")
+        }
+        "100" -> if (safeAvailable >= 100) {
+            ExamQuestionCountChoice(100, "100")
+        } else {
+            ExamQuestionCountChoice(customCount.coerceIn(1, safeAvailable), "custom")
+        }
+        "all" -> ExamQuestionCountChoice(safeAvailable, "all")
+        else -> ExamQuestionCountChoice(customCount.coerceIn(1, safeAvailable), "custom")
+    }
+}
+
+private fun ExamGroupMode.preferenceKey(): String {
+    return if (this == ExamGroupMode.CUSTOM) "custom" else "random"
 }
 
 private val examTypeOrder = listOf(

@@ -890,7 +890,7 @@ private fun PracticeProgressCard(
     if (!expanded) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
+            horizontalArrangement = Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically
         ) {
             PracticeAccuracyCapsule(
@@ -918,10 +918,34 @@ private fun PracticeProgressCard(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            TextButton(onClick = onToggle) {
-                Text("收起")
-            }
+            PracticePanelCapsule(
+                text = "收起",
+                onClick = onToggle
+            )
         }
+    }
+}
+
+@Composable
+private fun PracticePanelCapsule(
+    text: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .defaultMinSize(minHeight = 32.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(ShirohaRadius.Pill),
+        color = ShirohaColors.CardWhite86,
+        border = BorderStroke(ShirohaDimens.Hairline, ShirohaColors.LineStrong)
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 13.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1
+        )
     }
 }
 
