@@ -24,11 +24,13 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.AutoStories
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.Article
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.FileOpen
 import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.Save
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
@@ -78,7 +80,8 @@ import java.util.Locale
 fun MeScreen(
     onOpenWrongBook: () -> Unit,
     onOpenRecords: () -> Unit,
-    onOpenPreference: () -> Unit,
+    onOpenAppearancePreference: () -> Unit,
+    onOpenPracticePreference: () -> Unit,
     onOpenAiSettings: () -> Unit,
     onOpenDataManagement: () -> Unit,
     onOpenStandardFormat: () -> Unit,
@@ -144,10 +147,17 @@ fun MeScreen(
             )
             Spacer(Modifier.height(12.dp))
             FeaturePlanStrip(
-                icon = Icons.Rounded.Settings,
-                title = "个人偏好",
-                desc = "外观、开屏和练习行为。",
-                onClick = onOpenPreference
+                icon = Icons.Rounded.DarkMode,
+                title = "外观偏好",
+                desc = "主题、Shiroha 模式、开屏图和应用图标。",
+                onClick = onOpenAppearancePreference
+            )
+            Spacer(Modifier.height(10.dp))
+            FeaturePlanStrip(
+                icon = Icons.Rounded.Tune,
+                title = "刷题偏好",
+                desc = "默认答题方式、每组题数和切题习惯。",
+                onClick = onOpenPracticePreference
             )
             Spacer(Modifier.height(10.dp))
             FeaturePlanStrip(
@@ -165,7 +175,7 @@ fun MeScreen(
             )
             Spacer(Modifier.height(10.dp))
             FeaturePlanStrip(
-                icon = Icons.Rounded.AutoStories,
+                icon = Icons.Rounded.Article,
                 title = "标准导入格式",
                 desc = "查看题库文本、答案和解析的推荐写法。",
                 onClick = onOpenStandardFormat
@@ -450,14 +460,10 @@ private fun DataActionTile(
 }
 
 @Composable
-fun PersonalPreferenceScreen(
+fun AppearancePreferenceScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    var showDefaultBatchSizeDialog by remember { mutableStateOf(false) }
-    var defaultBatchSizeText by remember(QuizRepository.preferredPracticeBatchCustomSize) {
-        mutableStateOf(QuizRepository.preferredPracticeBatchCustomSize.coerceAtLeast(1).toString())
-    }
 
     Column(
         modifier = Modifier
@@ -466,9 +472,9 @@ fun PersonalPreferenceScreen(
         verticalArrangement = Arrangement.spacedBy(ShirohaSpacing.Lg)
     ) {
         ShirohaHeader(
-            kicker = "Preference",
-            title = "个人偏好",
-            subtitle = ""
+            kicker = "Appearance",
+            title = "外观偏好",
+            subtitle = "管理主题、Shiroha 模式、开屏图和应用图标。"
         )
 
         GlassCard {
@@ -484,24 +490,55 @@ fun PersonalPreferenceScreen(
                 darkThemeEnabled = QuizRepository.darkThemeEnabled,
                 onThemeChange = { enabled -> QuizRepository.setDarkThemeEnabled(context, enabled) }
             )
-        }
-
-        GlassCard {
-            Text(
-                text = "启动设置",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
             Spacer(Modifier.height(12.dp))
             PreferenceSwitchRow(
-                title = "保留开屏启动图片",
-                desc = "下次启动时显示学习主题开屏图。",
-                checked = QuizRepository.startupSplashEnabled,
-                onCheckedChange = { enabled -> QuizRepository.setStartupSplashEnabled(context, enabled) }
+                title = "Shiroha 模式",
+                desc = "显示开屏图、页面插画并切换 Shiroha 图标。",
+                checked = QuizRepository.shirohaModeEnabled,
+                onCheckedChange = { enabled -> QuizRepository.setShirohaModeEnabled(context, enabled) }
+            )
+            if (QuizRepository.shirohaModeEnabled) {
+                Spacer(Modifier.height(12.dp))
+                PreferenceSwitchRow(
+                    title = "保留开屏启动图片",
+                    desc = "开启后下次启动显示学习主题开屏图。",
+                    checked = QuizRepository.startupSplashEnabled,
+                    onCheckedChange = { enabled -> QuizRepository.setStartupSplashEnabled(context, enabled) }
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "提示：部分桌面可能会缓存应用图标，切换后可能需要稍等片刻才刷新。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+
+        BackToSettingsButton(onBack = onBack)
+    }
+}
+
+@Composable
+fun PracticePreferenceScreen(
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    var showDefaultBatchSizeDialog by remember { mutableStateOf(false) }
+    var defaultBatchSizeText by remember(QuizRepository.preferredPracticeBatchCustomSize) {
+        mutableStateOf(QuizRepository.preferredPracticeBatchCustomSize.coerceAtLeast(1).toString())
+    }
+
+    Column(
+        modifier = Modifier
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = ShirohaSpacing.Xl, vertical = ShirohaSpacing.Sm),
+        verticalArrangement = Arrangement.spacedBy(ShirohaSpacing.Lg)
+    ) {
+        ShirohaHeader(
+            kicker = "Practice",
+            title = "刷题偏好",
+            subtitle = "管理默认答题方式、每组题数和练习交互。"
+        )
 
         GlassCard {
             Text(

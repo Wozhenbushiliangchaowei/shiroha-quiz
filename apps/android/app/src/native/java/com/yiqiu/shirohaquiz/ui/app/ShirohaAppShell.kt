@@ -59,7 +59,8 @@ import com.yiqiu.shirohaquiz.ui.screens.ExamScreen
 import com.yiqiu.shirohaquiz.ui.screens.HomeScreen
 import com.yiqiu.shirohaquiz.ui.screens.ImportScreen
 import com.yiqiu.shirohaquiz.ui.screens.MeScreen
-import com.yiqiu.shirohaquiz.ui.screens.PersonalPreferenceScreen
+import com.yiqiu.shirohaquiz.ui.screens.AppearancePreferenceScreen
+import com.yiqiu.shirohaquiz.ui.screens.PracticePreferenceScreen
 import com.yiqiu.shirohaquiz.ui.screens.PracticeScreen
 import com.yiqiu.shirohaquiz.ui.screens.RecordDetailScreen
 import com.yiqiu.shirohaquiz.ui.screens.RecordsScreen
@@ -88,7 +89,8 @@ private enum class MainTab(
     WrongBook("错题本", Icons.Rounded.School, showInBottomBar = false),
     Records("记录", Icons.Rounded.Dashboard, showInBottomBar = false),
     RecordDetail("记录详情", Icons.Rounded.Dashboard, showInBottomBar = false),
-    Preference("个人偏好", Icons.Rounded.Settings, showInBottomBar = false),
+    AppearancePreference("外观偏好", Icons.Rounded.Settings, showInBottomBar = false),
+    PracticePreference("刷题偏好", Icons.Rounded.School, showInBottomBar = false),
     AiSettings("AI 设置", Icons.Rounded.Settings, showInBottomBar = false),
     DataManagement("数据管理", Icons.Rounded.Settings, showInBottomBar = false),
     StandardFormat("标准格式", Icons.Rounded.ImportExport, showInBottomBar = false),
@@ -179,12 +181,13 @@ fun ShirohaAppShell() {
                     )
                     MainTab.Import -> ImportScreen(
                         onImportSaved = { currentTab = MainTab.Home },
-                        onOpenPreference = { currentTab = MainTab.Preference }
+                        onOpenPreference = { currentTab = MainTab.AiSettings }
                     )
                     MainTab.Me -> MeScreen(
                         onOpenWrongBook = { currentTab = MainTab.WrongBook },
                         onOpenRecords = { currentTab = MainTab.Records },
-                        onOpenPreference = { currentTab = MainTab.Preference },
+                        onOpenAppearancePreference = { currentTab = MainTab.AppearancePreference },
+                        onOpenPracticePreference = { currentTab = MainTab.PracticePreference },
                         onOpenAiSettings = { currentTab = MainTab.AiSettings },
                         onOpenDataManagement = { currentTab = MainTab.DataManagement },
                         onOpenStandardFormat = { currentTab = MainTab.StandardFormat },
@@ -227,7 +230,10 @@ fun ShirohaAppShell() {
                         recordId = detailRecordId,
                         onBack = { currentTab = MainTab.Records }
                     )
-                    MainTab.Preference -> PersonalPreferenceScreen(
+                    MainTab.AppearancePreference -> AppearancePreferenceScreen(
+                        onBack = { currentTab = MainTab.Me }
+                    )
+                    MainTab.PracticePreference -> PracticePreferenceScreen(
                         onBack = { currentTab = MainTab.Me }
                     )
                     MainTab.AiSettings -> AiSettingsScreen(

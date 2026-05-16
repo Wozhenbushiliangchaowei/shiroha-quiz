@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yiqiu.shirohaquiz.R
+import com.yiqiu.shirohaquiz.state.QuizRepository
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaColors
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaDimens
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaMotion
@@ -428,18 +429,7 @@ fun IllustrationHeroCard(
     imageSize: Dp = ShirohaDimens.HeroImageSize,
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
-    val density = LocalDensity.current
-    val floatDistancePx = with(density) { ShirohaMotion.HeroFloatDistance.toPx() }
-    val heroFloat = rememberInfiniteTransition(label = "hero_illustration_float")
-    val imageOffsetY by heroFloat.animateFloat(
-        initialValue = -floatDistancePx,
-        targetValue = floatDistancePx,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = ShirohaMotion.HeroFloatMillis),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "hero_illustration_float_y"
-    )
+    val showIllustration = QuizRepository.shirohaModeEnabled
 
     GlassCard(modifier = modifier) {
         Row(
@@ -468,19 +458,33 @@ fun IllustrationHeroCard(
                 }
                 content()
             }
-            Box(
-                modifier = Modifier.size(imageSize + ShirohaDimens.HeroImageFrameExtra),
-                contentAlignment = Alignment.Center
-            ) {
-                Image(
-                    painter = painterResource(imageRes),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(imageSize + ShirohaDimens.HeroImageFrameExtra)
-                        .graphicsLayer { translationY = imageOffsetY }
-                        .alpha(ShirohaDimens.HeroImageAlpha),
-                    contentScale = ContentScale.Fit
+            if (showIllustration) {
+                val density = LocalDensity.current
+                val floatDistancePx = with(density) { ShirohaMotion.HeroFloatDistance.toPx() }
+                val heroFloat = rememberInfiniteTransition(label = "hero_illustration_float")
+                val imageOffsetY by heroFloat.animateFloat(
+                    initialValue = -floatDistancePx,
+                    targetValue = floatDistancePx,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(durationMillis = ShirohaMotion.HeroFloatMillis),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "hero_illustration_float_y"
                 )
+                Box(
+                    modifier = Modifier.size(imageSize + ShirohaDimens.HeroImageFrameExtra),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        painter = painterResource(imageRes),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(imageSize + ShirohaDimens.HeroImageFrameExtra)
+                            .graphicsLayer { translationY = imageOffsetY }
+                            .alpha(ShirohaDimens.HeroImageAlpha),
+                        contentScale = ContentScale.Fit
+                    )
+                }
             }
         }
     }
@@ -500,14 +504,16 @@ fun EmptyStateIllustration(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(ShirohaSpacing.Md)
         ) {
-            Image(
-                painter = painterResource(imageRes),
-                contentDescription = null,
-                modifier = Modifier
-                    .size(ShirohaDimens.EmptyStateImageSize)
-                    .alpha(0.9f),
-                contentScale = ContentScale.Fit
-            )
+            if (QuizRepository.shirohaModeEnabled) {
+                Image(
+                    painter = painterResource(imageRes),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(ShirohaDimens.EmptyStateImageSize)
+                        .alpha(0.9f),
+                    contentScale = ContentScale.Fit
+                )
+            }
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleLarge,
@@ -545,15 +551,17 @@ fun LoadingIllustration(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(ShirohaSpacing.Md)
         ) {
-            Image(
-                painter = painterResource(imageRes),
-                contentDescription = null,
-                modifier = Modifier
-                    .size(ShirohaDimens.LoadingImageSize)
-                    .scale(scale.value)
-                    .alpha(0.9f),
-                contentScale = ContentScale.Fit
-            )
+            if (QuizRepository.shirohaModeEnabled) {
+                Image(
+                    painter = painterResource(imageRes),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(ShirohaDimens.LoadingImageSize)
+                        .scale(scale.value)
+                        .alpha(0.9f),
+                    contentScale = ContentScale.Fit
+                )
+            }
             Text(
                 text = text,
                 style = MaterialTheme.typography.bodyMedium,

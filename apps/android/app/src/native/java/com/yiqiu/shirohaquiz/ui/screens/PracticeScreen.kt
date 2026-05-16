@@ -1056,19 +1056,21 @@ private fun CompactPracticeSetupHero() {
                 PracticeSetupStepCard(index = "2", text = "开始练习", selected = false)
                 PracticeSetupStepCard(index = "3", text = "记录结果", selected = false)
             }
-            Box(
-                modifier = Modifier.size(ShirohaDimens.HeroImageFrameSize),
-                contentAlignment = Alignment.Center
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.illus_practice_hint_webp),
-                    contentDescription = "练习提示",
-                    modifier = Modifier
-                        .size(ShirohaDimens.HeroImageFrameSize)
-                        .graphicsLayer { translationY = imageOffsetY }
-                        .alpha(ShirohaDimens.HeroImageAlpha),
-                    contentScale = ContentScale.Fit
-                )
+            if (QuizRepository.shirohaModeEnabled) {
+                Box(
+                    modifier = Modifier.size(ShirohaDimens.HeroImageFrameSize),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.illus_practice_hint_webp),
+                        contentDescription = "练习提示",
+                        modifier = Modifier
+                            .size(ShirohaDimens.HeroImageFrameSize)
+                            .graphicsLayer { translationY = imageOffsetY }
+                            .alpha(ShirohaDimens.HeroImageAlpha),
+                        contentScale = ContentScale.Fit
+                    )
+                }
             }
         }
     }

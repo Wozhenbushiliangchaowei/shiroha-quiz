@@ -47,6 +47,7 @@ import com.yiqiu.shirohaquiz.ui.app.ShirohaAppShell
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaColors
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaMotion
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaQuizTheme
+import com.yiqiu.shirohaquiz.util.LauncherIconSwitcher
 import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
@@ -54,6 +55,7 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         QuizRepository.init(applicationContext)
+        LauncherIconSwitcher.applyShirohaMode(applicationContext, QuizRepository.shirohaModeEnabled)
         setContent {
             ShirohaQuizTheme(darkTheme = QuizRepository.darkThemeEnabled) {
                 ShirohaStartupGate {
@@ -68,7 +70,7 @@ class MainActivity : ComponentActivity() {
 private fun ShirohaStartupGate(
     content: @Composable () -> Unit
 ) {
-    val shouldShowStartupSplash = remember { QuizRepository.startupSplashEnabled }
+    val shouldShowStartupSplash = remember { QuizRepository.shirohaModeEnabled && QuizRepository.startupSplashEnabled }
     var showSplash by remember { mutableStateOf(shouldShowStartupSplash) }
     var splashProgress by remember { mutableFloatStateOf(if (shouldShowStartupSplash) 0f else 1f) }
 

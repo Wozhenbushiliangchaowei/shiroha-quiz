@@ -1228,7 +1228,7 @@ fun ImportScreen(
         AlertDialog(
             onDismissRequest = { showAiConfigPrompt = false },
             title = { Text("需要配置 AI 接口") },
-            text = { Text("请先在 个人偏好 → AI 设置 中配置接口。") },
+            text = { Text("请先在 我的 → AI 设置 中配置接口。") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -2923,19 +2923,21 @@ private fun ImportStepHeroCard() {
                 ImportStepPill(index = "2", text = "核对结果", selected = false)
                 ImportStepPill(index = "3", text = "创建题库", selected = false)
             }
-            Box(
-                modifier = Modifier.size(ShirohaDimens.HeroImageFrameSize),
-                contentAlignment = Alignment.Center
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.illus_import_hint_webp),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(ShirohaDimens.HeroImageFrameSize)
-                        .graphicsLayer { translationY = imageOffsetY }
-                        .alpha(ShirohaDimens.HeroImageAlpha),
-                    contentScale = ContentScale.Fit
-                )
+            if (QuizRepository.shirohaModeEnabled) {
+                Box(
+                    modifier = Modifier.size(ShirohaDimens.HeroImageFrameSize),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.illus_import_hint_webp),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(ShirohaDimens.HeroImageFrameSize)
+                            .graphicsLayer { translationY = imageOffsetY }
+                            .alpha(ShirohaDimens.HeroImageAlpha),
+                        contentScale = ContentScale.Fit
+                    )
+                }
             }
         }
     }

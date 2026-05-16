@@ -10,6 +10,7 @@ import com.yiqiu.shirohaquiz.importer.model.Option
 import com.yiqiu.shirohaquiz.importer.model.Question
 import com.yiqiu.shirohaquiz.importer.model.QuestionImage
 import com.yiqiu.shirohaquiz.importer.model.QuestionType
+import com.yiqiu.shirohaquiz.util.LauncherIconSwitcher
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -124,6 +125,7 @@ object QuizRepository {
     private const val KEY_EXAM_PREFERRED_TYPE_SCORES = "exam_preferred_type_scores"
     private const val KEY_STARTUP_SPLASH_ENABLED = "startup_splash_enabled"
     private const val KEY_DARK_THEME_ENABLED = "dark_theme_enabled"
+    private const val KEY_SHIROHA_MODE_ENABLED = "shiroha_mode_enabled"
     private const val KEY_AI_PROVIDER = "ai_provider"
     private const val KEY_AI_API_BASE_URL = "ai_api_base_url"
     private const val KEY_AI_API_KEY = "ai_api_key"
@@ -197,6 +199,8 @@ object QuizRepository {
     var startupSplashEnabled by mutableStateOf(true)
         private set
     var darkThemeEnabled by mutableStateOf(false)
+        private set
+    var shirohaModeEnabled by mutableStateOf(false)
         private set
     var aiProvider by mutableStateOf("DeepSeek")
         private set
@@ -304,6 +308,7 @@ object QuizRepository {
         preferredExamTypeScoresText = prefs.getString(KEY_EXAM_PREFERRED_TYPE_SCORES, "") ?: ""
         startupSplashEnabled = prefs.getBoolean(KEY_STARTUP_SPLASH_ENABLED, true)
         darkThemeEnabled = prefs.getBoolean(KEY_DARK_THEME_ENABLED, false)
+        shirohaModeEnabled = prefs.getBoolean(KEY_SHIROHA_MODE_ENABLED, false)
         aiProvider = prefs.getString(KEY_AI_PROVIDER, "DeepSeek") ?: "DeepSeek"
         aiApiBaseUrl = prefs.getString(KEY_AI_API_BASE_URL, "") ?: ""
         aiApiKey = prefs.getString(KEY_AI_API_KEY, "") ?: ""
@@ -742,6 +747,13 @@ object QuizRepository {
         appContext = context.applicationContext
         darkThemeEnabled = enabled
         persist()
+    }
+
+    fun setShirohaModeEnabled(context: Context, enabled: Boolean) {
+        appContext = context.applicationContext
+        shirohaModeEnabled = enabled
+        persist()
+        LauncherIconSwitcher.applyShirohaMode(context, enabled)
     }
 
     fun setAiInterfaceConfig(
@@ -1799,6 +1811,7 @@ object QuizRepository {
             .putString(KEY_EXAM_PREFERRED_TYPE_SCORES, preferredExamTypeScoresText)
             .putBoolean(KEY_STARTUP_SPLASH_ENABLED, startupSplashEnabled)
             .putBoolean(KEY_DARK_THEME_ENABLED, darkThemeEnabled)
+            .putBoolean(KEY_SHIROHA_MODE_ENABLED, shirohaModeEnabled)
             .putString(KEY_AI_PROVIDER, aiProvider)
             .putString(KEY_AI_API_BASE_URL, aiApiBaseUrl)
             .putString(KEY_AI_API_KEY, aiApiKey)
