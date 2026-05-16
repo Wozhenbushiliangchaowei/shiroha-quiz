@@ -1,6 +1,8 @@
 package com.yiqiu.shirohaquiz.state
 
 import android.content.Context
+import android.graphics.BitmapFactory
+import android.util.Base64
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -15,6 +17,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -1337,7 +1340,7 @@ object QuizRepository {
         val bankArray = root.optJSONArray("banks") ?: return "导入失败：备份中没有题库数据。"
         val importedBanks = runCatching { parseBanksJson(bankArray.toString()) }
             .getOrElse { return "导入失败：题库数据无法解析。" }
-            .map { bank -> remapBankAssets(bank, zipAssets, assetDir) }
+            .map { bank -> normalizeImportedBankAssets(bank, zipAssets, assetDir) }
             .map(::sanitizeBank)
         if (importedBanks.isEmpty()) return "导入失败：备份中没有可用题库。"
 
@@ -1364,7 +1367,7 @@ object QuizRepository {
                 entry.copy(
                     bankId = mappedBankId,
                     bankName = mappedBankName,
-                    question = remapQuestionAssets(entry.question, zipAssets, assetDir)
+                    question = normalizeImportedQuestionAssets(entry.question, zipAssets, assetDir)
                 )
             )
         }
@@ -1381,7 +1384,7 @@ object QuizRepository {
                 bankId = mappedBankId ?: record.bankId,
                 bankName = mappedBankName,
                 questionResults = record.questionResults.map { result ->
-                    result.copy(question = remapQuestionAssets(result.question, zipAssets, assetDir))
+                    result.copy(question = normalizeImportedQuestionAssets(result.question, zipAssets, assetDir))
                 }
             )
         }
@@ -1396,6 +1399,15 @@ object QuizRepository {
 
     private fun remapBankAssets(bank: QuizBank, zipAssets: Map<String, ByteArray>, assetDir: File): QuizBank {
         return bank.copy(questions = bank.questions.map { remapQuestionAssets(it, zipAssets, assetDir) })
+    }
+
+    private fun normalizeImportedBankAssets(bank: QuizBank, zipAssets: Map<String, ByteArray>, assetDir: File): QuizBank {
+        return bank.copy(questions = bank.questions.map { normalizeImportedQuestionAssets(it, zipAssets, assetDir) })
+    }
+
+    private fun normalizeImportedQuestionAssets(question: Question, zipAssets: Map<String, ByteArray>, assetDir: File): Question {
+        val converted = convertEmbeddedDataImages(question, assetDir)
+        return remapQuestionAssets(converted, zipAssets, assetDir)
     }
 
     private fun remapQuestionAssets(question: Question, zipAssets: Map<String, ByteArray>, assetDir: File): Question {
@@ -1413,6 +1425,73 @@ object QuizRepository {
                 }
             }
         )
+    }
+
+    private val embeddedDataImageRegex = Regex(
+        """!\[([^\]]*)\]\((data:image/([A-Za-z0-9.+-]+);base64,([A-Za-z0-9+/=\r\n]+))\)""",
+        setOf(RegexOption.IGNORE_CASE)
+    )
+
+    private fun convertEmbeddedDataImages(question: Question, assetDir: File): Question {
+        val rawQuestion = question.question
+        if (!rawQuestion.contains("data:image/", ignoreCase = true)) return question
+
+        var nextOrder = (question.images.maxOfOrNull { it.order } ?: question.images.size) + 1
+        val addedImages = mutableListOf<QuestionImage>()
+        val cleanedQuestion = embeddedDataImageRegex.replace(rawQuestion) { match ->
+            val alt = match.groupValues[1].ifBlank { "题目图片$nextOrder" }
+            val mimeSuffix = match.groupValues[3].lowercase(Locale.ROOT)
+            val base64Text = match.groupValues[4].replace(Regex("""\s+"""), "")
+            val bytes = runCatching { Base64.decode(base64Text, Base64.DEFAULT) }.getOrNull()
+            if (bytes == null || bytes.isEmpty()) {
+                "【$alt】"
+            } else {
+                val ext = imageExtensionForMimeSuffix(mimeSuffix)
+                val safeQuestionId = question.id.ifBlank { "question" }.replace(Regex("[^A-Za-z0-9_.-]"), "_")
+                val imageId = "web_${safeQuestionId}_${nextOrder}_${System.currentTimeMillis()}"
+                    .replace(Regex("[^A-Za-z0-9_.-]"), "_")
+                    .take(96)
+                val outFile = File(assetDir, "$imageId.$ext")
+                val saved = runCatching { outFile.writeBytes(bytes) }.isSuccess
+                if (saved) {
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                    addedImages.add(
+                        QuestionImage(
+                            id = imageId,
+                            localPath = outFile.absolutePath,
+                            sourceName = "$alt.$ext",
+                            order = nextOrder,
+                            width = bounds.outWidth.takeIf { it > 0 },
+                            height = bounds.outHeight.takeIf { it > 0 },
+                            sizeBytes = outFile.length()
+                        )
+                    )
+                    nextOrder++
+                    "\n【$alt】\n"
+                } else {
+                    "【$alt】"
+                }
+            }
+        }.replace(Regex("""\n{3,}"""), "\n\n").trim()
+
+        if (addedImages.isEmpty()) return question
+        return question.copy(
+            question = cleanedQuestion,
+            images = question.images + addedImages
+        )
+    }
+
+    private fun imageExtensionForMimeSuffix(mimeSuffix: String): String {
+        return when (mimeSuffix.lowercase(Locale.ROOT)) {
+            "jpeg", "jpg" -> "jpg"
+            "png" -> "png"
+            "gif" -> "gif"
+            "webp" -> "webp"
+            "bmp" -> "bmp"
+            "svg+xml" -> "svg"
+            else -> "bin"
+        }
     }
 
     private fun looksLikeZip(bytes: ByteArray): Boolean {

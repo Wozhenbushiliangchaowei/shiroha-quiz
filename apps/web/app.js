@@ -9,7 +9,7 @@ const state=loadState();
 let importCache=[];let tableImportResultV49=null;let importWarnings=[];let importReport='';let importDiagnostics=null;let importPreviewFilter='priority';let importSelected=new Set();let bankEditSessionV45=null;let exportBankSelectedV23=new Set();let backupImportModeV23='merge';let practice={items:[],idx:0,answered:0,correct:0,wrong:0,start:0};let exam={items:[],answers:{},start:0,timer:null,deadline:0,submitted:false};
 const $=s=>document.querySelector(s);const $$=s=>[...document.querySelectorAll(s)];
 init();
-function init(){upgradeState();ensureDefaultBank();bindNav();bindEvents();renderBankSelect();renderAll();setupEnhancedDataToolsV23();}
+function init(){upgradeState();ensureDefaultBank();ensureQuestionMediaResponsiveStylesV8217();bindNav();bindEvents();renderBankSelect();renderAll();setupEnhancedDataToolsV23();}
 function defaultBank(){const qb=window.questionBank||{meta:{title:'空题库'},questions:[]};return {id:'default-c1',name:qb.meta?.title||'默认题库',createdAt:now(),questions:(qb.questions||[]).map(normalizeQuestion)}}
 function ensureDefaultBank(){if(!state.banks.length&&!state.settings?.suppressDefaultBank) state.banks.push(defaultBank()); if(!state.activeBankId) state.activeBankId=state.banks[0]?.id||'';}
 function blankState(){return {schemaVersion:CURRENT_SCHEMA_VERSION,banks:[],activeBankId:'',wrongBook:{},records:[],settings:{}}}
@@ -57,6 +57,57 @@ function upgradeState(){
 }
 function saveState(){localStorage.setItem(KEY,serializeState());toast('已保存到浏览器本地。','ok')}
 function now(){return new Date().toISOString()}
+function ensureQuestionMediaResponsiveStylesV8217(){
+  if(document.getElementById('shiroha-question-media-responsive-v8217'))return;
+  const style=document.createElement('style');
+  style.id='shiroha-question-media-responsive-v8217';
+  style.textContent=`
+.question-media{
+  width:100%;
+  max-width:100%;
+  margin:12px 0;
+  padding:0;
+  text-align:center;
+  overflow:hidden;
+}
+.question-image{
+  display:block;
+  width:auto;
+  max-width:100%;
+  max-height:min(68vh,720px);
+  height:auto;
+  object-fit:contain;
+  margin:0 auto;
+  border-radius:14px;
+  background:rgba(255,255,255,.72);
+  box-shadow:0 10px 30px rgba(37,99,235,.10);
+}
+.quiz-card .question-title,
+.quiz-card .question-media{
+  min-width:0;
+}
+.import-preview-question .question-image,
+.table-wrap .question-image{
+  max-height:260px;
+}
+@media (max-width:700px){
+  .question-media{
+    margin:10px 0;
+  }
+  .question-image{
+    max-width:100%;
+    max-height:min(58vh,520px);
+    border-radius:12px;
+  }
+}
+@media (min-width:1024px){
+  .question-image{
+    max-height:min(72vh,760px);
+  }
+}
+`;
+  document.head.appendChild(style);
+}
 function activeBank(){return state.banks.find(b=>b.id===state.activeBankId)||state.banks[0]||{questions:[]}}
 function resetViewScrollV282(){
   try{
