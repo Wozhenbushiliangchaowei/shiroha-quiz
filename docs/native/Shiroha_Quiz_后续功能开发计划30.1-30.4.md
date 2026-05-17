@@ -1,4 +1,4 @@
-# Shiroha Quiz 后续功能分级规划
+# Shiroha Quiz 原生 Android / Compose 版 30.1～30.4 开发计划
 
 > 说明：本文是阶段性规划 / 历史设计记录，部分版本号和待办项可能已经被后续实现覆盖。  
 > 当前项目状态请优先参考根目录 `README.md`、`CHANGELOG.md` 和 `docs/native/原生开发进度.md`。
