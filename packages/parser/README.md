@@ -11,8 +11,9 @@
 | 分卷分区 | "一、单选题" 等标题继承题型 |
 | 双文件 | 题目 + 答案分离导入 |
 | 整卷兜底 | 格式混乱时尽力解析 |
-| docx | 提取 word/document.xml |
-| JSON | 结构化导入 |
+| Excel 表格 | xlsx/xls/xlsm，自动提取表列 |
+| docx | 提取 word/document.xml，含内嵌图片 |
+| JSON | 结构化导入，支持 ZIP 含素材 |
 
 ## 答案行格式
 
@@ -23,7 +24,19 @@
 正确答案：B
 参考答案：ABCD
 标准答案：正确
+答案：A/B/C
+本题答案：D
 ```
+
+## 文本编辑器
+
+原生端支持：
+- 全文查找/替换，支持正则表达式
+- "选项：A. xxx B. xxx" 前缀自动剥离
+
+## 填空题识别
+
+关键词覆盖：填空、填入、空白、空格、横线、括号内、____ 等。
 
 ## 解析流程
 
@@ -33,10 +46,17 @@
   → SectionTitleParser（分区识别）
   → QuestionBlockSplitter（切块）
   → StandardQuestionParser（解析）
+  → convertEmbeddedDataImages（内嵌图片提取）
   → ImportStrategyScorer（评分）
   → ImportValidator（校验）
   → ImportResult
 ```
+
+## 图片处理
+
+- 原生端：docx 内嵌图片提取 + JSON 中 base64 图片转为本地文件
+- Web 端：ZIP 导入时 assets 图片转为内嵌 data URL
+- 图片选项题不触发"缺少选项"警告
 
 ## 题号识别
 
