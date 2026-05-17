@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/promo1.png" width="800" alt="Shiroha Quiz">
+  <img src="assets/promo4.jpg" width="800" alt="Shiroha Quiz">
 </div>
 
 <br>
