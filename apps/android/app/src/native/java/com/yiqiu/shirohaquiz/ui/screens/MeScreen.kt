@@ -132,7 +132,7 @@ fun MeScreen(
         IllustrationHeroCard(
             title = "我是Shiroha",
             subtitle = "欢迎关注我的一点一点进步",
-            imageRes = R.drawable.illus_home_welcome_webp,
+            imageRes = R.drawable.illus_me_settings,
             modifier = Modifier.height(ShirohaDimens.HeroCardHeight),
             imageSize = ShirohaDimens.HeroImageSize
         )

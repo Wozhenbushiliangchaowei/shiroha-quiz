@@ -76,7 +76,7 @@ fun HomeScreen(
         IllustrationHeroCard(
             title = "欢迎回来",
             subtitle = "继续练习、考试或查看学习记录。",
-            imageRes = R.drawable.illus_home_welcome_v2,
+            imageRes = R.drawable.illus_home_welcome,
             modifier = Modifier.height(ShirohaDimens.HeroCardHeight),
             imageSize = ShirohaDimens.HeroImageSize
         )
