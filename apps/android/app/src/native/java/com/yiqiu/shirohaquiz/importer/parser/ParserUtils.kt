@@ -26,3 +26,21 @@ internal fun chineseNumberToInt(raw: String): Int? {
     }
     return digitMap[raw.first()]
 }
+
+private val binaryJudgeStrongPromptRegex = Regex("""(判断|判定|正误|对错|是非|是否|能否|可否|正确与否|错误与否|对还是错|对不对|错不错|正确吗|错误吗)""")
+private val binaryOptionChoicePromptRegex = Regex("""(下列|以下|哪(?:一)?(?:项|个|些|种|条)|选择|选出|应选|正确的是|错误的是|不正确的是|不属于|属于|包括|不包括|符合|不符合|最佳|最合适|最恰当)""")
+private val binaryJudgeLoosePromptRegex = Regex("""(判断|正确|错误|对错|是非|是否|正误|√|×)""")
+private val judgeOptionTextSet = setOf("正确", "错误", "对", "错", "是", "否", "√", "×", "True", "False", "true", "false")
+
+internal fun isJudgeOptionPair(optionKeys: List<String>, optionTexts: List<String>): Boolean {
+    return optionKeys.map { it.uppercase() } == listOf("A", "B") &&
+        optionTexts.map { it.trim() }.all { it in judgeOptionTextSet }
+}
+
+internal fun shouldInferJudgeFromBinaryOptions(stem: String, answerText: String = ""): Boolean {
+    val cleanStem = stem.trim()
+    if (binaryJudgeStrongPromptRegex.containsMatchIn(cleanStem)) return true
+    if (binaryOptionChoicePromptRegex.containsMatchIn(cleanStem)) return false
+    return binaryJudgeLoosePromptRegex.containsMatchIn(cleanStem + answerText)
+}
+

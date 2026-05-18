@@ -38,7 +38,6 @@ object QuestionBlockSplitter {
     private val embeddedAnswerRegex = Regex("""[\[【]\s*(?:答案|正确答案|参考答案|标准答案|参考要点|参考思路|答题要点|答题思路|作答思路|评分要点|参考作答)\s*(?:[:：]|[\]】])|(?:本题)?(?:答案|正确答案|参考答案|标准答案)\s*为""")
     private val subjectiveQuestionTypeRegex = Regex("""(?:[【\[（(〔〖《]\s*)?(?:简答题|问答题|面试题|结构化面试题|公考面试题|公务员面试题|材料分析题|案例分析题|名词解释|论述题|综合题)(?:\s*[】\]）)〕〗》])?""")
     private val subjectiveContinuationMarkerRegex = Regex("""^\s*(?:参考要点|参考思路|答题要点|答题思路|作答思路|评分要点|参考作答)\s*[:：]""")
-    private val globalAnswerSectionRegex = Regex("""(?:集中答案|集中解析|参考答案|标准答案|正确答案|答案解析|答案区|解析区|答案部分|答案(?:与|及)解析)""")
     private val materialIntroLineRegex = Regex(
         """^\s*(?:[一二三四五六七八九十0-9]+[、.．:：]\s*)?根据(?:以下|下列|上述|给定)?(?:资料|材料|图表|统计资料).*回答\s*\d{1,4}\s*[~～\-—至到]\s*\d{1,4}\s*题"""
     )
@@ -86,20 +85,19 @@ object QuestionBlockSplitter {
                 return@forEach
             }
             SectionTitleParser.parse(line)?.let { section ->
-                if (!section.isAnswerSection) {
+                if (section.isAnswerSection) {
                     flush()
-                    currentCategory = section.title.ifBlank { category }
-                    currentSectionForcedType = section.forcedType ?: forcedType
-                    currentForcedType = currentSectionForcedType
-                    skippingGlobalAnswerSection = false
+                    skippingGlobalAnswerSection = true
                     skippingMaterialIntro = false
                     return@forEach
                 }
-                if (isGlobalAnswerSectionHeading(line)) {
-                    flush()
-                    skippingGlobalAnswerSection = true
-                    return@forEach
-                }
+                flush()
+                currentCategory = section.title.ifBlank { category }
+                currentSectionForcedType = section.forcedType ?: forcedType
+                currentForcedType = currentSectionForcedType
+                skippingGlobalAnswerSection = false
+                skippingMaterialIntro = false
+                return@forEach
             }
 
             if (skippingGlobalAnswerSection) return@forEach
@@ -228,10 +226,6 @@ object QuestionBlockSplitter {
     private fun isMaterialIntroLine(line: String): Boolean {
         return Regex("""^\s*材料[一二三四五六七八九十0-9]+\s*[:：]""").containsMatchIn(line) ||
             materialIntroLineRegex.containsMatchIn(line)
-    }
-
-    private fun isGlobalAnswerSectionHeading(line: String): Boolean {
-        return globalAnswerSectionRegex.containsMatchIn(line) && !Regex("""^\s*(?:[\[【]\s*)?(?:答案|正确答案|参考答案|标准答案|参考要点|参考思路|答题要点|答题思路|作答思路|评分要点|参考作答|答)(?:\s*[\]】])?\s*[:：]?\s*\S+""").containsMatchIn(line)
     }
 
     private fun shouldKeepAsSubjectiveAnswerContinuation(currentLines: List<String>, line: String): Boolean {

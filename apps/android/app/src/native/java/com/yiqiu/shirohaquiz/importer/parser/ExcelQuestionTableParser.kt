@@ -11,8 +11,8 @@ import java.util.Locale
  * structure; rich-text symbols/subscripts are handled by TextImportDecoder.
  */
 object ExcelQuestionTableParser {
-    private const val MAX_HEADER_SCAN_ROWS = 12
-    private const val MAX_OPTION_COLUMNS = 7
+    private const val MaxHeaderScanRows = 12
+    private const val MaxOptionColumns = 7
 
     private data class HeaderMapping(
         val headerIndex: Int,
@@ -106,7 +106,7 @@ object ExcelQuestionTableParser {
     }
 
     private fun findHeaderMapping(rows: List<List<String>>): HeaderMapping? {
-        val scanCount = rows.size.coerceAtMost(MAX_HEADER_SCAN_ROWS)
+        val scanCount = rows.size.coerceAtMost(MaxHeaderScanRows)
         for (index in 0 until scanCount) {
             buildHeaderMapping(rows[index], index)?.let { return it }
         }
@@ -278,9 +278,12 @@ object ExcelQuestionTableParser {
         explicitType?.let { return it }
         val normalizedAnswer = answerText.trim()
         val optionKeys = options.map { it.key.uppercase(Locale.ROOT) }
-        val looksLikeJudgePair = optionKeys == listOf("A", "B") &&
-            options.map { it.text.trim() }.all { it in judgeOptionTexts }
-        if (looksLikeJudgePair || AnswerTokenParser.isJudgeAnswerText(normalizedAnswer)) return QuestionType.JUDGE
+        val looksLikeJudgePair = isJudgeOptionPair(
+            optionKeys = optionKeys,
+            optionTexts = options.map { it.text }
+        )
+        if (looksLikeJudgePair && shouldInferJudgeFromBinaryOptions(stem, normalizedAnswer)) return QuestionType.JUDGE
+        if (options.isEmpty() && AnswerTokenParser.isJudgeAnswerText(normalizedAnswer)) return QuestionType.JUDGE
         if (options.isNotEmpty()) {
             val answers = AnswerTokenParser.parseObjectiveAnswers(normalizedAnswer)
             return if (answers.size > 1) QuestionType.MULTIPLE else QuestionType.SINGLE
@@ -363,6 +366,5 @@ object ExcelQuestionTableParser {
     private val analysisHeaders = setOf("解析", "答案解析", "试题解析", "说明", "解释", "analysis", "explanation", "reason")
     private val categoryHeaders = setOf("分类", "章节", "知识点", "标签", "科目", "目录", "category", "tag", "chapter", "subject")
     private val scoreHeaders = setOf("分值", "分数", "得分", "score", "point", "points")
-    private val judgeOptionTexts = setOf("正确", "错误", "对", "错", "是", "否", "√", "×", "True", "False", "true", "false")
     private val blankHints = listOf("填空", "填入", "补全", "空白处", "____", "()", "（）")
 }

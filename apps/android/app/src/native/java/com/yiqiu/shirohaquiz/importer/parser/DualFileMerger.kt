@@ -44,7 +44,7 @@ object DualFileMerger {
                 question
             } else {
                 used += matched
-                applyAnswer(question, matched)
+                applyAnswer(question, matched, warnings)
             }
         }
 
@@ -73,7 +73,7 @@ object DualFileMerger {
                 question
             } else {
                 used += matched
-                applyAnswer(question, matched)
+                applyAnswer(question, matched, warnings)
             }
         }
 
@@ -94,7 +94,7 @@ object DualFileMerger {
                 warnings += ImportWarning(WarningLevel.WARNING, question.number, "按顺序未匹配到答案")
                 question
             } else {
-                applyAnswer(question, matched)
+                applyAnswer(question, matched, warnings)
             }
         }
         if (answers.size > questions.size) {
@@ -103,11 +103,25 @@ object DualFileMerger {
         return MergeResult(mergedQuestions, warnings, "按顺序合并")
     }
 
-    private fun applyAnswer(question: Question, entry: ParsedAnswerEntry): Question {
+    private fun applyAnswer(
+        question: Question,
+        entry: ParsedAnswerEntry,
+        warnings: MutableList<ImportWarning>
+    ): Question {
+        val mergedAnswer = if (question.answer.isNotEmpty()) question.answer else normalizeAnswerForQuestion(question, entry.answer)
+        val mergedType = normalizeTypeAfterMerge(question, mergedAnswer)
+        if (mergedType != question.type) {
+            warnings += ImportWarning(WarningLevel.WARNING, question.number, "题型根据多答案由单选修正为多选")
+        }
         return question.copy(
-            answer = if (question.answer.isNotEmpty()) question.answer else normalizeAnswerForQuestion(question, entry.answer),
+            type = mergedType,
+            answer = mergedAnswer,
             analysis = if (question.analysis.isNotBlank()) question.analysis else entry.analysis
         )
+    }
+
+    private fun normalizeTypeAfterMerge(question: Question, answer: List<String>): QuestionType {
+        return if (question.type == QuestionType.SINGLE && answer.size > 1) QuestionType.MULTIPLE else question.type
     }
 
     private fun normalizeAnswerForQuestion(question: Question, answer: List<String>): List<String> {

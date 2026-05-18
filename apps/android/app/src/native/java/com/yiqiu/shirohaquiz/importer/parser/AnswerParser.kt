@@ -127,6 +127,49 @@ object AnswerParser {
     private val tableNumberTokenRegex = Regex("""(?:第\s*)?([0-9]{1,4}|[一二三四五六七八九十百]{1,4})(?:\s*题)?""")
 
 
+    private data class AnswerParseContext(
+        val lines: List<String>,
+        val index: Int,
+        val currentType: QuestionType?,
+        val sequence: Int
+    ) {
+        val line: String get() = lines[index]
+    }
+
+    private sealed class AnswerRuleResult(open val consumedLines: Int) {
+        data class Entries(
+            val values: List<ParsedAnswerEntry>,
+            override val consumedLines: Int = 1
+        ) : AnswerRuleResult(consumedLines)
+
+        data class ConsumeLine(
+            val nextType: QuestionType?,
+            override val consumedLines: Int = 1
+        ) : AnswerRuleResult(consumedLines)
+    }
+
+    private data class AnswerParseRule(
+        val name: String,
+        val parse: (AnswerParseContext) -> AnswerRuleResult?
+    )
+
+    private val answerParseRules = listOf(
+        AnswerParseRule("table_answer", ::parseTableAnswerRule),
+        AnswerParseRule("labeled_answer", ::parseLabeledAnswerRule),
+        AnswerParseRule("expression_answer", ::parseExpressionAnswerRule),
+        AnswerParseRule("subjective_answer", ::parseSubjectiveAnswerRule),
+        AnswerParseRule("section_heading", ::parseSectionHeadingRule),
+        AnswerParseRule("range_answer", ::parseRangeAnswerRule),
+        AnswerParseRule("multiple_bracket_answer", ::parseMultipleBracketAnswerRule),
+        AnswerParseRule("bracket_answer", ::parseBracketAnswerRule),
+        AnswerParseRule("inline_multi_answer", ::parseInlineMultiAnswerRule),
+        AnswerParseRule("answer_analysis", ::parseAnswerAnalysisRule),
+        AnswerParseRule("inline_single_answer", ::parseInlineSingleAnswerRule),
+        AnswerParseRule("simple_tail_answer", ::parseSimpleTailAnswerRule)
+    )
+
+    internal fun ruleNamesForTest(): List<String> = answerParseRules.map { it.name }
+
     fun parse(text: String): List<ParsedAnswerEntry> {
         val entries = mutableListOf<ParsedAnswerEntry>()
         var currentType: QuestionType? = null
@@ -135,196 +178,214 @@ object AnswerParser {
         val lines = text.lineSequence().map { it.trim() }.filter { it.isNotBlank() }.toList()
         var index = 0
         while (index < lines.size) {
-            val line = lines[index]
+            val context = AnswerParseContext(lines, index, currentType, sequence)
+            val result = answerParseRules.firstNotNullOfOrNull { rule -> rule.parse(context) }
 
-            val tableEntries = parseAnswerTableAt(lines, index, currentType, sequence)
-            if (tableEntries != null) {
-                entries += tableEntries
-                sequence += tableEntries.size
-                index += 2
-                continue
-            }
-
-            val labeledAnswerMatch = labeledAnswerLineRegex.find(line)
-            if (labeledAnswerMatch != null) {
-                val answer = AnswerTokenParser.parseObjectiveAnswers(labeledAnswerMatch.groupValues[2])
-                if (answer.isNotEmpty()) {
-                    entries += ParsedAnswerEntry(
-                        number = labeledAnswerMatch.groupValues[1],
-                        answer = answer,
-                        analysis = labeledAnswerMatch.groupValues[3].trim(),
-                        type = currentType,
-                        sequence = sequence++
-                    )
-                    index += 1
-                    continue
+            when (result) {
+                is AnswerRuleResult.Entries -> {
+                    entries += result.values
+                    sequence += result.values.size
+                    index += result.consumedLines
                 }
-            }
-
-            val expressionMatch = expressionAnswerLineRegex.find(line)
-            if (expressionMatch != null) {
-                val answer = AnswerTokenParser.parseObjectiveAnswers(expressionMatch.groupValues[2])
-                if (answer.isNotEmpty()) {
-                    entries += ParsedAnswerEntry(
-                        number = expressionMatch.groupValues[1],
-                        answer = answer,
-                        analysis = expressionMatch.groupValues[3].trim(),
-                        type = currentType,
-                        sequence = sequence++
-                    )
-                    index += 1
-                    continue
+                is AnswerRuleResult.ConsumeLine -> {
+                    currentType = result.nextType
+                    index += result.consumedLines
                 }
+                null -> index += 1
             }
-
-            val subjectiveMatch = subjectiveAnswerLineRegex.find(line)
-            if (subjectiveMatch != null) {
-                val number = normalizeQuestionIndex(subjectiveMatch.groupValues[1].ifBlank { subjectiveMatch.groupValues[2] })
-                val answerText = subjectiveMatch.groupValues[3].trim()
-                if (number.isNotBlank() && answerText.isNotBlank()) {
-                    val objectiveAnswer = AnswerTokenParser.parseObjectiveAnswers(answerText)
-                    entries += if (objectiveAnswer.isNotEmpty()) {
-                        ParsedAnswerEntry(
-                            number = number,
-                            answer = objectiveAnswer,
-                            type = currentType,
-                            sequence = sequence++
-                        )
-                    } else {
-                        ParsedAnswerEntry(
-                            number = number,
-                            answer = listOf(answerText),
-                            type = currentType ?: QuestionType.SHORT,
-                            sequence = sequence++
-                        )
-                    }
-                    index += 1
-                    continue
-                }
-            }
-
-            val section = SectionTitleParser.parse(line)
-            if (section != null) {
-                if (!section.isAnswerSection) currentType = section.forcedType
-                index += 1
-                continue
-            }
-
-            val rangeMatch = rangeEntryRegex.find(line)
-            if (rangeMatch != null) {
-                val start = rangeMatch.groupValues[1].toInt()
-                val end = rangeMatch.groupValues[2].toInt()
-                val tokens = rangeMatch.groupValues[3]
-                    .split(Regex("""\s+"""))
-                    .mapNotNull { token ->
-                        val parsed = AnswerTokenParser.parseObjectiveAnswers(token)
-                        parsed.takeIf { it.isNotEmpty() }
-                    }
-                if (tokens.isNotEmpty() && end >= start) {
-                    (start..end).forEachIndexed { offset, number ->
-                        if (offset < tokens.size) {
-                            entries += ParsedAnswerEntry(
-                                number = number.toString(),
-                                answer = tokens[offset],
-                                type = currentType,
-                                sequence = sequence++
-                            )
-                        }
-                    }
-                    index += 1
-                    continue
-                }
-            }
-
-            val bracketEntries = multipleBracketEntryRegex.findAll(line).mapNotNull { match ->
-                val answer = AnswerTokenParser.parseObjectiveAnswers(match.groupValues[2])
-                if (answer.isEmpty()) null else ParsedAnswerEntry(
-                    number = match.groupValues[1],
-                    answer = answer,
-                    type = currentType,
-                    sequence = sequence++
-                )
-            }.toList()
-            if (bracketEntries.size >= 2) {
-                entries += bracketEntries
-                index += 1
-                continue
-            }
-
-            val bracketMatch = bracketAnswerLineRegex.find(line)
-            if (bracketMatch != null) {
-                val answer = AnswerTokenParser.parseObjectiveAnswers(bracketMatch.groupValues[2])
-                if (answer.isNotEmpty()) {
-                    entries += ParsedAnswerEntry(
-                        number = bracketMatch.groupValues[1],
-                        answer = answer,
-                        analysis = bracketMatch.groupValues[3].trim(),
-                        type = currentType,
-                        sequence = sequence++
-                    )
-                    index += 1
-                    continue
-                }
-            }
-
-            val lineEntries = inlineEntryRegex.findAll(line).mapNotNull { match ->
-                val number = match.groupValues[1]
-                val answer = AnswerTokenParser.parseObjectiveAnswers(match.groupValues[2])
-                if (answer.isEmpty()) null else ParsedAnswerEntry(
-                    number = number,
-                    answer = answer,
-                    type = currentType,
-                    sequence = sequence++
-                )
-            }.toList()
-
-            if (lineEntries.size >= 2) {
-                entries += lineEntries
-                index += 1
-                continue
-            }
-
-            val answerAnalysisMatch = answerAnalysisLineRegex.find(line)
-            if (answerAnalysisMatch != null) {
-                val answer = AnswerTokenParser.parseObjectiveAnswers(answerAnalysisMatch.groupValues[2])
-                if (answer.isNotEmpty()) {
-                    entries += ParsedAnswerEntry(
-                        number = answerAnalysisMatch.groupValues[1],
-                        answer = answer,
-                        analysis = answerAnalysisMatch.groupValues[3].trim(),
-                        type = currentType,
-                        sequence = sequence++
-                    )
-                    index += 1
-                    continue
-                }
-            }
-
-            if (lineEntries.isNotEmpty()) {
-                entries += lineEntries
-                index += 1
-                continue
-            }
-
-            val simpleAnswerMatch = simpleAnswerTailRegex.find(line)
-            if (simpleAnswerMatch != null) {
-                val answer = AnswerTokenParser.parseObjectiveAnswers(simpleAnswerMatch.groupValues[2])
-                val tail = simpleAnswerMatch.groupValues[3].trim()
-                if (answer.isNotEmpty() && tail.length >= 2) {
-                    entries += ParsedAnswerEntry(
-                        number = simpleAnswerMatch.groupValues[1],
-                        answer = answer,
-                        analysis = tail,
-                        type = currentType,
-                        sequence = sequence++
-                    )
-                }
-            }
-
-            index += 1
         }
 
         return entries
+    }
+
+    private fun parseTableAnswerRule(context: AnswerParseContext): AnswerRuleResult? {
+        val tableEntries = parseAnswerTableAt(
+            context.lines,
+            context.index,
+            context.currentType,
+            context.sequence
+        ) ?: return null
+        return AnswerRuleResult.Entries(tableEntries, consumedLines = 2)
+    }
+
+    private fun parseLabeledAnswerRule(context: AnswerParseContext): AnswerRuleResult? {
+        val match = labeledAnswerLineRegex.find(context.line) ?: return null
+        val answer = AnswerTokenParser.parseObjectiveAnswers(match.groupValues[2])
+        if (answer.isEmpty()) return null
+        return AnswerRuleResult.Entries(
+            listOf(
+                ParsedAnswerEntry(
+                    number = match.groupValues[1],
+                    answer = answer,
+                    analysis = match.groupValues[3].trim(),
+                    type = context.currentType,
+                    sequence = context.sequence
+                )
+            )
+        )
+    }
+
+    private fun parseExpressionAnswerRule(context: AnswerParseContext): AnswerRuleResult? {
+        val match = expressionAnswerLineRegex.find(context.line) ?: return null
+        val answer = AnswerTokenParser.parseObjectiveAnswers(match.groupValues[2])
+        if (answer.isEmpty()) return null
+        return AnswerRuleResult.Entries(
+            listOf(
+                ParsedAnswerEntry(
+                    number = match.groupValues[1],
+                    answer = answer,
+                    analysis = match.groupValues[3].trim(),
+                    type = context.currentType,
+                    sequence = context.sequence
+                )
+            )
+        )
+    }
+
+    private fun parseSubjectiveAnswerRule(context: AnswerParseContext): AnswerRuleResult? {
+        val match = subjectiveAnswerLineRegex.find(context.line) ?: return null
+        val number = normalizeQuestionIndex(match.groupValues[1].ifBlank { match.groupValues[2] })
+        val answerText = match.groupValues[3].trim()
+        if (number.isBlank() || answerText.isBlank()) return null
+
+        val objectiveAnswer = AnswerTokenParser.parseObjectiveAnswers(answerText)
+        val entry = if (objectiveAnswer.isNotEmpty()) {
+            ParsedAnswerEntry(
+                number = number,
+                answer = objectiveAnswer,
+                type = context.currentType,
+                sequence = context.sequence
+            )
+        } else {
+            ParsedAnswerEntry(
+                number = number,
+                answer = listOf(answerText),
+                type = context.currentType ?: QuestionType.SHORT,
+                sequence = context.sequence
+            )
+        }
+        return AnswerRuleResult.Entries(listOf(entry))
+    }
+
+    private fun parseSectionHeadingRule(context: AnswerParseContext): AnswerRuleResult? {
+        val section = SectionTitleParser.parse(context.line) ?: return null
+        val nextType = if (section.isAnswerSection) context.currentType else section.forcedType
+        return AnswerRuleResult.ConsumeLine(nextType = nextType)
+    }
+
+    private fun parseRangeAnswerRule(context: AnswerParseContext): AnswerRuleResult? {
+        val match = rangeEntryRegex.find(context.line) ?: return null
+        val start = match.groupValues[1].toInt()
+        val end = match.groupValues[2].toInt()
+        val tokens = match.groupValues[3]
+            .split(Regex("""\s+"""))
+            .mapNotNull { token ->
+                val parsed = AnswerTokenParser.parseObjectiveAnswers(token)
+                parsed.takeIf { it.isNotEmpty() }
+            }
+        if (tokens.isEmpty() || end < start) return null
+
+        val entries = (start..end).mapIndexedNotNull { offset, number ->
+            if (offset >= tokens.size) return@mapIndexedNotNull null
+            ParsedAnswerEntry(
+                number = number.toString(),
+                answer = tokens[offset],
+                type = context.currentType,
+                sequence = context.sequence + offset
+            )
+        }
+        if (entries.isEmpty()) return null
+        return AnswerRuleResult.Entries(entries)
+    }
+
+    private fun parseMultipleBracketAnswerRule(context: AnswerParseContext): AnswerRuleResult? {
+        val entries = multipleBracketEntryRegex.findAll(context.line).mapIndexedNotNull { offset, match ->
+            val answer = AnswerTokenParser.parseObjectiveAnswers(match.groupValues[2])
+            if (answer.isEmpty()) null else ParsedAnswerEntry(
+                number = match.groupValues[1],
+                answer = answer,
+                type = context.currentType,
+                sequence = context.sequence + offset
+            )
+        }.toList()
+        if (entries.size < 2) return null
+        return AnswerRuleResult.Entries(entries)
+    }
+
+    private fun parseBracketAnswerRule(context: AnswerParseContext): AnswerRuleResult? {
+        val match = bracketAnswerLineRegex.find(context.line) ?: return null
+        val answer = AnswerTokenParser.parseObjectiveAnswers(match.groupValues[2])
+        if (answer.isEmpty()) return null
+        return AnswerRuleResult.Entries(
+            listOf(
+                ParsedAnswerEntry(
+                    number = match.groupValues[1],
+                    answer = answer,
+                    analysis = match.groupValues[3].trim(),
+                    type = context.currentType,
+                    sequence = context.sequence
+                )
+            )
+        )
+    }
+
+    private fun parseInlineMultiAnswerRule(context: AnswerParseContext): AnswerRuleResult? {
+        val entries = parseInlineEntries(context)
+        if (entries.size < 2) return null
+        return AnswerRuleResult.Entries(entries)
+    }
+
+    private fun parseAnswerAnalysisRule(context: AnswerParseContext): AnswerRuleResult? {
+        val match = answerAnalysisLineRegex.find(context.line) ?: return null
+        val answer = AnswerTokenParser.parseObjectiveAnswers(match.groupValues[2])
+        if (answer.isEmpty()) return null
+        return AnswerRuleResult.Entries(
+            listOf(
+                ParsedAnswerEntry(
+                    number = match.groupValues[1],
+                    answer = answer,
+                    analysis = match.groupValues[3].trim(),
+                    type = context.currentType,
+                    sequence = context.sequence
+                )
+            )
+        )
+    }
+
+    private fun parseInlineSingleAnswerRule(context: AnswerParseContext): AnswerRuleResult? {
+        val entries = parseInlineEntries(context)
+        if (entries.isEmpty()) return null
+        return AnswerRuleResult.Entries(entries)
+    }
+
+    private fun parseSimpleTailAnswerRule(context: AnswerParseContext): AnswerRuleResult? {
+        val match = simpleAnswerTailRegex.find(context.line) ?: return null
+        val answer = AnswerTokenParser.parseObjectiveAnswers(match.groupValues[2])
+        val tail = match.groupValues[3].trim()
+        if (answer.isEmpty() || tail.length < 2) return null
+        return AnswerRuleResult.Entries(
+            listOf(
+                ParsedAnswerEntry(
+                    number = match.groupValues[1],
+                    answer = answer,
+                    analysis = tail,
+                    type = context.currentType,
+                    sequence = context.sequence
+                )
+            )
+        )
+    }
+
+    private fun parseInlineEntries(context: AnswerParseContext): List<ParsedAnswerEntry> {
+        return inlineEntryRegex.findAll(context.line).mapIndexedNotNull { offset, match ->
+            val answer = AnswerTokenParser.parseObjectiveAnswers(match.groupValues[2])
+            if (answer.isEmpty()) null else ParsedAnswerEntry(
+                number = match.groupValues[1],
+                answer = answer,
+                type = context.currentType,
+                sequence = context.sequence + offset
+            )
+        }.toList()
     }
 
     private fun parseAnswerTableAt(
