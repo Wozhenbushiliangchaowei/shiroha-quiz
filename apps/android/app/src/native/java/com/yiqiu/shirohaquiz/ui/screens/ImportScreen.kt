@@ -12,7 +12,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -1593,7 +1592,7 @@ private fun EditorSaveButton(onClick: () -> Unit) {
     Surface(
         modifier = Modifier
             .height(38.dp)
-            .clickable(onClick = onClick),
+            .shirohaNoRippleClickable(onClick = onClick),
         shape = shape,
         color = MaterialTheme.colorScheme.primary,
         border = BorderStroke(ShirohaDimens.Hairline, MaterialTheme.colorScheme.primary)
@@ -1650,7 +1649,7 @@ private fun ReviewTypeChip(
     Surface(
         modifier = Modifier
             .defaultMinSize(minHeight = 32.dp)
-            .clickable(onClick = onClick),
+            .shirohaNoRippleClickable(onClick = onClick),
         shape = RoundedCornerShape(ShirohaRadius.Pill),
         color = if (selected) ShirohaColors.BrandPrimarySoft else ShirohaColors.CardMuted,
         border = BorderStroke(
@@ -1682,7 +1681,7 @@ private fun ReviewCompactButton(
     Surface(
         modifier = modifier
             .defaultMinSize(minHeight = 38.dp)
-            .clickable(onClick = onClick),
+            .shirohaNoRippleClickable(onClick = onClick),
         shape = RoundedCornerShape(ShirohaRadius.Pill),
         color = if (primary) MaterialTheme.colorScheme.primary else ShirohaColors.CardWhite86,
         border = BorderStroke(ShirohaDimens.Hairline, if (primary) MaterialTheme.colorScheme.primary else ShirohaColors.LineStrong)
@@ -3214,7 +3213,7 @@ private fun ReviewFilteredJumpList(
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .clickable { onIndexChange(index) }
+                            .shirohaNoRippleClickable { onIndexChange(index) }
                     ) {
                         Text(
                             text = "第 ${index + 1} 题 · ${typeLabel(question.type)} · 答案：${answerDisplayText(question)}",
