@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
-$ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$RegressionDir = Join-Path $ScriptRoot 'test\native-parser-regression'
+$RegressionDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RepoRoot = Resolve-Path (Join-Path $RegressionDir '..\..')
 $ActualDir = Join-Path $RegressionDir 'actual'
 
 function Resolve-GradleCommand {
@@ -9,7 +9,7 @@ function Resolve-GradleCommand {
         return (Resolve-Path $env:SHIROHA_GRADLE).Path
     }
 
-    $ProjectGradlew = Join-Path $ScriptRoot 'apps\android\gradlew.bat'
+    $ProjectGradlew = Join-Path $RepoRoot 'apps\android\gradlew.bat'
     if (Test-Path $ProjectGradlew) {
         return (Resolve-Path $ProjectGradlew).Path
     }
@@ -26,7 +26,7 @@ else {
 }
 
 $Gradle = Resolve-GradleCommand
-$env:GRADLE_USER_HOME = Join-Path $ScriptRoot 'apps\android\.gradle-user-home'
+$env:GRADLE_USER_HOME = Join-Path $RepoRoot 'apps\android\.gradle-user-home'
 
 Write-Host "Using Gradle: $Gradle"
 Write-Host "Cleaning generated actual outputs: $ActualDir"
