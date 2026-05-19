@@ -15,6 +15,7 @@ import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
@@ -103,8 +104,13 @@ fun PracticeScreen(
     val practiceQuestions = QuizRepository.activePracticeQuestions()
     val question = QuizRepository.currentPracticeQuestion()
     val result = QuizRepository.practiceLastResult
-    val availableCounts = remember(bank?.id, bank?.questions?.size) {
-        QuizRepository.questionTypeCounts(bank?.questions.orEmpty())
+    val isReciteMode = QuizRepository.practiceReciteModeEnabled
+    val slashedVersion = QuizRepository.slashedQuestions.joinToString("|") { "${it.bankId}:${it.questionKey}" }
+    val practiceCandidateQuestions = remember(bank?.id, bank?.questions, slashedVersion) {
+        QuizRepository.activePracticePoolQuestions(bank)
+    }
+    val availableCounts = remember(practiceCandidateQuestions) {
+        QuizRepository.questionTypeCounts(practiceCandidateQuestions)
     }
     val availableTypes = practiceTypeOrder.filter { (availableCounts[it] ?: 0) > 0 }
     val defaultPracticeTypes = remember(availableTypes) {
@@ -126,8 +132,8 @@ fun PracticeScreen(
         }
     }
     val initialPracticeTypes = rememberedPracticeTypes.ifEmpty { defaultPracticeTypes }
-    val initialAvailableCount = remember(bank?.id, bank?.questions?.size, initialPracticeTypes) {
-        bank?.questions?.count { it.type in initialPracticeTypes } ?: 0
+    val initialAvailableCount = remember(bank?.id, practiceCandidateQuestions, initialPracticeTypes) {
+        practiceCandidateQuestions.count { it.type in initialPracticeTypes }
     }
     val initialQuestionCountMode = remember(
         bank?.id,
@@ -181,7 +187,7 @@ fun PracticeScreen(
     }
     val startPracticeWithSettings = {
         val safeTypes = selectedTypes.ifEmpty { QuizRepository.objectiveQuestionTypes() }
-        val available = bank?.questions?.count { it.type in safeTypes } ?: 0
+        val available = QuizRepository.activePracticePoolQuestions(bank).count { it.type in safeTypes }
         if (available > 0) {
             val count = selectedQuestionCount.coerceIn(1, available)
             QuizRepository.rememberPracticeSettings(
@@ -199,7 +205,7 @@ fun PracticeScreen(
                 allowedTypes = safeTypes,
                 sourceLabel = "当前题库",
                 randomize = practiceOrderMode == "random",
-                practiceMode = selectedPracticeMode,
+                practiceMode = if (QuizRepository.practiceReciteModeEnabled) QuizRepository.PRACTICE_MODE_INSTANT else selectedPracticeMode,
                 batchGroupSize = selectedBatchGroupSize.coerceIn(1, count)
             )
         }
@@ -370,8 +376,14 @@ fun PracticeScreen(
         val batchGroupTotal = if (isBatchPractice) QuizRepository.practiceCurrentBatchTotal() else practiceQuestions.size
         val batchGroupNumber = if (isBatchPractice) QuizRepository.practiceBatchGroupNumber() else 0
         val batchGroupCount = if (isBatchPractice) QuizRepository.practiceBatchGroupCount() else 0
-        val canGoNext = if (isBatchPractice) QuizRepository.practiceIndex < batchGroupEnd else isBatchBeforeSubmit || !QuizRepository.practiceNextRequiresResult || isSubmitted
-        val displayedSelection = effectiveResult?.userAnswer ?: QuizRepository.selectedAnswer
+        val canGoNext = if (isReciteMode) {
+            if (isBatchPractice) QuizRepository.practiceIndex < batchGroupEnd else QuizRepository.practiceIndex < practiceQuestions.lastIndex
+        } else if (isBatchPractice) {
+            QuizRepository.practiceIndex < batchGroupEnd
+        } else {
+            isBatchBeforeSubmit || !QuizRepository.practiceNextRequiresResult || isSubmitted
+        }
+        val displayedSelection = if (isReciteMode) emptyList() else effectiveResult?.userAnswer ?: QuizRepository.selectedAnswer
         val batchDraftAnsweredCount = QuizRepository.practiceDraftAnsweredCount()
         var showBatchSubmitConfirm by rememberSaveable(practiceQuestions.size, QuizRepository.practiceBatchSubmitted, batchGroupStart) { mutableStateOf(false) }
         var showExitPracticeConfirm by rememberSaveable(practiceQuestions.size) { mutableStateOf(false) }
@@ -405,7 +417,8 @@ fun PracticeScreen(
             canGoNext
         }
         val canStartNextBatchGroup = isBatchSubmitted && QuizRepository.canStartNextPracticeBatchGroup()
-        val isPracticeComplete = practiceQuestions.isNotEmpty() &&
+        val isPracticeComplete = !isReciteMode &&
+            practiceQuestions.isNotEmpty() &&
             if (isBatchPractice) QuizRepository.isAllPracticeBatchGroupsSubmitted() else QuizRepository.practiceAnsweredCount() >= practiceQuestions.size
 
         val questionCardModifier = if (QuizRepository.swipeNavigationEnabled) {
@@ -430,8 +443,10 @@ fun PracticeScreen(
                     wrongCount = batchWrongIndexes.size,
                     wrongOnly = batchReviewWrongOnly,
                     expanded = true,
-                    onOpenAnswerSheet = if (isBatchPractice) { { showBatchAnswerSheet = true } } else null,
-                    onToggleWrongOnly = if (isBatchSubmitted) {
+                    reciteMode = isReciteMode,
+                    reciteIndex = QuizRepository.practiceIndex + 1,
+                    onOpenAnswerSheet = if (isBatchPractice && !isReciteMode) { { showBatchAnswerSheet = true } } else null,
+                    onToggleWrongOnly = if (isBatchSubmitted && !isReciteMode) {
                         {
                             if (batchReviewWrongOnly) {
                                 batchReviewWrongOnly = false
@@ -465,17 +480,29 @@ fun PracticeScreen(
             }
 
             GlassCard(modifier = questionCardModifier) {
-            FlowRow(
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                CompactPracticeChip(
-                    if (isBatchPractice) "第 $batchGroupNumber 组 · ${QuizRepository.practiceIndex - batchGroupStart + 1} / $batchGroupTotal 题" else "第 ${QuizRepository.practiceIndex + 1} / ${practiceQuestions.size} 题",
-                    selected = true
-                )
-                CompactPracticeChip(typeLabel(question.type))
-                if (isBatchSubmitted && batchReviewWrongOnly) CompactPracticeChip("只看错题", selected = true)
+                FlowRow(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    CompactPracticeChip(
+                        if (isBatchPractice) "第 $batchGroupNumber 组 · ${QuizRepository.practiceIndex - batchGroupStart + 1} / $batchGroupTotal 题" else "第 ${QuizRepository.practiceIndex + 1} / ${practiceQuestions.size} 题",
+                        selected = true
+                    )
+                    CompactPracticeChip(typeLabel(question.type))
+                    if (isReciteMode) CompactPracticeChip("背题模式", selected = true)
+                    if (isBatchSubmitted && batchReviewWrongOnly) CompactPracticeChip("只看错题", selected = true)
+                }
+                if (QuizRepository.practiceSlashEnabled && QuizRepository.practiceSourceLabel == "当前题库") {
+                    SlashQuestionRoundButton(
+                        onClick = { QuizRepository.slashCurrentPracticeQuestion(context) }
+                    )
+                }
             }
             Spacer(Modifier.height(12.dp))
             Text(
@@ -502,10 +529,11 @@ fun PracticeScreen(
                             resultStyle = practiceOptionResultStyle(
                                 optionKey = option.key,
                                 correctAnswers = question.answer,
-                                result = effectiveResult
+                                result = effectiveResult,
+                                revealAnswer = isReciteMode
                             ),
                             onClick = {
-                                if (!isSubmitted) {
+                                if (!isSubmitted && !isReciteMode) {
                                     val isFastAutoQuestion = question.type == QuestionType.SINGLE || question.type == QuestionType.JUDGE
                                     val shouldAutoNextInstant = !isBatchPractice &&
                                         QuizRepository.practiceAutoNextEnabled &&
@@ -557,7 +585,7 @@ fun PracticeScreen(
             }
 
             Spacer(Modifier.height(10.dp))
-            if (isBatchBeforeSubmit) {
+            if (!isReciteMode && isBatchBeforeSubmit) {
                 ActionPillButton(
                     Icons.Rounded.CheckCircle,
                     "提交本组",
@@ -574,7 +602,7 @@ fun PracticeScreen(
                         }
                     }
                 )
-            } else {
+            } else if (!isReciteMode) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -691,26 +719,27 @@ fun PracticeScreen(
                 )
             }
 
-            if (effectiveResult != null) {
+            if (isReciteMode || effectiveResult != null) {
+                val answerText = effectiveResult?.answerText ?: question.answer.joinToString(" / ").ifBlank { "未识别答案" }
                 Spacer(Modifier.height(16.dp))
-                AnswerResultCapsule(correct = effectiveResult.correct)
-                Spacer(Modifier.height(8.dp))
-                NoticeCard("正确答案：${effectiveResult.answerText}", warning = false)
-                if (question.analysis.isNotBlank()) {
+                if (!isReciteMode && effectiveResult != null) {
+                    AnswerResultCapsule(correct = effectiveResult.correct)
                     Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = "解析",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = formatAnalysisForDisplay(question.analysis),
-                        style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 23.sp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
+                NoticeCard("正确答案：$answerText", warning = false)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "解析",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = question.analysis.takeIf { it.isNotBlank() }?.let(::formatAnalysisForDisplay) ?: "暂无解析",
+                    style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 23.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
             if (showBatchSubmitConfirm) {
@@ -991,7 +1020,12 @@ private fun PracticeSetupPanel(
         }
         if (selectedAvailable <= 0) {
             Spacer(Modifier.height(10.dp))
-            NoticeCard("当前筛选没有可练习题目，请至少选择一种有题目的题型。", warning = true)
+            val emptyTip = if (totalQuestions > 0) {
+                "当前筛选范围内没有可练习题目。若题目已被斩题，可到题库详情的斩题本恢复后继续练习。"
+            } else {
+                "当前筛选没有可练习题目，请至少选择一种有题目的题型。"
+            }
+            NoticeCard(emptyTip, warning = true)
         }
     }
 
@@ -1110,6 +1144,36 @@ private fun PracticeSetupStepCard(
 }
 
 
+
+@Composable
+private fun SlashQuestionRoundButton(
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    Surface(
+        modifier = Modifier
+            .size(32.dp)
+            .clip(CircleShape)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        shape = CircleShape,
+        color = ShirohaColors.BrandPrimarySoft,
+        border = BorderStroke(ShirohaDimens.Hairline, ShirohaColors.LineSelected)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = "斩",
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1
+            )
+        }
+    }
+}
 
 @Composable
 private fun CompactPracticeChip(
@@ -1284,12 +1348,13 @@ private fun PracticeCompletionCard(
 private fun practiceOptionResultStyle(
     optionKey: String,
     correctAnswers: List<String>,
-    result: QuestionCheckResult?
+    result: QuestionCheckResult?,
+    revealAnswer: Boolean = false
 ): QuizOptionResultStyle {
-    if (result == null) return QuizOptionResultStyle.Neutral
+    if (result == null && !revealAnswer) return QuizOptionResultStyle.Neutral
     val normalizedKey = optionKey.trim().uppercase()
     val isCorrectAnswer = correctAnswers.any { it.trim().uppercase() == normalizedKey }
-    val isUserSelected = result.userAnswer.any { it.trim().uppercase() == normalizedKey }
+    val isUserSelected = result?.userAnswer.orEmpty().any { it.trim().uppercase() == normalizedKey }
     return when {
         isCorrectAnswer -> QuizOptionResultStyle.Correct
         isUserSelected -> QuizOptionResultStyle.Wrong
@@ -1350,6 +1415,8 @@ private fun PracticeProgressCard(
     wrongCount: Int,
     wrongOnly: Boolean,
     expanded: Boolean,
+    reciteMode: Boolean = false,
+    reciteIndex: Int = 0,
     onOpenAnswerSheet: (() -> Unit)?,
     onToggleWrongOnly: (() -> Unit)?,
     onToggle: () -> Unit
@@ -1364,7 +1431,21 @@ private fun PracticeProgressCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                if (batchSubmitted) {
+                if (reciteMode) {
+                    Text(
+                        text = "背题模式",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "浏览 ${reciteIndex.coerceIn(1, total.coerceAtLeast(1))} / $total 题 · 不计入正确率",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                } else if (batchSubmitted) {
                     Text(
                         text = "批量复盘",
                         style = MaterialTheme.typography.titleMedium,

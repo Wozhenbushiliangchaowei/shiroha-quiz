@@ -1,5 +1,7 @@
 package com.yiqiu.shirohaquiz.ui.screens
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,9 +17,11 @@ import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.yiqiu.shirohaquiz.R
 import com.yiqiu.shirohaquiz.importer.model.Option
@@ -41,6 +46,10 @@ import com.yiqiu.shirohaquiz.ui.components.GlassCard
 import com.yiqiu.shirohaquiz.ui.components.NoticeCard
 import com.yiqiu.shirohaquiz.ui.components.ShirohaHeader
 import com.yiqiu.shirohaquiz.ui.components.StatusChip
+import com.yiqiu.shirohaquiz.ui.components.shirohaNoRippleClickable
+import com.yiqiu.shirohaquiz.ui.theme.ShirohaColors
+import com.yiqiu.shirohaquiz.ui.theme.ShirohaDimens
+import com.yiqiu.shirohaquiz.ui.theme.ShirohaRadius
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaSpacing
 
 @Composable
@@ -54,6 +63,10 @@ fun BankDetailScreen(
     val context = LocalContext.current
     val bank = QuizRepository.banks.firstOrNull { it.id == bankId } ?: QuizRepository.activeBank()
     val isActive = bank?.id == QuizRepository.activeBank()?.id
+    var showSlashedList by remember(bank?.id) { mutableStateOf(false) }
+
+    BackHandler(enabled = showSlashedList) { showSlashedList = false }
+
     Column(
         modifier = Modifier
             .verticalScroll(rememberScrollState())
@@ -86,6 +99,15 @@ fun BankDetailScreen(
             return
         }
 
+        if (showSlashedList) {
+            SlashedQuestionListCard(
+                bank = bank,
+                onBack = { showSlashedList = false },
+                onRestore = { question -> QuizRepository.restoreSlashedQuestion(context, bank.id, question) }
+            )
+            return
+        }
+
         GlassCard {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -111,9 +133,18 @@ fun BankDetailScreen(
                 )
             }
             Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 StatusChip("${bank.questions.size} 题", selected = true)
                 StatusChip(if (isActive) "活动题库" else "可切换题库", selected = isActive)
+                Spacer(Modifier.weight(1f))
+                SlashedBankChip(
+                    count = QuizRepository.slashedQuestionCount(bank.id),
+                    onClick = { showSlashedList = true }
+                )
             }
             Spacer(Modifier.height(14.dp))
             Text(
@@ -200,6 +231,95 @@ fun BankDetailScreen(
                         onBack()
                     }
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SlashedBankChip(
+    count: Int,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .height(32.dp)
+            .shirohaNoRippleClickable(onClick = onClick),
+        shape = RoundedCornerShape(ShirohaRadius.Pill),
+        color = ShirohaColors.BrandPrimarySoft,
+        border = BorderStroke(ShirohaDimens.Hairline, ShirohaColors.LineSelected)
+    ) {
+        Text(
+            text = "斩 $count",
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun SlashedQuestionListCard(
+    bank: com.yiqiu.shirohaquiz.state.QuizBank,
+    onBack: () -> Unit,
+    onRestore: (Question) -> Unit
+) {
+    val slashed = QuizRepository.slashedQuestionsForBank(bank.id)
+    GlassCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "当前题库斩题本",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "${bank.name} · 共 ${slashed.size} 题",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            ActionPillButton(
+                icon = Icons.Rounded.Done,
+                text = "返回",
+                primary = false,
+                modifier = Modifier.height(42.dp),
+                onClick = onBack
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        if (slashed.isEmpty()) {
+            NoticeCard("暂无已斩题。开启斩题功能后，练习时点击题目右上角“斩”按钮，可将一眼会的题移出后续练习。", warning = false)
+        } else {
+            NoticeCard("恢复后，这道题会重新进入后续练习。", warning = false)
+            Spacer(Modifier.height(12.dp))
+            slashed.forEach { question ->
+                QuestionPreviewBlock(
+                    question = question,
+                    editable = false,
+                    onEdit = {}
+                )
+                ActionPillButton(
+                    icon = Icons.Rounded.Done,
+                    text = "恢复本题",
+                    primary = false,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(42.dp),
+                    fillWidthContent = true,
+                    onClick = { onRestore(question) }
+                )
+                Spacer(Modifier.height(14.dp))
             }
         }
     }

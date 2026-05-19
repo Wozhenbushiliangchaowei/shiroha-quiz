@@ -584,6 +584,20 @@ fun PracticePreferenceScreen(
                 onCheckedChange = { enabled -> QuizRepository.setPracticeInlineAnswerSettingsEnabled(context, enabled) }
             )
             Spacer(Modifier.height(12.dp))
+            PreferenceSwitchRow(
+                title = "背题模式",
+                desc = "进入练习后直接显示答案和解析，不提交答案，不计入正确率和错题。",
+                checked = QuizRepository.practiceReciteModeEnabled,
+                onCheckedChange = { enabled -> QuizRepository.setPracticeReciteModeEnabled(context, enabled) }
+            )
+            Spacer(Modifier.height(12.dp))
+            PreferenceSwitchRow(
+                title = "斩题功能",
+                desc = "开启后练习页显示斩题按钮，可将已掌握题移出后续练习。",
+                checked = QuizRepository.practiceSlashEnabled,
+                onCheckedChange = { enabled -> QuizRepository.setPracticeSlashEnabled(context, enabled) }
+            )
+            Spacer(Modifier.height(12.dp))
             Text(
                 text = "默认答题方式",
                 style = MaterialTheme.typography.titleSmall,

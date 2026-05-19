@@ -53,6 +53,12 @@ data class WrongQuestionEntry(
     val status: String = WrongStatus.REVIEWING.label
 )
 
+data class SlashedQuestionEntry(
+    val bankId: String,
+    val questionKey: String,
+    val slashedAt: Long
+)
+
 enum class WrongStatus(val label: String) {
     REVIEWING("复习中"),
     NOT_MASTERED("未掌握"),
@@ -106,12 +112,15 @@ object QuizRepository {
     private const val KEY_BANKS = "banks"
     private const val KEY_ACTIVE_BANK_ID = "active_bank_id"
     private const val KEY_WRONG_BOOK = "wrong_book"
+    private const val KEY_SLASHED_QUESTIONS = "slashed_questions"
     private const val KEY_STUDY_RECORDS = "study_records"
     private const val KEY_PRACTICE_NEXT_REQUIRES_RESULT = "practice_next_requires_result"
     private const val KEY_REMEMBER_PRACTICE_SETTINGS = "remember_practice_settings"
     private const val KEY_SWIPE_NAVIGATION_ENABLED = "swipe_navigation_enabled"
     private const val KEY_PRACTICE_AUTO_NEXT_ENABLED = "practice_auto_next_enabled"
     private const val KEY_PRACTICE_INLINE_ANSWER_SETTINGS_ENABLED = "practice_inline_answer_settings_enabled"
+    private const val KEY_PRACTICE_RECITE_MODE_ENABLED = "practice_recite_mode_enabled"
+    private const val KEY_PRACTICE_SLASH_ENABLED = "practice_slash_enabled"
     private const val KEY_PRACTICE_PREFERRED_COUNT_MODE = "practice_preferred_count_mode"
     private const val KEY_PRACTICE_PREFERRED_CUSTOM_COUNT = "practice_preferred_custom_count"
     private const val KEY_PRACTICE_PREFERRED_ORDER_MODE = "practice_preferred_order_mode"
@@ -144,6 +153,7 @@ object QuizRepository {
 
     val banks = mutableStateListOf<QuizBank>()
     val wrongBook = mutableStateListOf<WrongQuestionEntry>()
+    val slashedQuestions = mutableStateListOf<SlashedQuestionEntry>()
     val studyRecords = mutableStateListOf<StudyRecord>()
 
     var activeBankId by mutableStateOf<String?>(null)
@@ -173,6 +183,10 @@ object QuizRepository {
     var practiceAutoNextEnabled by mutableStateOf(false)
         private set
     var practiceInlineAnswerSettingsEnabled by mutableStateOf(false)
+        private set
+    var practiceReciteModeEnabled by mutableStateOf(false)
+        private set
+    var practiceSlashEnabled by mutableStateOf(false)
         private set
     var preferredPracticeQuestionCountMode by mutableStateOf("custom")
         private set
@@ -263,12 +277,16 @@ object QuizRepository {
         val restoredWrongBook = runCatching {
             parseWrongBookJson(prefs.getString(KEY_WRONG_BOOK, null))
         }.getOrDefault(emptyList())
+        val restoredSlashedQuestions = runCatching {
+            parseSlashedQuestionsJson(prefs.getString(KEY_SLASHED_QUESTIONS, null))
+        }.getOrDefault(emptyList())
         val restoredStudyRecords = runCatching {
             parseStudyRecordsJson(prefs.getString(KEY_STUDY_RECORDS, null))
         }.getOrDefault(emptyList())
 
         banks.clear()
         wrongBook.clear()
+        slashedQuestions.clear()
         studyRecords.clear()
 
         val sanitizedRestoredBanks = restoredBanks
@@ -283,6 +301,8 @@ object QuizRepository {
         swipeNavigationEnabled = prefs.getBoolean(KEY_SWIPE_NAVIGATION_ENABLED, true)
         practiceAutoNextEnabled = prefs.getBoolean(KEY_PRACTICE_AUTO_NEXT_ENABLED, false)
         practiceInlineAnswerSettingsEnabled = prefs.getBoolean(KEY_PRACTICE_INLINE_ANSWER_SETTINGS_ENABLED, false)
+        practiceReciteModeEnabled = prefs.getBoolean(KEY_PRACTICE_RECITE_MODE_ENABLED, false)
+        practiceSlashEnabled = prefs.getBoolean(KEY_PRACTICE_SLASH_ENABLED, false)
         preferredPracticeQuestionCountMode = normalizePracticeCountMode(
             prefs.getString(KEY_PRACTICE_PREFERRED_COUNT_MODE, "custom") ?: "custom"
         )
@@ -326,6 +346,7 @@ object QuizRepository {
         aiRefactorMaxChars = prefs.getInt(KEY_AI_REFACTOR_MAX_CHARS, 30000).coerceIn(5000, 80000)
 
         wrongBook.addAll(restoredWrongBook.map(::sanitizeWrongEntry))
+        slashedQuestions.addAll(sanitizeSlashedEntries(restoredSlashedQuestions, sanitizedRestoredBanks))
         studyRecords.addAll(restoredStudyRecords)
         if (sanitizedRestoredBanks != restoredBanks) persist()
     }
@@ -357,6 +378,7 @@ object QuizRepository {
         val removingActive = activeBankId == bankId
         banks.removeAll { it.id == bankId }
         wrongBook.removeAll { it.bankId == bankId }
+        slashedQuestions.removeAll { it.bankId == bankId }
         studyRecords.removeAll { it.bankId == bankId }
 
         if (removingActive || banks.none { it.id == activeBankId }) {
@@ -446,6 +468,8 @@ object QuizRepository {
                 }
             }
         }
+        val validQuestionKeys = cleanQuestions.map(::questionKey).toSet()
+        slashedQuestions.removeAll { it.bankId == bankId && it.questionKey !in validQuestionKeys }
 
         if (activeBankId == bankId) {
             resetPracticeState()
@@ -476,8 +500,15 @@ object QuizRepository {
     }
 
     fun activePracticeQuestions(): List<Question> {
-        return practiceQuestions.ifEmpty { activeBank()?.questions.orEmpty() }
+        return practiceQuestions.ifEmpty { activePracticePoolQuestions(activeBank()) }
     }
+
+    fun activePracticePoolQuestions(bank: QuizBank? = activeBank()): List<Question> {
+        val currentBank = bank ?: return emptyList()
+        return currentBank.questions.filterNot { isQuestionSlashed(currentBank.id, it) }
+    }
+
+    fun practiceAvailableQuestionCount(bank: QuizBank? = activeBank()): Int = activePracticePoolQuestions(bank).size
 
     fun startPracticeSession(
         questionCount: Int,
@@ -489,7 +520,9 @@ object QuizRepository {
         batchGroupSize: Int = preferredPracticeBatchGroupSize()
     ): Boolean {
         val selectedTypes = allowedTypes.ifEmpty { objectiveQuestionTypes() }
-        val source = (sourceQuestions ?: activeBank()?.questions.orEmpty()).filter { it.type in selectedTypes }
+        val bank = activeBank()
+        val rawSource = sourceQuestions ?: activePracticePoolQuestions(bank)
+        val source = rawSource.filter { it.type in selectedTypes }
         if (source.isEmpty()) return false
         val count = questionCount.coerceIn(1, source.size)
         practiceQuestions = if (randomize) source.shuffled().take(count) else source.take(count)
@@ -600,6 +633,70 @@ object QuizRepository {
         persist()
     }
 
+    fun slashedQuestionCount(bankId: String): Int {
+        val bank = banks.firstOrNull { it.id == bankId } ?: return 0
+        val validKeys = bank.questions.map(::questionKey).toSet()
+        return slashedQuestions.count { it.bankId == bankId && it.questionKey in validKeys }
+    }
+
+    fun slashedQuestionsForBank(bankId: String): List<Question> {
+        val bank = banks.firstOrNull { it.id == bankId } ?: return emptyList()
+        val slashedKeys = slashedQuestions
+            .filter { it.bankId == bankId }
+            .map { it.questionKey }
+            .toSet()
+        return bank.questions.filter { questionKey(it) in slashedKeys }
+    }
+
+    fun isQuestionSlashed(bankId: String, question: Question): Boolean {
+        val key = questionKey(question)
+        return slashedQuestions.any { it.bankId == bankId && it.questionKey == key }
+    }
+
+    fun slashCurrentPracticeQuestion(context: Context): Boolean {
+        appContext = context.applicationContext
+        val bank = activeBank() ?: return false
+        val question = currentPracticeQuestion() ?: return false
+        val key = questionKey(question)
+        val now = System.currentTimeMillis()
+        if (slashedQuestions.none { it.bankId == bank.id && it.questionKey == key }) {
+            slashedQuestions.add(0, SlashedQuestionEntry(bank.id, key, now))
+        }
+
+        val currentIndex = practiceIndex
+        practiceQuestions = practiceQuestions.filterNot { questionKey(it) == key }
+        practiceSessionResults.remove(question.id)
+        practiceAnswerResults.remove(question.id)
+        practiceDraftAnswers.remove(question.id)
+        practiceLastResult = null
+        selectedAnswer = emptyList()
+
+        if (practiceQuestions.isEmpty()) {
+            practiceIndex = 0
+            practiceBatchSubmitted = false
+            practiceBatchGroupStartIndex = 0
+        } else {
+            practiceIndex = currentIndex.coerceAtMost(practiceQuestions.lastIndex)
+            if (practiceMode == PRACTICE_MODE_BATCH) {
+                practiceBatchGroupStartIndex = practiceBatchGroupStartIndex.coerceAtMost(practiceQuestions.lastIndex)
+                if (practiceIndex < practiceCurrentBatchStartIndex()) practiceIndex = practiceCurrentBatchStartIndex()
+                if (practiceIndex > practiceCurrentBatchEndIndex()) practiceIndex = practiceCurrentBatchEndIndex()
+            }
+            restorePracticeSelectionForCurrentQuestion()
+        }
+
+        persist()
+        return true
+    }
+
+    fun restoreSlashedQuestion(context: Context, bankId: String, question: Question): Boolean {
+        appContext = context.applicationContext
+        val key = questionKey(question)
+        val removed = slashedQuestions.removeAll { it.bankId == bankId && it.questionKey == key }
+        if (removed) persist()
+        return removed
+    }
+
     fun toggleAnswer(key: String, multiple: Boolean) {
         val nextAnswer = if (multiple) {
             if (selectedAnswer.contains(key)) selectedAnswer - key else selectedAnswer + key
@@ -652,6 +749,18 @@ object QuizRepository {
     fun setPracticeInlineAnswerSettingsEnabled(context: Context, enabled: Boolean) {
         appContext = context.applicationContext
         practiceInlineAnswerSettingsEnabled = enabled
+        persist()
+    }
+
+    fun setPracticeReciteModeEnabled(context: Context, enabled: Boolean) {
+        appContext = context.applicationContext
+        practiceReciteModeEnabled = enabled
+        persist()
+    }
+
+    fun setPracticeSlashEnabled(context: Context, enabled: Boolean) {
+        appContext = context.applicationContext
+        practiceSlashEnabled = enabled
         persist()
     }
 
@@ -1520,6 +1629,7 @@ object QuizRepository {
         appContext = context.applicationContext
         banks.clear()
         wrongBook.clear()
+        slashedQuestions.clear()
         studyRecords.clear()
         activeBankId = null
         resetPracticeState()
@@ -1530,6 +1640,7 @@ object QuizRepository {
     internal fun resetForTesting() {
         banks.clear()
         wrongBook.clear()
+        slashedQuestions.clear()
         studyRecords.clear()
         activeBankId = null
         resetPracticeState()
@@ -1633,6 +1744,24 @@ object QuizRepository {
             lastWrongAt = if (entry.lastWrongAt > 0L) entry.lastWrongAt else entry.timestamp,
             status = normalizedStatus
         )
+    }
+
+    private fun sanitizeSlashedEntries(entries: List<SlashedQuestionEntry>, banks: List<QuizBank>): List<SlashedQuestionEntry> {
+        val validKeysByBank = banks.associate { bank -> bank.id to bank.questions.map(::questionKey).toSet() }
+        return entries
+            .filter { entry -> entry.questionKey.isNotBlank() && validKeysByBank[entry.bankId]?.contains(entry.questionKey) == true }
+            .distinctBy { it.bankId + "#" + it.questionKey }
+    }
+
+    private fun questionKey(question: Question): String {
+        return question.id.ifBlank {
+            listOf(
+                question.type.name,
+                question.question.trim(),
+                question.options.joinToString("|") { option -> "${option.key}:${option.text}" },
+                question.answer.joinToString("|")
+            ).joinToString("#").lowercase(Locale.ROOT)
+        }
     }
 
     private fun sanitizeQuestion(question: Question): Question {
@@ -1877,12 +2006,15 @@ object QuizRepository {
             .putString(KEY_BANKS, banksToJson(banks))
             .putString(KEY_ACTIVE_BANK_ID, activeBankId)
             .putString(KEY_WRONG_BOOK, wrongBookToJson(wrongBook))
+            .putString(KEY_SLASHED_QUESTIONS, slashedQuestionsToJson(slashedQuestions))
             .putString(KEY_STUDY_RECORDS, studyRecordsToJson(studyRecords))
             .putBoolean(KEY_PRACTICE_NEXT_REQUIRES_RESULT, practiceNextRequiresResult)
             .putBoolean(KEY_REMEMBER_PRACTICE_SETTINGS, rememberPracticeSettingsEnabled)
             .putBoolean(KEY_SWIPE_NAVIGATION_ENABLED, swipeNavigationEnabled)
             .putBoolean(KEY_PRACTICE_AUTO_NEXT_ENABLED, practiceAutoNextEnabled)
             .putBoolean(KEY_PRACTICE_INLINE_ANSWER_SETTINGS_ENABLED, practiceInlineAnswerSettingsEnabled)
+            .putBoolean(KEY_PRACTICE_RECITE_MODE_ENABLED, practiceReciteModeEnabled)
+            .putBoolean(KEY_PRACTICE_SLASH_ENABLED, practiceSlashEnabled)
             .putString(KEY_PRACTICE_PREFERRED_COUNT_MODE, preferredPracticeQuestionCountMode)
             .putInt(KEY_PRACTICE_PREFERRED_CUSTOM_COUNT, preferredPracticeCustomQuestionCount)
             .putString(KEY_PRACTICE_PREFERRED_ORDER_MODE, preferredPracticeOrderMode)
@@ -1942,6 +2074,18 @@ object QuizRepository {
             if (entry.lastCorrectAt != null) item.put("lastCorrectAt", entry.lastCorrectAt)
             item.put("status", entry.status)
             item.put("question", questionToJson(entry.question, assetMapping))
+            array.put(item)
+        }
+        return array.toString()
+    }
+
+    private fun slashedQuestionsToJson(entries: List<SlashedQuestionEntry>): String {
+        val array = JSONArray()
+        entries.forEach { entry ->
+            val item = JSONObject()
+            item.put("bankId", entry.bankId)
+            item.put("questionKey", entry.questionKey)
+            item.put("slashedAt", entry.slashedAt)
             array.put(item)
         }
         return array.toString()
@@ -2030,6 +2174,26 @@ object QuizRepository {
                         lastWrongAt = item.optLong("lastWrongAt", item.optLong("timestamp")),
                         lastCorrectAt = if (item.has("lastCorrectAt") && !item.isNull("lastCorrectAt")) item.optLong("lastCorrectAt") else null,
                         status = WrongStatus.normalize(item.optString("status", WrongStatus.NOT_MASTERED.label))
+                    )
+                )
+            }
+        }
+    }
+
+    private fun parseSlashedQuestionsJson(text: String?): List<SlashedQuestionEntry> {
+        if (text.isNullOrBlank()) return emptyList()
+        val array = JSONArray(text)
+        return buildList {
+            for (i in 0 until array.length()) {
+                val item = array.optJSONObject(i) ?: continue
+                val bankId = item.optString("bankId")
+                val key = item.optString("questionKey")
+                if (bankId.isBlank() || key.isBlank()) continue
+                add(
+                    SlashedQuestionEntry(
+                        bankId = bankId,
+                        questionKey = key,
+                        slashedAt = item.optLong("slashedAt", System.currentTimeMillis())
                     )
                 )
             }
