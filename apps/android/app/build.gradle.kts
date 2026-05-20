@@ -28,7 +28,7 @@ android {
             dimension = "variant"
             applicationId = "com.reqir.shirohaquiz"
             versionCode = 126
-            versionName = "0.4.9"
+            versionName = "0.4.8"
         }
     }
 

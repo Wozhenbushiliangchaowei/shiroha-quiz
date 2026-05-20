@@ -141,20 +141,20 @@ Releases 页面提供两个 APK，根据需求选择：
 ### WebView 壳版（`*-web-release.apk`）
 
 - 内置完整 Web 页面，离线可用
-- 功能最全面：导入、练习、考试、错题、备份均已稳定
+- 功能完整，仅做必要维护，不再作为主要开发线
 - 下载约 6 MB
 
 ### 原生 Compose 版（`*-native-release.apk`）
 
-- Kotlin + Compose 纯原生实现
+- Kotlin + Compose 纯原生实现，当前主要开发线
 - 启动更快，界面更流畅，体积更小（约 5 MB）
-- 暗夜模式、AI 功能、表格导入、背题模式、斩题功能、错题复盘均已落地
+- 暗夜模式、AI 功能、表格导入、背题模式、斩题功能、错题复盘、跨端互通均已落地
 
 | | WebView 壳版 | 原生 Compose 版 |
 |------|-------------|----------------|
-| 稳定性 | 高 | 中 |
+| 定位 | 稳定维护 | 主要开发线 |
 | 流畅度 | 一般 | 高 |
-| 功能完整度 | 完整 | AI/暗夜模式/表格导入/背题/斩题/错题复盘等已落地 |
+| 功能完整度 | 完整 | 完整（含 AI/暗夜/背题/斩题/错题复盘等） |
 | APK 大小 | ~6 MB | ~5 MB |
 | 适合人群 | 日常刷题用户 | 想体验原生流畅度的用户 |
 
@@ -175,36 +175,6 @@ apps/android/
 ├── app/src/main/java/              # 通用 Android 入口
 └── app/src/native/java/            # 原生 Compose 版本代码
 ```
-
----
-
-## 原生 Compose 当前状态
-
-原生版已覆盖从导入到复盘的核心流程，包含 13 个核心页面，暗夜模式、AI 功能、表格导入、背题模式、斩题功能、错题复盘等已落地。后续重点是编译验收、实机稳定性和更多题库格式兼容。
-
-| 页面 | 功能 |
-|------|------|
-| `HomeScreen` | 首页、题库概览、今日状态 |
-| `ImportScreen` | 文件解析、双文件导入、后台处理 |
-| `PracticeScreen` | 随机/顺序组题、即时判题、自动下一题、背题模式、斩题入口、完成总结 |
-| `ExamScreen` | 计时考试、答题卡、未答提醒、滑动切题、交卷报告 |
-| `BankListScreen` | 题库管理与重命名 |
-| `BankDetailScreen` | 题库详情、二次核对、斩题本入口与恢复管理 |
-| `BankReviewScreen` | 逐题检查与修正 |
-| `WrongBookScreen` | 错题筛选、错题复习、连续答对掌握、手动掌握状态管理 |
-| `RecordsScreen` | 练习考试记录列表 |
-| `RecordDetailScreen` | 单轮逐题复盘 |
-| `MeScreen` | 数据导入/导出/备份、AI 设置、外观设置、刷题偏好 |
-| `AboutScreen` | 版本信息 |
-| `StandardImportFormatScreen` | 标准格式说明与 AI 清洗指引 |
-
-核心模块：
-
-- `QuizRepository`：题库、练习、考试、错题、记录的集中状态管理
-- `ai/`：AI 核对、AI 解析生成、OpenAI 兼容 API
-- `importer/`：解析器链、双文件合并、策略评分、验证
-- `ui/components/`：GlassCard、ActionPillButton 等设计系统组件
-- `ui/theme/`：Material3 主题、间距令牌、字体系统
 
 ---
 
