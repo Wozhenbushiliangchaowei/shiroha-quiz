@@ -99,6 +99,11 @@ private enum class MainTab(
 }
 
 private fun MainTab.systemBackTarget(): MainTab? = when (this) {
+    MainTab.Home,
+    MainTab.Practice,
+    MainTab.Import,
+    MainTab.Me -> null
+
     MainTab.Exam,
     MainTab.BankList,
     MainTab.BankDetail,
@@ -107,18 +112,12 @@ private fun MainTab.systemBackTarget(): MainTab? = when (this) {
 
     MainTab.BankReview -> MainTab.BankDetail
     MainTab.RecordDetail -> MainTab.Records
-
     MainTab.AppearancePreference,
     MainTab.PracticePreference,
     MainTab.AiSettings,
     MainTab.DataManagement,
     MainTab.StandardFormat,
     MainTab.About -> MainTab.Me
-
-    MainTab.Home,
-    MainTab.Practice,
-    MainTab.Import,
-    MainTab.Me -> null
 }
 
 @Composable
@@ -126,12 +125,10 @@ fun ShirohaAppShell() {
     var currentTab by rememberSaveable { mutableStateOf(MainTab.Home) }
     var detailBankId by rememberSaveable { mutableStateOf<String?>(null) }
     var detailRecordId by rememberSaveable { mutableStateOf<String?>(null) }
-
     val systemBackTarget = currentTab.systemBackTarget()
+
     BackHandler(enabled = systemBackTarget != null) {
-        systemBackTarget?.let { target ->
-            currentTab = target
-        }
+        systemBackTarget?.let { currentTab = it }
     }
 
     Scaffold(

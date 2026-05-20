@@ -616,15 +616,12 @@ object QuizRepository {
         wrongBook[index] = if (mastered) {
             current.copy(
                 status = WrongStatus.MASTERED.label,
-                rightCount = current.rightCount.coerceAtLeast(3),
-                reviewRightCount = current.reviewRightCount.coerceAtLeast(3),
                 streakCorrectCount = current.streakCorrectCount.coerceAtLeast(2),
                 lastCorrectAt = now
             )
         } else {
             current.copy(
                 status = WrongStatus.NOT_MASTERED.label,
-                reviewRightCount = 0,
                 streakCorrectCount = 0
             )
         }
