@@ -790,7 +790,6 @@ fun PracticeScreen(
 }
 
 @OptIn(ExperimentalLayoutApi::class)
-
 @Composable
 fun PracticeQuickEditScreen(
     onBack: () -> Unit
@@ -995,6 +994,7 @@ fun PracticeQuickEditScreen(
 }
 
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PracticeSetupPanel(
     bankName: String,
