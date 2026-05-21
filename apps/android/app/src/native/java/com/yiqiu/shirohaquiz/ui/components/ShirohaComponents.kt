@@ -340,21 +340,58 @@ fun QuizOptionCard(
         selected -> ShirohaColors.TextOnBrand
         else -> MaterialTheme.colorScheme.onSurface
     }
-    val minHeight = if (compact) 46.dp else 72.dp
-    val verticalPadding = if (compact) 7.dp else 12.dp
-    val horizontalPadding = if (compact) 10.dp else ShirohaDimens.OptionCardHorizontalPadding
     val optionFontSize = QuizRepository.optionFontSizeSp().sp
     val optionLineHeight = QuizRepository.optionLineHeightSp().sp
-    val effectiveContainerColor = if (compact && resultStyle == QuizOptionResultStyle.Neutral && !selected) {
-        Color.Transparent
-    } else {
-        containerColor
+
+    if (compact) {
+        val compactContentColor = when {
+            isCorrect -> ShirohaColors.StateSuccess
+            isWrong -> ShirohaColors.StateDanger
+            selected -> MaterialTheme.colorScheme.primary
+            else -> MaterialTheme.colorScheme.onSurface
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = 42.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = onClick
+                )
+                .padding(horizontal = 4.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Text(
+                text = "$label.",
+                color = compactContentColor,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontSize = optionFontSize,
+                    lineHeight = optionLineHeight
+                )
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = text,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontSize = optionFontSize,
+                    lineHeight = optionLineHeight
+                ),
+                fontWeight = if (selected || resultStyle != QuizOptionResultStyle.Neutral) FontWeight.SemiBold else FontWeight.Normal,
+                color = compactContentColor
+            )
+        }
+        return
     }
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .defaultMinSize(minHeight = minHeight)
+            .defaultMinSize(minHeight = 64.dp)
             .clip(shape)
             .clickable(
                 interactionSource = interactionSource,
@@ -362,13 +399,13 @@ fun QuizOptionCard(
                 onClick = onClick
             ),
         shape = shape,
-        color = effectiveContainerColor,
-        border = BorderStroke(ShirohaDimens.Hairline, if (compact && resultStyle == QuizOptionResultStyle.Neutral && !selected) ShirohaColors.LineSoft.copy(alpha = 0.45f) else borderColor)
+        color = containerColor,
+        border = BorderStroke(ShirohaDimens.Hairline, borderColor)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = horizontalPadding, vertical = verticalPadding),
+                .padding(horizontal = ShirohaDimens.OptionCardHorizontalPadding, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
@@ -384,7 +421,7 @@ fun QuizOptionCard(
                     )
                 }
             }
-            Spacer(Modifier.width(if (compact) 8.dp else ShirohaDimens.OptionLabelTextGap))
+            Spacer(Modifier.width(ShirohaDimens.OptionLabelTextGap))
             Text(
                 text = text,
                 modifier = Modifier.weight(1f),

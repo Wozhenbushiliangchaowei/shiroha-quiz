@@ -1127,26 +1127,26 @@ object QuizRepository {
     }
 
     fun questionFontSizeSp(): Int = when (questionFontSizeMode) {
-        "small" -> 20
-        "large" -> 24
+        "small" -> 18
+        "large" -> 26
         else -> 22
     }
 
     fun questionLineHeightSp(): Int = when (questionFontSizeMode) {
-        "small" -> 27
-        "large" -> 32
+        "small" -> 25
+        "large" -> 34
         else -> 29
     }
 
     fun optionFontSizeSp(): Int = when (optionFontSizeMode) {
-        "small" -> 15
-        "large" -> 18
+        "small" -> 14
+        "large" -> 19
         else -> 16
     }
 
     fun optionLineHeightSp(): Int = when (optionFontSizeMode) {
-        "small" -> 20
-        "large" -> 24
+        "small" -> 19
+        "large" -> 25
         else -> 21
     }
 

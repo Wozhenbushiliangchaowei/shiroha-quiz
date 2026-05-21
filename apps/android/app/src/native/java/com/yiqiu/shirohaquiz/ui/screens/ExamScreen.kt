@@ -821,7 +821,7 @@ private fun ActiveExamPanel(
             Spacer(Modifier.height(14.dp))
             QuestionImagesBlock(examQuestion.images, maxPreviewHeight = 360.dp, showMeta = true)
         }
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(22.dp))
 
         when (examQuestion.type) {
             QuestionType.SINGLE,
@@ -840,7 +840,7 @@ private fun ActiveExamPanel(
                             )
                         }
                     )
-                    Spacer(Modifier.height(if (QuizRepository.compactOptionsEnabled) 5.dp else 10.dp))
+                    Spacer(Modifier.height(if (QuizRepository.compactOptionsEnabled) 8.dp else 10.dp))
                 }
             }
 

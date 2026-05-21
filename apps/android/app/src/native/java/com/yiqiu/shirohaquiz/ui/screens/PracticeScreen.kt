@@ -551,7 +551,7 @@ fun PracticeScreen(
                 Spacer(Modifier.height(14.dp))
                 QuestionImagesBlock(question.images, maxPreviewHeight = 360.dp, showMeta = true)
             }
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(18.dp))
 
             when (question.type) {
                 QuestionType.SINGLE,
@@ -589,7 +589,7 @@ fun PracticeScreen(
                                 }
                             }
                         )
-                        Spacer(Modifier.height(if (QuizRepository.compactOptionsEnabled) 5.dp else 10.dp))
+                        Spacer(Modifier.height(if (QuizRepository.compactOptionsEnabled) 8.dp else 10.dp))
                     }
                 }
 
