@@ -427,8 +427,9 @@ fun PracticeScreen(
             canGoNext
         }
         val canStartNextBatchGroup = isBatchSubmitted && QuizRepository.canStartNextPracticeBatchGroup()
-        val scheduleInstantAutoNextAfterSubmit: (String, Int) -> Unit = { autoNextQuestionId, autoNextIndex ->
-            if (!isBatchPractice &&
+        val scheduleInstantAutoNextAfterSubmit: (String, Int, Boolean) -> Unit = { autoNextQuestionId, autoNextIndex, correct ->
+            if (correct &&
+                !isBatchPractice &&
                 !isReciteMode &&
                 QuizRepository.practiceAutoNextEnabled &&
                 autoNextIndex < practiceQuestions.lastIndex
@@ -582,7 +583,7 @@ fun PracticeScreen(
                                         val autoNextIndex = QuizRepository.practiceIndex
                                         val submitted = QuizRepository.submitPracticeQuestion()
                                         if (submitted != null) {
-                                            scheduleInstantAutoNextAfterSubmit(autoNextQuestionId, autoNextIndex)
+                                            scheduleInstantAutoNextAfterSubmit(autoNextQuestionId, autoNextIndex, submitted.correct)
                                         }
                                     }
                                 }
@@ -635,7 +636,7 @@ fun PracticeScreen(
                                 val autoNextIndex = QuizRepository.practiceIndex
                                 val submitted = QuizRepository.submitPracticeQuestion()
                                 if (submitted != null) {
-                                    scheduleInstantAutoNextAfterSubmit(autoNextQuestionId, autoNextIndex)
+                                    scheduleInstantAutoNextAfterSubmit(autoNextQuestionId, autoNextIndex, submitted.correct)
                                 }
                             }
                         }
@@ -654,7 +655,7 @@ fun PracticeScreen(
                                 val autoNextIndex = QuizRepository.practiceIndex
                                 val submitted = QuizRepository.submitPracticeQuestion()
                                 if (submitted != null) {
-                                    scheduleInstantAutoNextAfterSubmit(autoNextQuestionId, autoNextIndex)
+                                    scheduleInstantAutoNextAfterSubmit(autoNextQuestionId, autoNextIndex, submitted.correct)
                                 }
                             }
                         }

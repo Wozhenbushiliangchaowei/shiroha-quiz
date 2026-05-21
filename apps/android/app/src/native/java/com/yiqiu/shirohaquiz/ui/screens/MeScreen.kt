@@ -765,8 +765,8 @@ fun PracticePreferenceScreen(
             )
             Spacer(Modifier.height(12.dp))
             PreferenceSwitchRow(
-                title = "判题后自动下一题",
-                desc = "仅即时练习生效。关闭后停留在本题，方便查看答案和解析。",
+                title = "答对后自动下一题",
+                desc = "仅即时练习生效。答对后自动切到下一题，答错时停留当前题查看解析。",
                 checked = QuizRepository.practiceAutoNextEnabled,
                 onCheckedChange = { enabled -> QuizRepository.setPracticeAutoNextEnabled(context, enabled) }
             )
