@@ -56,7 +56,7 @@ private enum class WrongBookFilter(val label: String) {
 private enum class WrongBookSort(val label: String) {
     RECENT_WRONG("最近错"),
     WRONG_COUNT("错误次数"),
-    MASTERY("掌握程度")
+    MASTERY("未掌握优先")
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -228,7 +228,7 @@ fun WrongBookScreen(
             ) {
                 ActionPillButton(
                     icon = Icons.Rounded.PlayArrow,
-                    text = "刷当前筛选",
+                    text = if (smartReviewEnabled) "刷当前筛选" else "刷错题",
                     primary = reviewEntries.isNotEmpty(),
                     modifier = Modifier
                         .weight(1f)

@@ -62,6 +62,7 @@ import com.yiqiu.shirohaquiz.ui.screens.ImportScreen
 import com.yiqiu.shirohaquiz.ui.screens.MeScreen
 import com.yiqiu.shirohaquiz.ui.screens.AppearancePreferenceScreen
 import com.yiqiu.shirohaquiz.ui.screens.PracticePreferenceScreen
+import com.yiqiu.shirohaquiz.ui.screens.PracticeQuickEditScreen
 import com.yiqiu.shirohaquiz.ui.screens.PracticeScreen
 import com.yiqiu.shirohaquiz.ui.screens.RecordDetailScreen
 import com.yiqiu.shirohaquiz.ui.screens.RecordsScreen
@@ -93,6 +94,7 @@ private enum class MainTab(
     RecordDetail("记录详情", Icons.Rounded.Dashboard, showInBottomBar = false),
     AppearancePreference("外观偏好", Icons.Rounded.Settings, showInBottomBar = false),
     PracticePreference("刷题偏好", Icons.Rounded.School, showInBottomBar = false),
+    PracticeQuickEdit("快速编辑", Icons.Rounded.School, showInBottomBar = false),
     WrongBookPreference("错题本设置", Icons.Rounded.School, showInBottomBar = false),
     AiSettings("AI 设置", Icons.Rounded.Settings, showInBottomBar = false),
     DataManagement("数据管理", Icons.Rounded.Settings, showInBottomBar = false),
@@ -114,6 +116,7 @@ private fun MainTab.systemBackTarget(): MainTab? = when (this) {
 
     MainTab.BankReview -> MainTab.BankDetail
     MainTab.RecordDetail -> MainTab.Records
+    MainTab.PracticeQuickEdit -> MainTab.Practice
     MainTab.AppearancePreference,
     MainTab.PracticePreference,
     MainTab.WrongBookPreference,
@@ -208,7 +211,11 @@ fun ShirohaAppShell() {
 
                     MainTab.Practice -> PracticeScreen(
                         onGoExam = { currentTab = MainTab.Exam },
-                        onOpenRecords = { currentTab = MainTab.Records }
+                        onOpenRecords = { currentTab = MainTab.Records },
+                        onOpenQuickEdit = { currentTab = MainTab.PracticeQuickEdit }
+                    )
+                    MainTab.PracticeQuickEdit -> PracticeQuickEditScreen(
+                        onBack = { currentTab = MainTab.Practice }
                     )
                     MainTab.Import -> ImportScreen(
                         onImportSaved = { currentTab = MainTab.Home },

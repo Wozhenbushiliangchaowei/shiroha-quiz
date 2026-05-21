@@ -134,6 +134,7 @@ object QuizRepository {
     private const val KEY_PRACTICE_INLINE_ANSWER_SETTINGS_ENABLED = "practice_inline_answer_settings_enabled"
     private const val KEY_PRACTICE_RECITE_MODE_ENABLED = "practice_recite_mode_enabled"
     private const val KEY_PRACTICE_SLASH_ENABLED = "practice_slash_enabled"
+    private const val KEY_PRACTICE_QUICK_EDIT_ENABLED = "practice_quick_edit_enabled"
     private const val KEY_WRONG_BOOK_SMART_REVIEW_ENABLED = "wrong_book_smart_review_enabled"
     private const val KEY_PRACTICE_PREFERRED_COUNT_MODE = "practice_preferred_count_mode"
     private const val KEY_PRACTICE_PREFERRED_CUSTOM_COUNT = "practice_preferred_custom_count"
@@ -204,6 +205,8 @@ object QuizRepository {
     var practiceReciteModeEnabled by mutableStateOf(false)
         private set
     var practiceSlashEnabled by mutableStateOf(false)
+        private set
+    var practiceQuickEditEnabled by mutableStateOf(false)
         private set
     var wrongBookSmartReviewEnabled by mutableStateOf(false)
         private set
@@ -324,6 +327,7 @@ object QuizRepository {
         practiceInlineAnswerSettingsEnabled = prefs.getBoolean(KEY_PRACTICE_INLINE_ANSWER_SETTINGS_ENABLED, false)
         practiceReciteModeEnabled = prefs.getBoolean(KEY_PRACTICE_RECITE_MODE_ENABLED, false)
         practiceSlashEnabled = prefs.getBoolean(KEY_PRACTICE_SLASH_ENABLED, false)
+        practiceQuickEditEnabled = prefs.getBoolean(KEY_PRACTICE_QUICK_EDIT_ENABLED, false)
         wrongBookSmartReviewEnabled = prefs.getBoolean(KEY_WRONG_BOOK_SMART_REVIEW_ENABLED, false)
         preferredPracticeQuestionCountMode = normalizePracticeCountMode(
             prefs.getString(KEY_PRACTICE_PREFERRED_COUNT_MODE, "custom") ?: "custom"
@@ -603,6 +607,52 @@ object QuizRepository {
         )
     }
 
+    fun updateCurrentPracticeQuestion(updated: Question): Boolean {
+        val current = currentPracticeQuestion() ?: return false
+        val targetBank = bankForPracticeQuestion(current) ?: return false
+        val bankIndex = banks.indexOfFirst { it.id == targetBank.id }
+        if (bankIndex < 0) return false
+        val questionIndex = banks[bankIndex].questions.indexOfFirst { it.id == current.id }
+        if (questionIndex < 0) return false
+
+        val sanitizedUpdated = sanitizeQuestion(
+            updated.copy(
+                id = current.id,
+                number = current.number,
+                type = current.type,
+                category = current.category,
+                images = current.images,
+                score = current.score
+            )
+        )
+
+        val updatedQuestions = banks[bankIndex].questions.toMutableList()
+        updatedQuestions[questionIndex] = sanitizedUpdated
+        banks[bankIndex] = banks[bankIndex].copy(questions = updatedQuestions)
+
+        practiceQuestions = practiceQuestions.map { question ->
+            if (question.id == current.id) sanitizedUpdated else question
+        }
+        val mappedBankId = practiceQuestionBankIds[current.id] ?: targetBank.id
+        for (index in wrongBook.indices) {
+            val entry = wrongBook[index]
+            if (entry.bankId == mappedBankId && entry.question.id == current.id) {
+                wrongBook[index] = entry.copy(
+                    bankName = banks[bankIndex].name,
+                    question = sanitizedUpdated
+                )
+            }
+        }
+
+        practiceSessionResults.remove(current.id)
+        practiceAnswerResults.remove(current.id)
+        practiceDraftAnswers.remove(current.id)
+        if (practiceLastResult?.question?.id == current.id) practiceLastResult = null
+        selectedAnswer = emptyList()
+        persist()
+        return true
+    }
+
     fun endPracticeSession() {
         finishPracticeSessionIfNeeded()
         resetPracticeState()
@@ -851,6 +901,12 @@ object QuizRepository {
     fun setPracticeSlashEnabled(context: Context, enabled: Boolean) {
         appContext = context.applicationContext
         practiceSlashEnabled = enabled
+        persist()
+    }
+
+    fun setPracticeQuickEditEnabled(context: Context, enabled: Boolean) {
+        appContext = context.applicationContext
+        practiceQuickEditEnabled = enabled
         persist()
     }
 
@@ -2264,6 +2320,7 @@ object QuizRepository {
             .putBoolean(KEY_PRACTICE_INLINE_ANSWER_SETTINGS_ENABLED, practiceInlineAnswerSettingsEnabled)
             .putBoolean(KEY_PRACTICE_RECITE_MODE_ENABLED, practiceReciteModeEnabled)
             .putBoolean(KEY_PRACTICE_SLASH_ENABLED, practiceSlashEnabled)
+            .putBoolean(KEY_PRACTICE_QUICK_EDIT_ENABLED, practiceQuickEditEnabled)
             .putBoolean(KEY_WRONG_BOOK_SMART_REVIEW_ENABLED, wrongBookSmartReviewEnabled)
             .putString(KEY_PRACTICE_PREFERRED_COUNT_MODE, preferredPracticeQuestionCountMode)
             .putInt(KEY_PRACTICE_PREFERRED_CUSTOM_COUNT, preferredPracticeCustomQuestionCount)

@@ -575,13 +575,13 @@ fun WrongBookPreferenceScreen(
             Spacer(Modifier.height(12.dp))
             PreferenceSwitchRow(
                 title = "启用错题智能复习",
-                desc = "开启后将在错题本中显示今日复习入口，并根据错题表现安排到期复习；首页学习状态会同步显示今日待复习数量。",
+                desc = "显示今日复习入口，并同步首页待复习数量。",
                 checked = QuizRepository.wrongBookSmartReviewEnabled,
                 onCheckedChange = { enabled -> QuizRepository.setWrongBookSmartReviewEnabled(context, enabled) }
             )
             Spacer(Modifier.height(10.dp))
             Text(
-                text = "提示：关闭后，错题本仍按原有规则收录错题、统计错 X 次 / 对 Y 次，并根据连续答对 2 次判断已掌握。",
+                text = "关闭后，错题本仍按原有规则统计与判定掌握。",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -714,6 +714,13 @@ fun PracticePreferenceScreen(
                 desc = "开启后练习页显示斩题按钮，可将已掌握题移出后续练习。",
                 checked = QuizRepository.practiceSlashEnabled,
                 onCheckedChange = { enabled -> QuizRepository.setPracticeSlashEnabled(context, enabled) }
+            )
+            Spacer(Modifier.height(12.dp))
+            PreferenceSwitchRow(
+                title = "题目快速编辑",
+                desc = "练习时可从题目右上角直接修改当前题目。",
+                checked = QuizRepository.practiceQuickEditEnabled,
+                onCheckedChange = { enabled -> QuizRepository.setPracticeQuickEditEnabled(context, enabled) }
             )
             Spacer(Modifier.height(12.dp))
             Text(

@@ -44,8 +44,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.automirrored.rounded.TextSnippet
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.AlertDialog
@@ -76,6 +79,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yiqiu.shirohaquiz.R
+import com.yiqiu.shirohaquiz.importer.model.Option
+import com.yiqiu.shirohaquiz.importer.model.Question
 import com.yiqiu.shirohaquiz.importer.model.QuestionType
 import com.yiqiu.shirohaquiz.state.QuestionCheckResult
 import com.yiqiu.shirohaquiz.state.QuizRepository
@@ -86,6 +91,7 @@ import com.yiqiu.shirohaquiz.ui.components.NoticeCard
 import com.yiqiu.shirohaquiz.ui.components.QuizOptionCard
 import com.yiqiu.shirohaquiz.ui.components.QuizOptionResultStyle
 import com.yiqiu.shirohaquiz.ui.components.QuestionImagesBlock
+import com.yiqiu.shirohaquiz.ui.components.ShirohaHeader
 import com.yiqiu.shirohaquiz.ui.components.StatusChip
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaSpacing
 import kotlinx.coroutines.delay
@@ -96,7 +102,8 @@ import kotlin.math.abs
 @Composable
 fun PracticeScreen(
     onGoExam: () -> Unit = {},
-    onOpenRecords: () -> Unit = {}
+    onOpenRecords: () -> Unit = {},
+    onOpenQuickEdit: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val bank = QuizRepository.activeBank()
@@ -514,6 +521,9 @@ fun PracticeScreen(
                     if (isReciteMode) CompactPracticeChip("背题模式", selected = true)
                     if (isBatchSubmitted && batchReviewWrongOnly) CompactPracticeChip("只看错题", selected = true)
                 }
+                if (QuizRepository.practiceQuickEditEnabled) {
+                    QuickEditQuestionIconButton(onClick = onOpenQuickEdit)
+                }
                 if (QuizRepository.practiceSlashEnabled && QuizRepository.practiceSourceLabel == "当前题库") {
                     SlashQuestionRoundButton(
                         onClick = { QuizRepository.slashCurrentPracticeQuestion(context) }
@@ -780,6 +790,211 @@ fun PracticeScreen(
 }
 
 @OptIn(ExperimentalLayoutApi::class)
+
+@Composable
+fun PracticeQuickEditScreen(
+    onBack: () -> Unit
+) {
+    val question = QuizRepository.currentPracticeQuestion()
+
+    Column(
+        modifier = Modifier
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = ShirohaSpacing.Xl, vertical = ShirohaSpacing.Sm),
+        verticalArrangement = Arrangement.spacedBy(ShirohaSpacing.Lg)
+    ) {
+        ShirohaHeader(
+            kicker = "Quick Edit",
+            title = "快速编辑题目",
+            subtitle = "修正当前练习题后，可直接返回继续刷题。"
+        )
+
+        if (question == null) {
+            GlassCard { NoticeCard("当前没有可编辑的练习题。") }
+            ActionPillButton(
+                icon = Icons.AutoMirrored.Rounded.ArrowBack,
+                text = "返回练习",
+                primary = false,
+                modifier = Modifier.height(44.dp),
+                onClick = onBack
+            )
+            return
+        }
+
+        var questionText by remember(question.id) { mutableStateOf(question.question) }
+        var answerText by remember(question.id) { mutableStateOf(question.answer.joinToString(" / ")) }
+        var analysisText by remember(question.id) { mutableStateOf(question.analysis) }
+        var optionDrafts by remember(question.id) { mutableStateOf(initialQuickEditOptions(question)) }
+        var savedNotice by remember(question.id) { mutableStateOf("") }
+        val isObjective = question.type == QuestionType.SINGLE ||
+            question.type == QuestionType.MULTIPLE ||
+            question.type == QuestionType.JUDGE
+
+        GlassCard {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                StatusChip("第 ${question.number.ifBlank { "-" }} 题")
+                StatusChip(typeLabel(question.type))
+                StatusChip("保留题型")
+            }
+            Spacer(Modifier.height(14.dp))
+            OutlinedTextField(
+                value = questionText,
+                onValueChange = {
+                    questionText = it
+                    savedNotice = ""
+                },
+                label = { Text("题干") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 4,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default)
+            )
+
+            if (question.images.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                NoticeCard("图片题图暂不在快速编辑中修改，保存后会继续保留原题图片。")
+            }
+
+            if (isObjective) {
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = "选项",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.height(8.dp))
+                optionDrafts.forEachIndexed { index, option ->
+                    OutlinedTextField(
+                        value = option.text,
+                        onValueChange = { value ->
+                            optionDrafts = optionDrafts.toMutableList().also { drafts ->
+                                drafts[index] = option.copy(text = value)
+                            }
+                            savedNotice = ""
+                        },
+                        label = { Text("选项 ${option.key}") },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    ActionPillButton(
+                        icon = Icons.Rounded.Add,
+                        text = "新增选项",
+                        primary = false,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(42.dp),
+                        fillWidthContent = true,
+                        onClick = {
+                            nextQuickEditOptionKey(optionDrafts)?.let { key ->
+                                optionDrafts = optionDrafts + Option(key = key, text = "")
+                                savedNotice = ""
+                            }
+                        }
+                    )
+                    ActionPillButton(
+                        icon = Icons.Rounded.DeleteOutline,
+                        text = "删除最后",
+                        primary = false,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(42.dp),
+                        fillWidthContent = true,
+                        enabled = optionDrafts.size > minimumOptionCount(question.type),
+                        onClick = {
+                            if (optionDrafts.size > minimumOptionCount(question.type)) {
+                                optionDrafts = optionDrafts.dropLast(1)
+                                savedNotice = ""
+                            }
+                        }
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            OutlinedTextField(
+                value = answerText,
+                onValueChange = {
+                    answerText = it
+                    savedNotice = ""
+                },
+                label = { Text(if (isObjective) "答案，例如 A 或 A/B" else "参考答案") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = if (isObjective) 1 else 2,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Text,
+                    imeAction = ImeAction.Next
+                )
+            )
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = analysisText,
+                onValueChange = {
+                    analysisText = it
+                    savedNotice = ""
+                },
+                label = { Text("解析") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 4,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default)
+            )
+
+            if (savedNotice.isNotBlank()) {
+                Spacer(Modifier.height(10.dp))
+                NoticeCard(savedNotice)
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            ActionPillButton(
+                icon = Icons.AutoMirrored.Rounded.ArrowBack,
+                text = "取消",
+                primary = false,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(50.dp),
+                fillWidthContent = true,
+                onClick = onBack
+            )
+            ActionPillButton(
+                icon = Icons.Rounded.CheckCircle,
+                text = "保存修改",
+                primary = questionText.isNotBlank(),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(50.dp),
+                fillWidthContent = true,
+                enabled = questionText.isNotBlank(),
+                onClick = {
+                    val updatedQuestion = question.copy(
+                        question = questionText.trim(),
+                        options = if (isObjective) optionDrafts.map { it.copy(text = it.text.trim()) } else emptyList(),
+                        answer = parseQuickEditAnswer(answerText, question.type, optionDrafts),
+                        analysis = analysisText.trim()
+                    )
+                    if (QuizRepository.updateCurrentPracticeQuestion(updatedQuestion)) {
+                        savedNotice = "已保存修改，当前练习题已刷新。"
+                        onBack()
+                    } else {
+                        savedNotice = "保存失败：未找到这道题的源题库。"
+                    }
+                }
+            )
+        }
+    }
+}
+
+
 @Composable
 private fun PracticeSetupPanel(
     bankName: String,
@@ -1149,6 +1364,31 @@ private fun PracticeSetupStepCard(
 }
 
 
+
+
+@Composable
+private fun QuickEditQuestionIconButton(
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.EditNote,
+            contentDescription = "快速编辑当前题目",
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(22.dp)
+        )
+    }
+}
 
 @Composable
 private fun SlashQuestionRoundButton(
@@ -1885,6 +2125,70 @@ private val practiceTypeOrder = listOf(
     QuestionType.BLANK,
     QuestionType.SHORT
 )
+
+
+private fun initialQuickEditOptions(question: Question): List<Option> {
+    if (question.options.isNotEmpty()) return question.options
+    return when (question.type) {
+        QuestionType.JUDGE -> listOf(
+            Option("A", "正确"),
+            Option("B", "错误")
+        )
+        QuestionType.SINGLE,
+        QuestionType.MULTIPLE -> listOf("A", "B", "C", "D").map { key -> Option(key, "") }
+        else -> emptyList()
+    }
+}
+
+private fun minimumOptionCount(type: QuestionType): Int = when (type) {
+    QuestionType.JUDGE -> 2
+    QuestionType.SINGLE,
+    QuestionType.MULTIPLE -> 2
+    else -> 0
+}
+
+private fun nextQuickEditOptionKey(options: List<Option>): String? {
+    val used = options.map { it.key.uppercase() }.toSet()
+    return ('A'..'Z').firstOrNull { it.toString() !in used }?.toString()
+}
+
+private fun parseQuickEditAnswer(raw: String, type: QuestionType, options: List<Option>): List<String> {
+    val trimmed = raw.trim()
+    if (trimmed.isBlank()) return emptyList()
+    return when (type) {
+        QuestionType.SINGLE,
+        QuestionType.MULTIPLE,
+        QuestionType.JUDGE -> {
+            val upper = trimmed.uppercase()
+            val normalized = when (upper) {
+                "正确", "对", "是", "TRUE", "T", "√" -> "A"
+                "错误", "错", "否", "FALSE", "F", "×", "X" -> "B"
+                else -> upper
+            }
+            val optionKeys = options.map { it.key.uppercase() }.toSet()
+            val tokens = normalized
+                .split(Regex("""[\s,，、/|;；]+"""))
+                .flatMap { token ->
+                    if (token.length > 1 && token.all { it in 'A'..'Z' }) {
+                        token.map { it.toString() }
+                    } else {
+                        listOf(token)
+                    }
+                }
+                .map { it.trim().uppercase() }
+                .filter { it.isNotBlank() && it in optionKeys }
+                .distinct()
+            tokens
+        }
+        QuestionType.BLANK,
+        QuestionType.SHORT -> trimmed
+            .split(Regex("""[\n/]+"""))
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .ifEmpty { listOf(trimmed) }
+    }
+}
+
 
 private fun typeLabel(type: QuestionType): String = when (type) {
     QuestionType.SINGLE -> "单选题"
