@@ -197,10 +197,10 @@ fun PracticeScreen(
         )
     }
 
-    val selectedAvailable = remember(availableCounts, selectedTypes) {
-        availableCounts.entries.sumOf { (type, count) -> if (type in selectedTypes) count else 0 }
+    val effectiveSelectedTypes = selectedTypes.ifEmpty { defaultPracticeTypes }
+    val selectedAvailable = remember(availableCounts, effectiveSelectedTypes) {
+        availableCounts.entries.sumOf { (type, count) -> if (type in effectiveSelectedTypes) count else 0 }
     }
-    val effectiveSelectedTypes = selectedTypes.ifEmpty { QuizRepository.objectiveQuestionTypes() }
     val sequentialProgressSnapshot = bank?.id?.let { bankId -> QuizRepository.practiceSequentialProgress[bankId] } ?: 0
     val sequentialProgressStartNumber = remember(
         bank?.id,
@@ -341,7 +341,7 @@ fun PracticeScreen(
                 bankName = bank.name,
                 totalQuestions = bank.questions.size,
                 availableCounts = availableCounts,
-                selectedTypes = selectedTypes,
+                selectedTypes = effectiveSelectedTypes,
                 selectedQuestionCount = selectedQuestionCount.coerceAtMost(selectedAvailable.coerceAtLeast(1)),
                 selectedQuestionCountMode = selectedQuestionCountMode,
                 practiceOrderMode = practiceOrderMode,
@@ -369,7 +369,12 @@ fun PracticeScreen(
                     sequentialStartMode = QuizRepository.SEQUENTIAL_START_CUSTOM
                 },
                 onToggleType = { type ->
-                    val updated = if (selectedTypes.contains(type)) selectedTypes - type else selectedTypes + type
+                    val currentTypes = selectedTypes.ifEmpty { defaultPracticeTypes }
+                    val updated = if (currentTypes.contains(type)) {
+                        if (currentTypes.size <= 1) currentTypes else currentTypes - type
+                    } else {
+                        currentTypes + type
+                    }
                     selectedTypes = updated
                     val newAvailable = availableCounts.entries.sumOf { (itemType, count) -> if (itemType in updated) count else 0 }
                     var savedCountMode = selectedQuestionCountMode
@@ -1201,26 +1206,38 @@ private fun PracticeSetupPanel(
             Spacer(Modifier.height(10.dp))
             Text("顺序起点", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(7.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 ActionPillButton(
                     icon = Icons.Rounded.PlayArrow,
-                    text = "从上次：第 ${sequentialProgressStartNumber.coerceAtLeast(1)} 题",
+                    text = "从上次开始",
                     primary = sequentialStartMode == QuizRepository.SEQUENTIAL_START_LAST,
-                    modifier = Modifier.height(44.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp),
+                    fillWidthContent = true,
                     onClick = { onSelectSequentialStartMode(QuizRepository.SEQUENTIAL_START_LAST) }
                 )
                 ActionPillButton(
                     icon = Icons.AutoMirrored.Rounded.TextSnippet,
                     text = "从头开始",
                     primary = sequentialStartMode == QuizRepository.SEQUENTIAL_START_FIRST,
-                    modifier = Modifier.height(44.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp),
+                    fillWidthContent = true,
                     onClick = { onSelectSequentialStartMode(QuizRepository.SEQUENTIAL_START_FIRST) }
                 )
                 ActionPillButton(
                     icon = Icons.Rounded.EditNote,
                     text = "自选题号",
                     primary = sequentialStartMode == QuizRepository.SEQUENTIAL_START_CUSTOM,
-                    modifier = Modifier.height(44.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp),
+                    fillWidthContent = true,
                     onClick = {
                         customSequentialStartText = sequentialCustomStartNumber.coerceIn(1, selectedAvailable.coerceAtLeast(1)).toString()
                         showCustomSequentialStartDialog = true
@@ -1324,16 +1341,37 @@ private fun PracticeSetupPanel(
         }
         Text("题型", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(6.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            practiceTypeOrder.filter { (availableCounts[it] ?: 0) > 0 }.forEach { type ->
-                val note = if (type in QuizRepository.objectiveQuestionTypes()) "" else " · 主观"
-                ActionPillButton(
-                    icon = Icons.Rounded.CheckCircle,
-                    text = "${typeLabel(type)} ${availableCounts[type] ?: 0}$note",
-                    primary = type in selectedTypes,
-                    modifier = Modifier.height(44.dp),
-                    onClick = { onToggleType(type) }
-                )
+        val visibleTypes = practiceTypeOrder.filter { (availableCounts[it] ?: 0) > 0 }
+        val objectiveVisibleTypes = visibleTypes.filter { it in QuizRepository.objectiveQuestionTypes() }
+        if (visibleTypes.size == objectiveVisibleTypes.size && visibleTypes.size in 2..3) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                visibleTypes.forEach { type ->
+                    ActionPillButton(
+                        icon = Icons.Rounded.CheckCircle,
+                        text = "${compactTypeLabel(type)} ${availableCounts[type] ?: 0}",
+                        primary = type in selectedTypes,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        fillWidthContent = true,
+                        onClick = { onToggleType(type) }
+                    )
+                }
+            }
+        } else {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                visibleTypes.forEach { type ->
+                    ActionPillButton(
+                        icon = Icons.Rounded.CheckCircle,
+                        text = "${compactTypeLabel(type)} ${availableCounts[type] ?: 0}",
+                        primary = type in selectedTypes,
+                        modifier = Modifier.height(44.dp),
+                        onClick = { onToggleType(type) }
+                    )
+                }
             }
         }
 
@@ -1353,35 +1391,37 @@ private fun PracticeSetupPanel(
             )
         }
         Spacer(Modifier.height(6.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            val safeAvailable = selectedAvailable.coerceAtLeast(1)
-            val halfCount = (safeAvailable / 2).coerceAtLeast(1)
-            ActionPillButton(
-                icon = Icons.Rounded.PlayArrow,
-                text = "自定义",
-                primary = selectedQuestionCountMode == "custom",
-                modifier = Modifier.height(44.dp),
-                onClick = {
-                    customQuestionCountText = selectedQuestionCount.coerceIn(1, safeAvailable).toString()
-                    showCustomCountDialog = true
+        if (selectedAvailable > 0) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                val safeAvailable = selectedAvailable
+                val halfCount = (safeAvailable / 2).coerceAtLeast(1)
+                ActionPillButton(
+                    icon = Icons.Rounded.PlayArrow,
+                    text = "自定义",
+                    primary = selectedQuestionCountMode == "custom",
+                    modifier = Modifier.height(44.dp),
+                    onClick = {
+                        customQuestionCountText = selectedQuestionCount.coerceIn(1, safeAvailable).toString()
+                        showCustomCountDialog = true
+                    }
+                )
+                buildList {
+                    if (safeAvailable >= 50) add(Triple(50, "50 题", "50"))
+                    if (safeAvailable >= 100) add(Triple(100, "100 题", "100"))
+                    if (safeAvailable > 1) add(Triple(halfCount, "一半 $halfCount 题", "half"))
+                    add(Triple(safeAvailable, "全部 $safeAvailable 题", "all"))
                 }
-            )
-            buildList {
-                if (safeAvailable >= 50) add(Triple(50, "50 题", "50"))
-                if (safeAvailable >= 100) add(Triple(100, "100 题", "100"))
-                add(Triple(halfCount, "一半 $halfCount 题", "half"))
-                add(Triple(safeAvailable, "全部 $safeAvailable 题", "all"))
+                    .distinctBy { it.first }
+                    .forEach { (count, label, mode) ->
+                        ActionPillButton(
+                            icon = Icons.Rounded.PlayArrow,
+                            text = label,
+                            primary = selectedQuestionCountMode == mode,
+                            modifier = Modifier.height(44.dp),
+                            onClick = { onSelectQuestionCount(count, mode) }
+                        )
+                    }
             }
-                .distinctBy { it.first }
-                .forEach { (count, label, mode) ->
-                    ActionPillButton(
-                        icon = Icons.Rounded.PlayArrow,
-                        text = label,
-                        primary = selectedQuestionCountMode == mode,
-                        modifier = Modifier.height(44.dp),
-                        onClick = { onSelectQuestionCount(count, mode) }
-                    )
-                }
         }
         if (selectedAvailable <= 0) {
             Spacer(Modifier.height(10.dp))
@@ -2372,6 +2412,14 @@ private fun parseQuickEditAnswer(raw: String, type: QuestionType, options: List<
     }
 }
 
+
+private fun compactTypeLabel(type: QuestionType): String = when (type) {
+    QuestionType.SINGLE -> "单选"
+    QuestionType.MULTIPLE -> "多选"
+    QuestionType.JUDGE -> "判断"
+    QuestionType.BLANK -> "填空"
+    QuestionType.SHORT -> "简答"
+}
 
 private fun typeLabel(type: QuestionType): String = when (type) {
     QuestionType.SINGLE -> "单选题"
