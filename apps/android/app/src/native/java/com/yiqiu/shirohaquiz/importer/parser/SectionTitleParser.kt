@@ -26,6 +26,10 @@ object SectionTitleParser {
     private val exactAnswerSectionTitleRegex = Regex(
         """^\s*(?:[一二三四五六七八九十百]+|\d{1,3})?[、.．]?\s*(?:集中答案|集中解析|参考答案|标准答案|正确答案|答案(?:与|及)?解析|答案解析|试题答案|答题要点|参考要点|参考思路|答题思路|作答思路|评分要点|答案区|解析区|答案部分)\s*[:：]?\s*$"""
     )
+    private val questionBlankMarkerRegex = Regex("""[（(]\s*[)）]""")
+    private val questionPromptKeywordRegex = Regex(
+        """(?:[?？]|(?:下列|以下|哪[一项种个]|哪个|哪种|哪项|不正确|不属于|正确|错误|属于|包括|主要|应当|应该|可以|能够|能否|是否|为什么|如何))"""
+    )
 
     fun parse(rawLine: String): SectionInfo? {
         val title = rawLine.trim()
@@ -33,6 +37,7 @@ object SectionTitleParser {
         if (title.length > 60) return null
 
         if (isExactAnswerSectionTitle(title)) return SectionInfo(title = title, isAnswerSection = true)
+        if (looksLikeNumberedQuestionStemLine(title)) return null
         if (genericSectionHeadingRegex.matches(title)) return SectionInfo(title = title)
         if (answerSectionRegex.containsMatchIn(title) && !isInlineAnswerLine(title)) {
             return SectionInfo(title = title, isAnswerSection = true)
@@ -57,6 +62,21 @@ object SectionTitleParser {
             return SectionInfo(title = title)
         }
         return null
+    }
+
+    private fun looksLikeNumberedQuestionStemLine(title: String): Boolean {
+        val rest = arabicNumberedRemainderRegex.find(title)?.groupValues?.getOrNull(1)?.trim().orEmpty()
+        if (rest.isBlank()) return false
+        if (looksLikeArabicNumberedTypedQuestionLine(title)) return true
+        if (questionBlankMarkerRegex.containsMatchIn(rest)) return true
+        if (questionPromptKeywordRegex.containsMatchIn(rest) && !looksLikeShortGenericSectionTitle(rest)) return true
+        return false
+    }
+
+    private fun looksLikeShortGenericSectionTitle(rest: String): Boolean {
+        val text = rest.trim().trimEnd(':', '：')
+        if (text.length > 16) return false
+        return Regex("""(?:测试区|样本|题库|格式|边界|极端|客观题|主观题|材料题|集中答案|AI\s*解析|AI\s*核对|功能测试)""", RegexOption.IGNORE_CASE).containsMatchIn(text)
     }
 
     private fun looksLikeTypeSectionRemainder(remainder: String): Boolean {
