@@ -29,7 +29,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -74,7 +80,9 @@ fun HomeScreen(
     val homeSectionGap = ShirohaSpacing.Lg
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val compactHomeLayout = maxHeight < 760.dp
+        val density = LocalDensity.current
+        val shortcutGridMinHeight = 224.dp * density.fontScale.coerceIn(1f, 1.2f)
+        var compactHomeLayout by remember(maxHeight, shortcutGridMinHeight) { mutableStateOf(false) }
         val homeScrollState = rememberScrollState()
         val homeContentModifier = if (compactHomeLayout) {
             Modifier
@@ -128,12 +136,18 @@ fun HomeScreen(
                 modifier = if (compactHomeLayout) {
                     Modifier
                         .fillMaxWidth()
-                        .height(224.dp)
+                        .height(shortcutGridMinHeight)
                 } else {
                     Modifier
                         .fillMaxWidth()
                         .weight(1f)
                         .padding(bottom = homeSectionGap)
+                        .onSizeChanged { size ->
+                            val gridHeight = with(density) { size.height.toDp() }
+                            if (gridHeight < shortcutGridMinHeight) {
+                                compactHomeLayout = true
+                            }
+                        }
                 }
             )
 

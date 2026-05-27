@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -1212,7 +1213,7 @@ private fun PracticeSetupPanel(
             ) {
                 ActionPillButton(
                     icon = Icons.Rounded.PlayArrow,
-                    text = "从上次开始",
+                    text = "继续上次",
                     primary = sequentialStartMode == QuizRepository.SEQUENTIAL_START_LAST,
                     modifier = Modifier
                         .weight(1f)
@@ -1355,8 +1356,9 @@ private fun PracticeSetupPanel(
                         primary = type in selectedTypes,
                         modifier = Modifier
                             .weight(1f)
-                            .height(44.dp),
+                            .heightIn(min = 44.dp),
                         fillWidthContent = true,
+                        textMaxLines = 2,
                         onClick = { onToggleType(type) }
                     )
                 }
@@ -1368,7 +1370,8 @@ private fun PracticeSetupPanel(
                         icon = Icons.Rounded.CheckCircle,
                         text = "${compactTypeLabel(type)} ${availableCounts[type] ?: 0}",
                         primary = type in selectedTypes,
-                        modifier = Modifier.height(44.dp),
+                        modifier = Modifier.heightIn(min = 44.dp),
+                        textMaxLines = 2,
                         onClick = { onToggleType(type) }
                     )
                 }

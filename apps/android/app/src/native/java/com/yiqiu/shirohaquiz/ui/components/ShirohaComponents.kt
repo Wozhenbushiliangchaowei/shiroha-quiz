@@ -208,6 +208,7 @@ fun ActionPillButton(
     modifier: Modifier = Modifier,
     fillWidthContent: Boolean = false,
     enabled: Boolean = true,
+    textMaxLines: Int = 1,
     onClick: () -> Unit = {}
 ) {
     val shape = RoundedCornerShape(ShirohaRadius.Pill)
@@ -249,7 +250,7 @@ fun ActionPillButton(
                 color = if (primary) ShirohaColors.TextOnBrand else MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.labelLarge,
-                maxLines = 1,
+                maxLines = textMaxLines.coerceAtLeast(1),
                 overflow = TextOverflow.Ellipsis
             )
         }

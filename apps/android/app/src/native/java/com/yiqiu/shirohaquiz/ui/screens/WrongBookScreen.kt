@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -214,8 +215,9 @@ fun WrongBookScreen(
                         primary = sort == item,
                         modifier = Modifier
                             .weight(1f)
-                            .height(44.dp),
+                            .heightIn(min = 44.dp),
                         fillWidthContent = true,
+                        textMaxLines = 2,
                         onClick = { sort = item }
                     )
                 }

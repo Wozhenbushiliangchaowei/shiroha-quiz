@@ -96,6 +96,8 @@ private fun RecordCard(
     val accuracy = if (record.total == 0) 0 else record.correct * 100 / record.total
     val finishTime = record.timestamp
     val isExam = record.source.contains("考试")
+    val meaningfulTitle = meaningfulRecordTitle(record)
+    val footerText = recordFooterText(record)
 
     GlassCard(modifier = Modifier.shirohaNoRippleClickable(onClick = onClick)) {
         Row(
@@ -118,20 +120,27 @@ private fun RecordCard(
                 )
             }
             Text(
-                text = formatShortRecordTime(finishTime),
+                text = formatRecordTime(finishTime),
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
             )
         }
-        Spacer(Modifier.height(10.dp))
-        Text(
-            text = record.title.ifBlank { if (isExam) "考试记录" else "练习记录" },
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Spacer(Modifier.height(8.dp))
+
+        if (meaningfulTitle != null) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = meaningfulTitle,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(8.dp))
+        } else {
+            Spacer(Modifier.height(10.dp))
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -140,7 +149,12 @@ private fun RecordCard(
             Text(
                 text = "${record.total} 题 · 对 ${record.correct} · 错 $wrong",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp)
             )
             Text(
                 text = if (isExam && record.totalScore != null && record.earnedScore != null) {
@@ -150,14 +164,17 @@ private fun RecordCard(
                 },
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1
             )
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            text = if (record.questionResults.isNotEmpty()) "点击查看逐题详情" else "旧记录仅保留摘要，缺少逐题详情",
+            text = footerText,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -172,8 +189,27 @@ internal fun formatRecordTime(timestamp: Long): String {
     return SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(timestamp))
 }
 
-private fun formatShortRecordTime(timestamp: Long): String {
-    return SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(timestamp))
+private fun meaningfulRecordTitle(record: StudyRecord): String? {
+    val title = record.title.trim()
+    if (title.isBlank()) return null
+    val bankName = record.bankName.trim()
+    val placeholders = setOf(
+        "当前题库",
+        "原生考试",
+        "练习记录",
+        "考试记录",
+        "当前练习",
+        "当前考试"
+    )
+    if (title in placeholders) return null
+    if (bankName.isNotBlank() && title == bankName) return null
+    return title
+}
+
+private fun recordFooterText(record: StudyRecord): String {
+    val duration = record.durationSeconds?.let { "用时 ${formatDuration(it)}" }
+    val detail = if (record.questionResults.isNotEmpty()) "点击查看详情" else "仅保留摘要"
+    return listOfNotNull(duration, detail).joinToString(" · ")
 }
 
 internal fun Double.trimScore(): String {
