@@ -237,32 +237,46 @@ Shiroha Quiz 的题库和记录保存在本地存储中（Web 端使用浏览器
 shiroha-quiz/
 ├── .github/                         # Issue 模板与 GitHub Actions
 ├── apps/
-│   ├── web/                         # Web 版静态页面与题库资源
+│   ├── web/                         # Web 版
 │   │   ├── index.html               # Web 入口
 │   │   ├── app.js                   # Web 主逻辑
 │   │   ├── styles.css               # Web 样式
 │   │   ├── question-bank.js         # 内置题库数据
-│   │   ├── data/                    # 示例 / 内置题库
 │   │   ├── media/                   # Web 插画素材
+│   │   ├── data/                    # 内置题库
 │   │   └── libs/                    # PDF.js 等本地库
 │   └── android/                     # Android 工程
-│       └── app/
-│           ├── src/main/            # 通用 Manifest、资源与 WebView 内置资源
-│           ├── src/web/             # WebView 壳版入口
-│           ├── src/native/          # 原生 Compose 版源码
-│           ├── src/test/            # 通用测试
-│           └── src/testNative/      # 原生版解析 / 逻辑测试
+│       ├── app/
+│       │   ├── build.gradle.kts
+│       │   ├── src/main/            # 通用入口、Manifest、图标与 WebView 内置 Web 资源
+│       │   ├── src/web/             # WebView 壳版入口
+│       │   ├── src/native/          # 原生 Compose 版源码
+│       │   │   ├── ai/              # AI 客户端与提示词
+│       │   │   ├── importer/        # 题库导入引擎
+│       │   │   │   ├── assets/      #   素材提取与绑定
+│       │   │   │   ├── model/       #   导入数据模型
+│       │   │   │   ├── parser/      #   文本 / 表格 / 双文件解析
+│       │   │   │   ├── score/       #   解析策略评分
+│       │   │   │   └── validate/    #   导入结果校验
+│       │   │   ├── state/           # 全局状态管理
+│       │   │   ├── ui/              # Compose UI
+│       │   │   │   ├── app/         #   App Shell
+│       │   │   │   ├── components/  #   可复用组件
+│       │   │   │   ├── screens/     #   各页面
+│       │   │   │   └── theme/       #   主题与设计 Token
+│       │   │   └── util/            # 工具类
+│       │   ├── src/test/            # 通用单元测试
+│       │   └── src/testNative/      # 原生版解析器测试
+│       ├── build.gradle.kts
+│       ├── settings.gradle.kts
+│       ├── gradle.properties
+│       └── gradlew / gradlew.bat
 ├── docs/                            # 使用说明、导入格式、架构与开发文档
-│   ├── web/                         # Web 端相关文档
-│   ├── native/                      # 原生 Android 相关文档
-│   └── universal/                   # 通用架构建议
+│   ├── web/
+│   ├── native/
+│   └── universal/
 ├── assets/                          # 宣传图与素材源文件
-├── packages/                        # 跨端模块规划与接口说明
-├── tools/                           # 辅助脚本，如 PDF.js 下载
-├── build-release.ps1                # Web / WebView 发布辅助脚本
-├── build-release-native.ps1         # 原生版发布辅助脚本
-├── run-regression.ps1               # 回归测试辅助脚本
-├── source-upload.ps1                # 源码上传辅助脚本
+├── packages/                        # 跨端模块接口说明
 ├── CHANGELOG.md
 ├── CONTRIBUTING.md
 ├── LICENSE
