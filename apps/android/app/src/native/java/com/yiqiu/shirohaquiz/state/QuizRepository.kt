@@ -298,6 +298,7 @@ object QuizRepository {
     private val practiceQuestionBankIds = mutableStateMapOf<String, String>()
     private var practiceStartedAt by mutableStateOf<Long?>(null)
     private var practiceSequentialBankId: String? = null
+    private var practiceSequentialStartIndex: Int? = null
     private var practiceSequentialNextIndexAfterComplete: Int? = null
 
     private var initialized by mutableStateOf(false)
@@ -649,6 +650,7 @@ object QuizRepository {
         if (started) {
             val nextIndex = startIndex + selectedQuestions.size
             practiceSequentialBankId = bank.id
+            practiceSequentialStartIndex = startIndex
             practiceSequentialNextIndexAfterComplete = if (nextIndex >= source.size) 0 else nextIndex
         }
         return started
@@ -716,6 +718,7 @@ object QuizRepository {
         }
         practiceStartedAt = System.currentTimeMillis()
         practiceSequentialBankId = null
+        practiceSequentialStartIndex = null
         practiceSequentialNextIndexAfterComplete = null
         return true
     }
@@ -816,6 +819,20 @@ object QuizRepository {
     fun endPracticeSession() {
         finishPracticeSessionIfNeeded(advanceSequentialProgress = false)
         resetPracticeState()
+    }
+
+    fun canSaveSequentialProgressOnPracticeExit(): Boolean {
+        return practiceQuestions.isNotEmpty() &&
+            practiceSequentialBankId != null &&
+            practiceSequentialStartIndex != null &&
+            !practiceReciteModeEnabled
+    }
+
+    fun endPracticeSessionSavingSequentialProgress() {
+        val progressSaved = saveSequentialProgressForPracticeExit()
+        finishPracticeSessionIfNeeded(advanceSequentialProgress = false)
+        resetPracticeState()
+        if (progressSaved) persist()
     }
 
     fun nextQuestion() {
@@ -2150,6 +2167,38 @@ object QuizRepository {
     }
 
 
+    private fun saveSequentialProgressForPracticeExit(): Boolean {
+        val bankId = practiceSequentialBankId ?: return false
+        val startIndex = practiceSequentialStartIndex ?: return false
+        if (practiceReciteModeEnabled || practiceQuestions.isEmpty()) return false
+
+        val targetInCurrentSession = if (practiceMode == PRACTICE_MODE_BATCH) {
+            val batchStart = practiceCurrentBatchStartIndex()
+            if (practiceBatchSubmitted) {
+                (practiceCurrentBatchEndIndex() + 1).coerceAtMost(practiceQuestions.size)
+            } else {
+                batchStart
+            }
+        } else {
+            val currentIndex = practiceIndex.coerceIn(0, practiceQuestions.lastIndex)
+            val currentQuestion = practiceQuestions.getOrNull(currentIndex)
+            val currentSubmitted = currentQuestion?.let { practiceAnswerResults.containsKey(it.id) } == true
+            if (currentSubmitted) {
+                (currentIndex + 1).coerceAtMost(practiceQuestions.size)
+            } else {
+                currentIndex
+            }
+        }
+
+        val nextProgressIndex = if (targetInCurrentSession >= practiceQuestions.size) {
+            practiceSequentialNextIndexAfterComplete ?: (startIndex + practiceQuestions.size)
+        } else {
+            startIndex + targetInCurrentSession
+        }
+        practiceSequentialProgress[bankId] = nextProgressIndex.coerceAtLeast(0)
+        return true
+    }
+
     private fun finishPracticeSessionIfNeeded(advanceSequentialProgress: Boolean = false) {
         if (practiceQuestions.isEmpty() || practiceAnswerResults.isEmpty()) return
         val now = System.currentTimeMillis()
@@ -2210,6 +2259,7 @@ object QuizRepository {
         practiceQuestionBankIds.clear()
         practiceStartedAt = null
         practiceSequentialBankId = null
+        practiceSequentialStartIndex = null
         practiceSequentialNextIndexAfterComplete = null
     }
 
