@@ -269,10 +269,164 @@ object TextImportDecoder {
                 else -> extractPlainTextFromXml(match.value)
             }
         }
+        working = Regex("""<m:func\b[\s\S]*?</m:func>""").replace(working) { match ->
+            formatOmmlFunction(match.value).ifBlank { extractPlainTextFromXml(match.value) }
+        }
+        working = Regex("""<m:nary\b[\s\S]*?</m:nary>""").replace(working) { match ->
+            val operator = extractOmmlNaryOperator(match.value).ifBlank { "∑" }
+            val sub = extractOmmlChildText(match.value, "sub")
+            val sup = extractOmmlChildText(match.value, "sup")
+            val expression = extractOmmlChildText(match.value, "e")
+            buildString {
+                append(operator)
+                if (sub.isNotBlank()) append(convertScript(sub, ScriptStyle.Subscript))
+                if (sup.isNotBlank()) append(convertScript(sup, ScriptStyle.Superscript))
+                if (expression.isNotBlank()) append(expression)
+            }.ifBlank { extractPlainTextFromXml(match.value) }
+        }
+        working = Regex("""<m:limLow\b[\s\S]*?</m:limLow>""").replace(working) { match ->
+            val base = extractOmmlChildText(match.value, "e")
+            val limit = extractOmmlChildText(match.value, "lim")
+            when {
+                base.isNotBlank() && limit.isNotBlank() -> base + convertScript(limit, ScriptStyle.Subscript)
+                base.isNotBlank() -> base
+                else -> extractPlainTextFromXml(match.value)
+            }
+        }
+        working = Regex("""<m:limUpp\b[\s\S]*?</m:limUpp>""").replace(working) { match ->
+            val base = extractOmmlChildText(match.value, "e")
+            val limit = extractOmmlChildText(match.value, "lim")
+            when {
+                base.isNotBlank() && limit.isNotBlank() -> base + convertScript(limit, ScriptStyle.Superscript)
+                base.isNotBlank() -> base
+                else -> extractPlainTextFromXml(match.value)
+            }
+        }
+        working = Regex("""<m:m\b[\s\S]*?</m:m>""").replace(working) { match ->
+            formatOmmlMatrix(match.value).ifBlank { extractPlainTextFromXml(match.value) }
+        }
+        working = Regex("""<m:acc\b[\s\S]*?</m:acc>""").replace(working) { match ->
+            formatOmmlAccent(match.value).ifBlank { extractPlainTextFromXml(match.value) }
+        }
+        working = Regex("""<m:bar\b[\s\S]*?</m:bar>""").replace(working) { match ->
+            formatOmmlBar(match.value).ifBlank { extractPlainTextFromXml(match.value) }
+        }
+        working = Regex("""<m:d\b[\s\S]*?</m:d>""").replace(working) { match ->
+            formatOmmlDelimiter(match.value).ifBlank { extractPlainTextFromXml(match.value) }
+        }
         working = Regex("""<m:chr\b[^>]*(?:m:val|val)="([^"]+)"[^>]*/?>""").replace(working) { match ->
             decodeXmlEntities(match.groupValues[1])
         }
         return extractPlainTextFromXml(working)
+    }
+
+
+    private fun extractOmmlNaryOperator(xml: String): String {
+        return Regex("""<m:chr\b[^>]*(?:m:val|val)="([^"]+)"[^>]*/?>""")
+            .find(xml)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.let(::decodeXmlEntities)
+            .orEmpty()
+    }
+
+    private fun formatOmmlDelimiter(xml: String): String {
+        val content = extractOmmlChildText(xml, "e")
+        if (content.isBlank()) return ""
+        val begin = extractOmmlControlValue(xml, "begChr").ifBlank { "(" }
+        val end = extractOmmlControlValue(xml, "endChr").ifBlank { matchingEndDelimiter(begin) }
+        return begin + content + end
+    }
+
+    private fun formatOmmlMatrix(xml: String): String {
+        val rows = Regex("""<m:mr\b[\s\S]*?</m:mr>""")
+            .findAll(xml)
+            .map { rowMatch -> extractOmmlChildTexts(rowMatch.value, "e").filter { it.isNotBlank() } }
+            .filter { it.isNotEmpty() }
+            .toList()
+        if (rows.isEmpty()) return ""
+        val hasMultipleColumns = rows.any { it.size > 1 }
+        return if (hasMultipleColumns) {
+            rows.joinToString(prefix = "[", postfix = "]", separator = "; ") { row ->
+                row.joinToString(prefix = "[", postfix = "]", separator = ", ")
+            }
+        } else {
+            rows.joinToString(prefix = "{", postfix = "}", separator = "; ") { row -> row.first() }
+        }
+    }
+
+    private fun formatOmmlAccent(xml: String): String {
+        val base = extractOmmlChildText(xml, "e")
+        if (base.isBlank()) return ""
+        val accent = extractOmmlControlValue(xml, "chr")
+        return when (accent) {
+            "→", "⃗" -> base + "⃗"
+            "^", "̂" -> base + "̂"
+            "~", "˜", "̃" -> base + "̃"
+            "¯", "ˉ", "̄" -> base + "̄"
+            "˙", "·", "̇" -> base + "̇"
+            "¨", "̈" -> base + "̈"
+            "" -> base
+            else -> base + accent
+        }
+    }
+
+    private fun formatOmmlBar(xml: String): String {
+        val base = extractOmmlChildText(xml, "e")
+        if (base.isBlank()) return ""
+        val position = extractOmmlControlValue(xml, "pos").lowercase(Locale.ROOT)
+        return if (position == "bot" || position == "bottom") base + "̲" else base + "̄"
+    }
+
+    private fun formatOmmlFunction(xml: String): String {
+        val rawName = extractOmmlChildText(xml, "fName").trim()
+        val argument = extractOmmlChildText(xml, "e").trim()
+        if (rawName.isBlank()) return argument
+        val normalizedName = normalizeOmmlFunctionName(rawName)
+        if (argument.isBlank()) return normalizedName
+        return when (normalizedName.lowercase(Locale.ROOT)) {
+            "sin", "cos", "tan", "cot", "sec", "csc", "log", "ln", "lg" -> "$normalizedName($argument)"
+            "lim" -> normalizedName + argument
+            else -> "$normalizedName($argument)"
+        }
+    }
+
+    private fun normalizeOmmlFunctionName(name: String): String {
+        val compact = name.replace(Regex("""\s+"""), "")
+        return when (compact.lowercase(Locale.ROOT)) {
+            "sin", "sine" -> "sin"
+            "cos", "cosine" -> "cos"
+            "tan", "tangent" -> "tan"
+            "cot" -> "cot"
+            "sec" -> "sec"
+            "csc" -> "csc"
+            "log" -> "log"
+            "ln" -> "ln"
+            "lg" -> "lg"
+            "lim" -> "lim"
+            else -> compact.ifBlank { name }
+        }
+    }
+
+    private fun matchingEndDelimiter(begin: String): String {
+        return when (begin) {
+            "(" -> ")"
+            "[" -> "]"
+            "{" -> "}"
+            "|" -> "|"
+            "‖" -> "‖"
+            "⟨" -> "⟩"
+            else -> begin
+        }
+    }
+
+    private fun extractOmmlControlValue(xml: String, tagName: String): String {
+        return Regex("""<m:$tagName\b[^>]*(?:m:val|val)=\"([^\"]*)\"[^>]*/?>""")
+            .find(xml)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.let(::decodeXmlEntities)
+            .orEmpty()
     }
 
     private fun replaceOmmlScriptBlock(
@@ -292,6 +446,18 @@ object TextImportDecoder {
             .replace(Regex("""^<m:$childName\b[^>]*>"""), "")
             .replace(Regex("""</m:$childName>$"""), "")
         return extractOmmlText(inner)
+    }
+
+    private fun extractOmmlChildTexts(xml: String, childName: String): List<String> {
+        return Regex("""<m:$childName\b[\s\S]*?</m:$childName>""")
+            .findAll(xml)
+            .map { match ->
+                val inner = match.value
+                    .replace(Regex("""^<m:$childName\b[^>]*>"""), "")
+                    .replace(Regex("""</m:$childName>$"""), "")
+                extractOmmlText(inner)
+            }
+            .toList()
     }
 
     private fun extractSpreadsheetSharedStrings(xml: String): List<String> {

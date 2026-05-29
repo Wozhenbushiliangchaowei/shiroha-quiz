@@ -36,7 +36,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -97,6 +96,7 @@ import com.yiqiu.shirohaquiz.ui.components.QuestionImagesBlock
 import com.yiqiu.shirohaquiz.ui.components.ShirohaHeader
 import com.yiqiu.shirohaquiz.ui.components.StatusChip
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaSpacing
+import com.yiqiu.shirohaquiz.ui.text.LatexDisplayFormatter
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -620,7 +620,7 @@ fun PracticeScreen(
             }
             Spacer(Modifier.height(12.dp))
             Text(
-                text = question.question,
+                text = LatexDisplayFormatter.format(question.question),
                 style = MaterialTheme.typography.titleLarge.copy(
                     fontSize = QuizRepository.questionFontSizeSp().sp,
                     lineHeight = QuizRepository.questionLineHeightSp().sp
@@ -821,19 +821,14 @@ fun PracticeScreen(
 
             if (showExitPracticeConfirm) {
                 PracticeExitConfirmDialog(
-                    canSaveProgress = !isPracticeComplete && QuizRepository.canSaveSequentialProgressOnPracticeExit(),
                     onDismiss = { showExitPracticeConfirm = false },
-                    onDirectExit = {
+                    onConfirm = {
                         showExitPracticeConfirm = false
                         if (isPracticeComplete) {
                             QuizRepository.completePracticeSession()
                         } else {
                             QuizRepository.endPracticeSession()
                         }
-                    },
-                    onSaveAndExit = {
-                        showExitPracticeConfirm = false
-                        QuizRepository.endPracticeSessionSavingSequentialProgress()
                     }
                 )
             }
@@ -855,7 +850,10 @@ fun PracticeScreen(
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = question.analysis.takeIf { it.isNotBlank() }?.let(::formatAnalysisForDisplay) ?: "暂无解析",
+                    text = question.analysis.takeIf { it.isNotBlank() }
+                        ?.let(::formatAnalysisForDisplay)
+                        ?.let(LatexDisplayFormatter::format)
+                        ?: "暂无解析",
                     style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 23.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1218,7 +1216,7 @@ private fun PracticeSetupPanel(
             ) {
                 ActionPillButton(
                     icon = Icons.Rounded.PlayArrow,
-                    text = "继续上次",
+                    text = "从上次开始",
                     primary = sequentialStartMode == QuizRepository.SEQUENTIAL_START_LAST,
                     modifier = Modifier
                         .weight(1f)
@@ -1361,9 +1359,8 @@ private fun PracticeSetupPanel(
                         primary = type in selectedTypes,
                         modifier = Modifier
                             .weight(1f)
-                            .heightIn(min = 44.dp),
+                            .height(44.dp),
                         fillWidthContent = true,
-                        textMaxLines = 2,
                         onClick = { onToggleType(type) }
                     )
                 }
@@ -1375,8 +1372,7 @@ private fun PracticeSetupPanel(
                         icon = Icons.Rounded.CheckCircle,
                         text = "${compactTypeLabel(type)} ${availableCounts[type] ?: 0}",
                         primary = type in selectedTypes,
-                        modifier = Modifier.heightIn(min = 44.dp),
-                        textMaxLines = 2,
+                        modifier = Modifier.height(44.dp),
                         onClick = { onToggleType(type) }
                     )
                 }
@@ -2226,39 +2222,24 @@ private fun BatchAnswerNumberChip(
 
 @Composable
 private fun PracticeExitConfirmDialog(
-    canSaveProgress: Boolean,
     onDismiss: () -> Unit,
-    onDirectExit: () -> Unit,
-    onSaveAndExit: () -> Unit
+    onConfirm: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("退出练习？") },
+        title = { Text("确定要退出练习吗？") },
         text = {
             Text(
-                text = if (canSaveProgress) {
-                    "保存退出后，下次可从当前位置继续。直接退出不会更新顺序进度。"
-                } else {
-                    "退出后将结束当前练习。"
-                },
+                text = "退出后将结束当前练习进度。",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         },
         confirmButton = {
-            if (canSaveProgress) {
-                TextButton(onClick = onSaveAndExit) { Text("保存退出") }
-            } else {
-                TextButton(onClick = onDirectExit) { Text("退出") }
-            }
+            TextButton(onClick = onConfirm) { Text("退出") }
         },
         dismissButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = onDismiss) { Text("取消") }
-                if (canSaveProgress) {
-                    TextButton(onClick = onDirectExit) { Text("直接退出") }
-                }
-            }
+            TextButton(onClick = onDismiss) { Text("取消") }
         }
     )
 }

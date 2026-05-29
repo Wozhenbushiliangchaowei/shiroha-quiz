@@ -64,6 +64,7 @@ import com.yiqiu.shirohaquiz.ui.theme.ShirohaDimens
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaMotion
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaRadius
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaSpacing
+import com.yiqiu.shirohaquiz.ui.text.LatexDisplayFormatter
 
 
 @Composable
@@ -343,6 +344,7 @@ fun QuizOptionCard(
     }
     val optionFontSize = QuizRepository.optionFontSizeSp().sp
     val optionLineHeight = QuizRepository.optionLineHeightSp().sp
+    val displayText = LatexDisplayFormatter.format(text)
 
     if (compact) {
         val compactContentColor = when {
@@ -376,7 +378,7 @@ fun QuizOptionCard(
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                text = text,
+                text = displayText,
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.bodyMedium.copy(
                     fontSize = optionFontSize,
@@ -424,7 +426,7 @@ fun QuizOptionCard(
             }
             Spacer(Modifier.width(ShirohaDimens.OptionLabelTextGap))
             Text(
-                text = text,
+                text = displayText,
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = optionFontSize, lineHeight = optionLineHeight),
                 fontWeight = if (selected || resultStyle != QuizOptionResultStyle.Neutral) FontWeight.SemiBold else FontWeight.Normal,
