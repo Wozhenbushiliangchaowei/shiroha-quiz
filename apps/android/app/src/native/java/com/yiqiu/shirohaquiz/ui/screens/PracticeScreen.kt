@@ -1216,7 +1216,7 @@ private fun PracticeSetupPanel(
             ) {
                 ActionPillButton(
                     icon = Icons.Rounded.PlayArrow,
-                    text = "从上次开始",
+                    text = "继续上次",
                     primary = sequentialStartMode == QuizRepository.SEQUENTIAL_START_LAST,
                     modifier = Modifier
                         .weight(1f)

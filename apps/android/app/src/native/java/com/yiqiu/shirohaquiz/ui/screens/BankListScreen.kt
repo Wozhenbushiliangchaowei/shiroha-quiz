@@ -1,7 +1,6 @@
 package com.yiqiu.shirohaquiz.ui.screens
 
 import androidx.compose.foundation.BorderStroke
-import com.yiqiu.shirohaquiz.ui.components.shirohaNoRippleClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -39,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.yiqiu.shirohaquiz.importer.model.QuestionType
+import com.yiqiu.shirohaquiz.state.DEFAULT_BANK_GROUP_NAME
 import com.yiqiu.shirohaquiz.state.QuizBank
 import com.yiqiu.shirohaquiz.state.QuizRepository
 import com.yiqiu.shirohaquiz.ui.components.ActionPillButton
@@ -46,6 +46,7 @@ import com.yiqiu.shirohaquiz.ui.components.GlassCard
 import com.yiqiu.shirohaquiz.ui.components.ShirohaDangerConfirmDialog
 import com.yiqiu.shirohaquiz.ui.components.ShirohaHeader
 import com.yiqiu.shirohaquiz.ui.components.StatusChip
+import com.yiqiu.shirohaquiz.ui.components.shirohaNoRippleClickable
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaColors
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaRadius
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaSpacing
@@ -57,36 +58,52 @@ fun BankListScreen(
 ) {
     val context = LocalContext.current
     val activeBank = QuizRepository.activeBank()
-    var renameTarget by remember { mutableStateOf<QuizBank?>(null) }
-    var renameText by remember { mutableStateOf("") }
+    var editTarget by remember { mutableStateOf<QuizBank?>(null) }
+    var editGroupText by remember { mutableStateOf(DEFAULT_BANK_GROUP_NAME) }
+    var editNameText by remember { mutableStateOf("") }
     var deleteTarget by remember { mutableStateOf<QuizBank?>(null) }
+    var collapsedGroups by remember { mutableStateOf<Set<String>>(emptySet()) }
 
-    if (renameTarget != null) {
+    if (editTarget != null) {
         AlertDialog(
-            onDismissRequest = { renameTarget = null },
-            title = { Text("重命名题库") },
+            onDismissRequest = { editTarget = null },
+            title = { Text("编辑题库信息") },
             text = {
-                OutlinedTextField(
-                    value = renameText,
-                    onValueChange = { renameText = it },
-                    label = { Text("题库名称") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = editGroupText,
+                        onValueChange = { editGroupText = it },
+                        label = { Text("一级分组") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = editNameText,
+                        onValueChange = { editNameText = it },
+                        label = { Text("二级题库名") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        val bank = renameTarget
-                        if (bank != null && renameText.isNotBlank()) {
-                            QuizRepository.renameBank(context, bank.id, renameText)
+                        val bank = editTarget
+                        if (bank != null && editNameText.isNotBlank()) {
+                            QuizRepository.updateBankInfo(
+                                context = context,
+                                bankId = bank.id,
+                                newGroupName = editGroupText,
+                                newName = editNameText
+                            )
                         }
-                        renameTarget = null
+                        editTarget = null
                     }
                 ) { Text("保存") }
             },
             dismissButton = {
-                TextButton(onClick = { renameTarget = null }) { Text("取消") }
+                TextButton(onClick = { editTarget = null }) { Text("取消") }
             }
         )
     }
@@ -94,7 +111,7 @@ fun BankListScreen(
     deleteTarget?.let { bank ->
         ShirohaDangerConfirmDialog(
             title = "确认删除题库？",
-            message = "将删除“${bank.name}”，并清理这份题库关联的错题、斩题和学习记录。操作不可撤销。",
+            message = "将删除“${bankDisplayPath(bank)}”，并清理这份题库关联的错题、斩题和学习记录。操作不可撤销。",
             confirmText = "确认删除",
             onDismiss = { deleteTarget = null },
             onConfirm = {
@@ -103,6 +120,11 @@ fun BankListScreen(
             }
         )
     }
+
+    val groupedBanks = QuizRepository.banks
+        .groupBy { it.groupName.ifBlank { DEFAULT_BANK_GROUP_NAME } }
+        .entries
+        .sortedBy { entry -> if (entry.key == DEFAULT_BANK_GROUP_NAME) "" else entry.key }
 
     Column(
         modifier = Modifier
@@ -113,7 +135,7 @@ fun BankListScreen(
         ShirohaHeader(
             kicker = "Banks",
             title = "题库管理",
-            subtitle = "管理原生题库，支持切换、查看、重命名和删除。"
+            subtitle = "按一级分组管理题库，二级题库可切换、查看、编辑和删除。"
         )
 
         GlassCard {
@@ -125,91 +147,162 @@ fun BankListScreen(
             )
         }
 
-        QuizRepository.banks.forEach { bank ->
-            val isActive = bank.id == activeBank?.id
-            val singleCount = bank.questions.count { it.type == QuestionType.SINGLE }
-            val multipleCount = bank.questions.count { it.type == QuestionType.MULTIPLE }
-            val judgeCount = bank.questions.count { it.type == QuestionType.JUDGE }
-            val subjectiveCount = bank.questions.count { it.type == QuestionType.BLANK || it.type == QuestionType.SHORT }
+        groupedBanks.forEach { entry ->
+            val groupName = entry.key
+            val banksInGroup = entry.value
+            val isExpanded = groupName !in collapsedGroups
+            val totalQuestions = banksInGroup.sumOf { it.questions.size }
 
-            GlassCard(
-                modifier = Modifier.shirohaNoRippleClickable { onOpenBankDetail(bank.id) }
-            ) {
+            GlassCard {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shirohaNoRippleClickable {
+                            collapsedGroups = if (isExpanded) collapsedGroups + groupName else collapsedGroups - groupName
+                        },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    StatusChip("${bank.questions.size} 题", selected = true)
-                    Spacer(Modifier.weight(1f))
-                    CompactBankStateChip(
-                        text = if (isActive) "当前" else "设为当前",
-                        selected = isActive,
-                        onClick = {
-                            if (!isActive) {
-                                QuizRepository.setActiveBank(context, bank.id)
-                            }
-                        }
+                    Text(
+                        text = if (isExpanded) "⌄" else "›",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.width(24.dp)
                     )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = groupName,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "${banksInGroup.size} 个题库 · $totalQuestions 题",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    activeBank?.takeIf { active -> banksInGroup.any { it.id == active.id } }?.let {
+                        StatusChip("当前分组", selected = true)
+                    }
                 }
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    text = bank.name,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "单选 $singleCount · 多选 $multipleCount · 判断 $judgeCount · 主观 $subjectiveCount",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(Modifier.height(14.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    ActionPillButton(
-                        icon = Icons.Rounded.Visibility,
-                        text = "详情",
-                        primary = false,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(42.dp),
-                        fillWidthContent = true,
-                        onClick = { onOpenBankDetail(bank.id) }
-                    )
-                    ActionPillButton(
-                        icon = Icons.Rounded.Edit,
-                        text = "重命名",
-                        primary = false,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(42.dp),
-                        fillWidthContent = true,
-                        onClick = {
-                            renameTarget = bank
-                            renameText = bank.name
-                        }
-                    )
-                    ActionPillButton(
-                        icon = Icons.Rounded.DeleteOutline,
-                        text = "删除",
-                        primary = false,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(42.dp),
-                        fillWidthContent = true,
-                        onClick = {
-                            if (bank.id != "demo-bank") {
-                                deleteTarget = bank
+
+                if (isExpanded) {
+                    Spacer(Modifier.height(12.dp))
+                    banksInGroup.forEach { bank ->
+                        BankCard(
+                            bank = bank,
+                            isActive = bank.id == activeBank?.id,
+                            onOpenBankDetail = onOpenBankDetail,
+                            onSetActive = { QuizRepository.setActiveBank(context, bank.id) },
+                            onEdit = {
+                                editTarget = bank
+                                editGroupText = bank.groupName.ifBlank { DEFAULT_BANK_GROUP_NAME }
+                                editNameText = bank.name
+                            },
+                            onDelete = {
+                                if (bank.id != "demo-bank") {
+                                    deleteTarget = bank
+                                }
                             }
-                        }
-                    )
+                        )
+                        Spacer(Modifier.height(12.dp))
+                    }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BankCard(
+    bank: QuizBank,
+    isActive: Boolean,
+    onOpenBankDetail: (String) -> Unit,
+    onSetActive: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val singleCount = bank.questions.count { it.type == QuestionType.SINGLE }
+    val multipleCount = bank.questions.count { it.type == QuestionType.MULTIPLE }
+    val judgeCount = bank.questions.count { it.type == QuestionType.JUDGE }
+    val subjectiveCount = bank.questions.count { it.type == QuestionType.BLANK || it.type == QuestionType.SHORT }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shirohaNoRippleClickable { onOpenBankDetail(bank.id) },
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(ShirohaRadius.Lg),
+        color = Color.White.copy(alpha = 0.64f),
+        border = BorderStroke(1.dp, ShirohaColors.LineSoft)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                StatusChip("${bank.questions.size} 题", selected = true)
+                Spacer(Modifier.weight(1f))
+                CompactBankStateChip(
+                    text = if (isActive) "当前" else "设为当前",
+                    selected = isActive,
+                    onClick = {
+                        if (!isActive) onSetActive()
+                    }
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = bank.name,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "单选 $singleCount · 多选 $multipleCount · 判断 $judgeCount · 主观 $subjectiveCount",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(14.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ActionPillButton(
+                    icon = Icons.Rounded.Visibility,
+                    text = "详情",
+                    primary = false,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(42.dp),
+                    fillWidthContent = true,
+                    onClick = { onOpenBankDetail(bank.id) }
+                )
+                ActionPillButton(
+                    icon = Icons.Rounded.Edit,
+                    text = "编辑",
+                    primary = false,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(42.dp),
+                    fillWidthContent = true,
+                    onClick = onEdit
+                )
+                ActionPillButton(
+                    icon = Icons.Rounded.DeleteOutline,
+                    text = "删除",
+                    primary = false,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(42.dp),
+                    fillWidthContent = true,
+                    onClick = onDelete
+                )
             }
         }
     }
@@ -248,4 +341,9 @@ private fun CompactBankStateChip(
             )
         }
     }
+}
+
+private fun bankDisplayPath(bank: QuizBank): String {
+    val groupName = bank.groupName.ifBlank { DEFAULT_BANK_GROUP_NAME }
+    return "$groupName / ${bank.name}"
 }

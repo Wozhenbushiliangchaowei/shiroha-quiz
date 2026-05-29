@@ -39,6 +39,7 @@ import com.yiqiu.shirohaquiz.R
 import com.yiqiu.shirohaquiz.importer.model.Option
 import com.yiqiu.shirohaquiz.importer.model.Question
 import com.yiqiu.shirohaquiz.importer.model.QuestionType
+import com.yiqiu.shirohaquiz.state.DEFAULT_BANK_GROUP_NAME
 import com.yiqiu.shirohaquiz.state.QuizRepository
 import com.yiqiu.shirohaquiz.ui.components.ActionPillButton
 import com.yiqiu.shirohaquiz.ui.components.EmptyStateIllustration
@@ -93,7 +94,7 @@ fun BankDetailScreen(
     ) {
         ShirohaHeader(
             kicker = "Bank Detail",
-            title = bank?.name ?: "题库详情",
+            title = bank?.let { bankDisplayPath(it.groupName, it.name) } ?: "题库详情",
             subtitle = "题库摘要、题型分布和快速操作。"
         )
 
@@ -157,6 +158,7 @@ fun BankDetailScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 StatusChip("${bank.questions.size} 题", selected = true)
+                StatusChip(bank.groupName.ifBlank { DEFAULT_BANK_GROUP_NAME }, selected = false)
                 StatusChip(if (isActive) "活动题库" else "可切换题库", selected = isActive)
                 Spacer(Modifier.weight(1f))
                 SlashedBankChip(
@@ -249,6 +251,11 @@ fun BankDetailScreen(
             }
         }
     }
+}
+
+private fun bankDisplayPath(groupName: String, bankName: String): String {
+    val cleanGroupName = groupName.ifBlank { DEFAULT_BANK_GROUP_NAME }
+    return "$cleanGroupName / $bankName"
 }
 
 @Composable

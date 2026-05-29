@@ -23,10 +23,13 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
+const val DEFAULT_BANK_GROUP_NAME = "未分组"
+
 data class QuizBank(
     val id: String,
     val name: String,
-    val questions: List<Question>
+    val questions: List<Question>,
+    val groupName: String = DEFAULT_BANK_GROUP_NAME
 )
 
 data class ExamSummary(
@@ -422,18 +425,41 @@ object QuizRepository {
         if (sanitizedRestoredBanks != restoredBanks) persist()
     }
 
-    fun importBank(context: Context, name: String, questions: List<Question>) {
+    fun importBank(
+        context: Context,
+        name: String,
+        questions: List<Question>,
+        groupName: String = DEFAULT_BANK_GROUP_NAME
+    ) {
         appContext = context.applicationContext
+        val cleanGroupName = normalizeBankGroupName(groupName)
+        val cleanName = uniqueBankNameInGroup(name.trim().ifBlank { "导入题库" }, cleanGroupName)
         val bank = QuizBank(
             id = "bank_${System.currentTimeMillis()}",
-            name = name.ifBlank { "导入题库" },
-            questions = questions.map(::sanitizeQuestion)
+            name = cleanName,
+            questions = questions.map(::sanitizeQuestion),
+            groupName = cleanGroupName
         )
         banks += bank
         activeBankId = bank.id
         resetPracticeState()
         resetExam()
         persist()
+    }
+
+    fun appendQuestionsToBank(context: Context, bankId: String, newQuestions: List<Question>): Boolean {
+        appContext = context.applicationContext
+        val bankIndex = banks.indexOfFirst { it.id == bankId }
+        if (bankIndex < 0) return false
+        val bank = banks[bankIndex]
+        val appendedQuestions = bank.questions + newQuestions.map(::sanitizeQuestion)
+        banks[bankIndex] = bank.copy(questions = appendedQuestions)
+        if (activeBankId == bankId) {
+            resetPracticeState()
+            resetExam()
+        }
+        persist()
+        return true
     }
 
     fun setActiveBank(context: Context, bankId: String) {
@@ -464,17 +490,33 @@ object QuizRepository {
 
 
     fun renameBank(context: Context, bankId: String, newName: String): Boolean {
+        val currentGroup = banks.firstOrNull { it.id == bankId }?.groupName ?: DEFAULT_BANK_GROUP_NAME
+        return updateBankInfo(context, bankId, currentGroup, newName)
+    }
+
+    fun updateBankInfo(context: Context, bankId: String, newGroupName: String, newName: String): Boolean {
         appContext = context.applicationContext
         val index = banks.indexOfFirst { it.id == bankId }
         if (index < 0) return false
-        val cleanName = uniqueBankNameForRename(newName.trim().ifBlank { "未命名题库" }, bankId)
+        val cleanGroupName = normalizeBankGroupName(newGroupName)
+        val cleanName = uniqueBankNameForRename(
+            rawName = newName.trim().ifBlank { "未命名题库" },
+            groupName = cleanGroupName,
+            bankId = bankId
+        )
         val current = banks[index]
-        banks[index] = current.copy(name = cleanName)
+        banks[index] = current.copy(name = cleanName, groupName = cleanGroupName)
 
         for (i in wrongBook.indices) {
             val entry = wrongBook[i]
             if (entry.bankId == bankId) {
                 wrongBook[i] = entry.copy(bankName = cleanName)
+            }
+        }
+        for (i in favoriteQuestions.indices) {
+            val entry = favoriteQuestions[i]
+            if (entry.bankId == bankId) {
+                favoriteQuestions[i] = entry.copy(bankName = cleanName)
             }
         }
         for (i in studyRecords.indices) {
@@ -1904,9 +1946,11 @@ object QuizRepository {
         val addedBanks = importedBanks.mapIndexed { index, bank ->
             val newId = "bank_${now}_$index"
             idMap[bank.id] = newId
+            val cleanGroupName = normalizeBankGroupName(bank.groupName)
             bank.copy(
                 id = newId,
-                name = uniqueImportedBankName(bank.name.ifBlank { "导入题库" })
+                name = uniqueImportedBankName(bank.name.ifBlank { "导入题库" }, cleanGroupName),
+                groupName = cleanGroupName
             )
         }
         banks.addAll(addedBanks)
@@ -2301,7 +2345,11 @@ object QuizRepository {
     fun practiceCorrectCount(): Int = practiceSessionResults.values.count { it }
 
     private fun sanitizeBank(bank: QuizBank): QuizBank {
-        return bank.copy(questions = bank.questions.map(::sanitizeQuestion))
+        return bank.copy(
+            name = bank.name.ifBlank { "未命名题库" },
+            groupName = normalizeBankGroupName(bank.groupName),
+            questions = bank.questions.map(::sanitizeQuestion)
+        )
     }
 
     private fun sanitizeWrongEntry(entry: WrongQuestionEntry): WrongQuestionEntry {
@@ -2587,9 +2635,18 @@ object QuizRepository {
 
     private fun nextDayStart(timestamp: Long): Long = startOfDay(timestamp) + DAY_MILLIS
 
-    private fun uniqueBankNameForRename(rawName: String, bankId: String): String {
+    private fun normalizeBankGroupName(rawName: String?): String {
+        return rawName?.trim()?.takeIf { it.isNotBlank() } ?: DEFAULT_BANK_GROUP_NAME
+    }
+
+    private fun uniqueBankNameForRename(rawName: String, groupName: String, bankId: String): String {
+        val cleanGroupName = normalizeBankGroupName(groupName)
         val baseName = rawName.ifBlank { "未命名题库" }
-        val existingNames = banks.filterNot { it.id == bankId }.map { it.name }.toSet()
+        val existingNames = banks
+            .filterNot { it.id == bankId }
+            .filter { normalizeBankGroupName(it.groupName) == cleanGroupName }
+            .map { it.name }
+            .toSet()
         if (baseName !in existingNames) return baseName
         var index = 2
         var candidate: String
@@ -2600,9 +2657,30 @@ object QuizRepository {
         return candidate
     }
 
-    private fun uniqueImportedBankName(rawName: String): String {
+    private fun uniqueBankNameInGroup(rawName: String, groupName: String): String {
+        val cleanGroupName = normalizeBankGroupName(groupName)
         val baseName = rawName.ifBlank { "导入题库" }
-        val existingNames = banks.map { it.name }.toSet()
+        val existingNames = banks
+            .filter { normalizeBankGroupName(it.groupName) == cleanGroupName }
+            .map { it.name }
+            .toSet()
+        if (baseName !in existingNames) return baseName
+        var index = 2
+        var candidate: String
+        do {
+            candidate = "$baseName $index"
+            index += 1
+        } while (candidate in existingNames)
+        return candidate
+    }
+
+    private fun uniqueImportedBankName(rawName: String, groupName: String): String {
+        val cleanGroupName = normalizeBankGroupName(groupName)
+        val baseName = rawName.ifBlank { "导入题库" }
+        val existingNames = banks
+            .filter { normalizeBankGroupName(it.groupName) == cleanGroupName }
+            .map { it.name }
+            .toSet()
         if (baseName !in existingNames) return baseName
         var index = 2
         var candidate: String
@@ -2748,6 +2826,7 @@ object QuizRepository {
             val bankJson = JSONObject()
             bankJson.put("id", bank.id)
             bankJson.put("name", bank.name)
+            bankJson.put("groupName", normalizeBankGroupName(bank.groupName))
             bankJson.put("questions", questionsToJsonArray(bank.questions, assetMapping))
             bankArray.put(bankJson)
         }
@@ -2862,7 +2941,8 @@ object QuizRepository {
                     QuizBank(
                         id = bankJson.optString("id"),
                         name = bankJson.optString("name"),
-                        questions = parseQuestionsArray(bankJson.optJSONArray("questions"))
+                        questions = parseQuestionsArray(bankJson.optJSONArray("questions")),
+                        groupName = normalizeBankGroupName(bankJson.optString("groupName", DEFAULT_BANK_GROUP_NAME))
                     )
                 )
             }
