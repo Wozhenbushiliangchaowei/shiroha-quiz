@@ -104,11 +104,11 @@ import com.yiqiu.shirohaquiz.ui.components.ShirohaHeader
 import com.yiqiu.shirohaquiz.ui.components.StatusChip
 import com.yiqiu.shirohaquiz.ui.components.shirohaNoRippleClickable
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaColors
+import com.yiqiu.shirohaquiz.ui.text.LatexDisplayFormatter
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaDimens
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaMotion
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaRadius
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaSpacing
-import com.yiqiu.shirohaquiz.ui.util.bankDisplayPath
 import androidx.compose.ui.res.painterResource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -1933,7 +1933,10 @@ private fun NativeImportPreview(
         }
         questions.take(8).forEach { question ->
             val answerText = answerDisplayText(question)
-            val optionText = question.options.joinToString("  ") { "${it.key}. ${it.text}" }
+            val displayQuestionText = LatexDisplayFormatter.format(question.question)
+            val optionText = question.options.joinToString("  ") { option ->
+                "${option.key}. ${LatexDisplayFormatter.format(option.text)}"
+            }
 
             Text(
                 text = "${question.number}. ${typeLabel(question.type)}",
@@ -1944,7 +1947,7 @@ private fun NativeImportPreview(
             Spacer(Modifier.height(6.dp))
             SelectionContainer {
                 Text(
-                    text = question.question,
+                    text = displayQuestionText,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -1986,7 +1989,7 @@ private fun NativeImportPreview(
             if (question.analysis.isNotBlank()) {
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "解析：${question.analysis}",
+                    text = "解析：${LatexDisplayFormatter.format(question.analysis)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -3623,6 +3626,11 @@ private fun defaultImportBankName(fileName: String): String {
         ?: "导入题库"
 }
 
+private fun bankDisplayPath(groupName: String, bankName: String): String {
+    val cleanGroupName = groupName.ifBlank { DEFAULT_BANK_GROUP_NAME }
+    return "$cleanGroupName / $bankName"
+}
+
 @Composable
 private fun ImportStepPill(
     index: String,
@@ -3655,3 +3663,4 @@ private fun ImportStepPill(
         }
     }
 }
+

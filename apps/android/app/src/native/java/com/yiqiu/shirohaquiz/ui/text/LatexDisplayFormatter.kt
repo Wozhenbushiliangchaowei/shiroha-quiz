@@ -7,42 +7,41 @@ package com.yiqiu.shirohaquiz.ui.text
  * common LaTeX fragments into readable plain math text for display.
  */
 object LatexDisplayFormatter {
-    private val commandReplacements = mapOf(
-        "leq" to "≤",
-        "le" to "≤",
-        "geq" to "≥",
-        "ge" to "≥",
-        "neq" to "≠",
-        "ne" to "≠",
-        "approx" to "≈",
-        "sim" to "≈",
-        "times" to "×",
-        "cdot" to "·",
-        "div" to "÷",
-        "pm" to "±",
-        "mp" to "∓",
-        "to" to "→",
-        "rightarrow" to "→",
-        "leftarrow" to "←",
-        "infty" to "∞",
-        "sum" to "∑",
-        "prod" to "∏",
-        "int" to "∫",
-        "pi" to "π",
-        "theta" to "θ",
-        "alpha" to "α",
-        "beta" to "β",
-        "gamma" to "γ",
-        "delta" to "δ",
-        "lambda" to "λ",
-        "mu" to "μ",
-        "sigma" to "σ",
-        "omega" to "ω",
-        "Delta" to "Δ",
-        "Omega" to "Ω",
-        "%" to "%"
+    private val commandReplacements = linkedMapOf(
+        "\\\\leq" to "≤",
+        "\\\\le" to "≤",
+        "\\\\geq" to "≥",
+        "\\\\ge" to "≥",
+        "\\\\neq" to "≠",
+        "\\\\ne" to "≠",
+        "\\\\approx" to "≈",
+        "\\\\sim" to "≈",
+        "\\\\times" to "×",
+        "\\\\cdot" to "·",
+        "\\\\div" to "÷",
+        "\\\\pm" to "±",
+        "\\\\mp" to "∓",
+        "\\\\to" to "→",
+        "\\\\rightarrow" to "→",
+        "\\\\leftarrow" to "←",
+        "\\\\infty" to "∞",
+        "\\\\sum" to "∑",
+        "\\\\prod" to "∏",
+        "\\\\int" to "∫",
+        "\\\\pi" to "π",
+        "\\\\theta" to "θ",
+        "\\\\alpha" to "α",
+        "\\\\beta" to "β",
+        "\\\\gamma" to "γ",
+        "\\\\delta" to "δ",
+        "\\\\lambda" to "λ",
+        "\\\\mu" to "μ",
+        "\\\\sigma" to "σ",
+        "\\\\omega" to "ω",
+        "\\\\Delta" to "Δ",
+        "\\\\Omega" to "Ω",
+        "\\\\%" to "%"
     )
-    private val latexCommandRegex = Regex("""\\([A-Za-z]+|%)""")
 
     private val superscriptMap = mapOf(
         '0' to '⁰', '1' to '¹', '2' to '²', '3' to '³', '4' to '⁴',
@@ -69,7 +68,7 @@ object LatexDisplayFormatter {
     }
 
     private fun mightContainLatex(text: String): Boolean {
-        return '$' in text || latexCommandRegex.containsMatchIn(text) || "^{" in text || "_{" in text
+        return '$' in text || '\\' in text || "^{" in text || "_{" in text
     }
 
     private fun formatInternal(text: String): String {
@@ -104,7 +103,7 @@ object LatexDisplayFormatter {
         val rows = splitCasesRows(content)
             .map { it.trim() }
             .filter { it.isNotEmpty() }
-        if (rows.isEmpty()) return "{}"
+        if (rows.isEmpty()) return ""
 
         val formattedRows = rows.map { row ->
             val columns = splitTopLevelAmpersand(row)
@@ -113,15 +112,15 @@ object LatexDisplayFormatter {
             when (columns.size) {
                 0 -> ""
                 1 -> columns[0]
-                else -> columns.joinToString("，")
+                else -> {
+                    val value = columns.first()
+                    val condition = columns.drop(1).joinToString("，")
+                    if (condition.isBlank()) value else "$value（$condition）"
+                }
             }
         }.filter { it.isNotEmpty() }
 
-        return formattedRows.joinToString(
-            separator = "\n  ",
-            prefix = "{\n  ",
-            postfix = "\n}"
-        )
+        return formattedRows.joinToString("；")
     }
 
     private fun splitCasesRows(content: String): List<String> {
@@ -284,9 +283,11 @@ object LatexDisplayFormatter {
     }
 
     private fun replaceCommands(text: String): String {
-        return latexCommandRegex.replace(text) { match ->
-            commandReplacements[match.groupValues[1]] ?: match.value
+        var working = text
+        commandReplacements.forEach { (pattern, replacement) ->
+            working = working.replace(Regex(pattern), replacement)
         }
+        return working
     }
 
     private fun convertScripts(text: String): String {
