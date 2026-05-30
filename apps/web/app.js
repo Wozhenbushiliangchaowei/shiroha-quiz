@@ -1,5 +1,5 @@
 (function(){
-const APP_VERSION='Web v34.1 / 二级题库分组修正版';
+const APP_VERSION='Web v34.4 / 标准优先兜底保护版';
 const RICH_CONTENT_VERSION_V57='shiroha-web-rich-v1';
 const BANK_DEFAULT_GROUP_V58='未分组';
 const CURRENT_SCHEMA_VERSION=1;
@@ -1798,7 +1798,7 @@ function mergeQuestionAnswers(questions,answers,mode){
 function parseTextQuestionsBaseDetailed(text){
   const protectedPack=protectDocxImageMarkdownForParser(text);
   const restore=protectedPack.restore||((x)=>x);
-  text=normalizeImportText(protectedPack.text);
+  text=repairDocxLostQuestionNumberLines(normalizeImportText(protectedPack.text));
   text=preSplitVolumeAndCompactQuestions(text);
   if(!text.trim())return {questions:[],blocks:[],pairs:[]};
   const blocks=splitQuestionBlocks(text);
@@ -2673,7 +2673,7 @@ function parseTextQuestions(text,strategy='auto'){
   const addCandidate=(name,fn)=>{
     try{
       let qs=fn().map((q,i)=>normalizeQuestion(q,i)).filter(q=>q.question);
-      qs=repairDocxTablePromptSplitQuestions(qs).map((q,i)=>normalizeQuestion(q,i)).filter(q=>q.question);
+      qs=repairDocxTablePromptSplitQuestions(qs).map(sanitizeQuestionOptionsForDocxBoundariesV583).map((q,i)=>normalizeQuestion(q,i)).filter(q=>q.question);
       candidates.push({name,questions:qs,score:scoreParsedQuestions(qs,profile),warnings:collectImportWarnings(qs)});
     }catch(e){candidates.push({name,questions:[],score:-9999,warnings:['解析失败：'+e.message]});}
   };
@@ -2797,9 +2797,23 @@ function parseTextQuestions(text,strategy='auto'){
         best=imageExamCandidate;
       }
     }
+    // v58.3：多章节题库中，同一题号会按章节重复。标准逐行解析在章节边界、表格边界处更容易多切 1-3 道；
+    // 若标准试卷段落解析数量接近且评分没有明显落后，优先选择结构化段落解析，避免题目数略大于答案数。
+    const structuredMain=candidates.find(c=>c.name==='标准试卷段落解析'&&c.questions&&c.questions.length);
+    const lineMain=candidates.find(c=>c.name==='标准逐行解析'&&c.questions&&c.questions.length);
+    if(best&&best.name==='标准逐行解析'&&structuredMain&&lineMain&&profile.repeatedQuestionNumbers&&profile.hasTypeSections){
+      const diff=(lineMain.questions||[]).length-(structuredMain.questions||[]).length;
+      const structuredEval=evaluateCandidate(structuredMain);
+      const lineEval=evaluateCandidate(lineMain);
+      const structuredNoWorse=structuredEval.hardCount<=lineEval.hardCount && (structuredMain.warnings||[]).length<=(lineMain.warnings||[]).length+2;
+      // v58.4：只在结构化段落解析质量不差时才压过标准逐行解析，避免为凑题量误伤正常格式。
+      if(diff>0 && diff<=3 && lineMain.score-structuredMain.score<=500 && structuredNoWorse){
+        best=structuredMain;
+      }
+    }
   }
 
-  const finalQuestions=repairDocxTablePromptSplitQuestions(best.questions||[]).map((q,i)=>normalizeQuestion(q,i)).filter(q=>q.question);
+  const finalQuestions=repairDocxTablePromptSplitQuestions(best.questions||[]).map(sanitizeQuestionOptionsForDocxBoundariesV583).map((q,i)=>normalizeQuestion(q,i)).filter(q=>q.question);
   const stats=countTypes(finalQuestions||[]);
   const profileBits=[];
   if(profile.hasVolumeHeading)profileBits.push('检测到分卷');
@@ -2877,6 +2891,38 @@ function scoreQuestionNumberContinuity(qs){
   return score;
 }
 
+
+function isLeakedHeadingOptionTextV583(text){
+  const t=String(text||'').trim();
+  if(!t)return false;
+  if(getHeadingType(t)||isVolumeHeading(t))return true;
+  if(/^第[一二三四五六七八九十百千万0-9]+章/.test(t.replace(/\s+/g,'')))return true;
+  if(/^(?:单项选择题|单选题|多项选择题|多选题|判断题|填空题|简答题)$/.test(t.replace(/\s+/g,'')))return true;
+  return false;
+}
+function isDocxTableArtifactOptionV583(option){
+  const key=String(option?.key||option?.label||'').trim().toUpperCase();
+  const t=String(option?.text||'');
+  if(!/^[E-GF]$/.test(key))return false;
+  return /\|/.test(t)&&/(?:Significance|回归分析|残差|总计|df|SS|MS|---|方差)/i.test(t);
+}
+function sanitizeQuestionOptionsForDocxBoundariesV583(q){
+  const copy={...q};
+  const opts=(copy.options||[]).filter(o=>{
+    const visible=visibleOptionTextForRisk(o?.text||'');
+    if(isLeakedHeadingOptionTextV583(visible))return false;
+    if(isDocxTableArtifactOptionV583(o))return false;
+    return true;
+  });
+  copy.options=opts;
+  return copy;
+}
+function countBoundaryOptionPollutionV583(qs){
+  let n=0;
+  (qs||[]).forEach(q=>{(q.options||[]).forEach(o=>{const visible=visibleOptionTextForRisk(o?.text||'');if(isLeakedHeadingOptionTextV583(visible)||isDocxTableArtifactOptionV583(o))n++;});});
+  return n;
+}
+
 function scoreParsedQuestions(qs,profile){
   const arr=qs||[];let score=arr.length*10;
   const warnings=collectImportWarnings(arr);
@@ -2892,6 +2938,7 @@ function scoreParsedQuestions(qs,profile){
   });
   score-=suspicious*30;
   if(profile.expectedByHeadings){const diff=Math.abs(arr.length-profile.expectedByHeadings);score-=Math.min(300,diff*12);}
+  score-=countBoundaryOptionPollutionV583(arr)*140;
   score+=scoreQuestionNumberContinuity(arr);
   return score;
 }
@@ -2902,7 +2949,7 @@ function forceSplitCompactText(text){
   return preSplitVolumeAndCompactQuestions(s);
 }
 function parseStructuredExamText(text){
-  const s=normalizeImportText(text);
+  const s=repairDocxLostQuestionNumberLines(normalizeImportText(text));
   const lines=s.split('\n').map(x=>x.trim()).filter(Boolean);
   const questions=[]; let currentType=''; let current=null; let collectingAnalysis=false;
   const flush=()=>{
@@ -3044,7 +3091,7 @@ function parseStructuredExamText(text){
   return questions.map((q,i)=>normalizeQuestion(q,i)).filter(q=>q.question&&(q.options.length||q.answer.length||q.type==='judge'||isTextType(q.type)));
 }
 function parseByVolumeAndSections(text){
-  const s=preSplitVolumeAndCompactQuestions(normalizeImportText(text));
+  const s=preSplitVolumeAndCompactQuestions(repairDocxLostQuestionNumberLines(normalizeImportText(text)));
   const lines=s.split('\n').map(x=>x.trim()).filter(Boolean);
   const blocks=[];let volume='';let group='';let section=[];
   const flush=()=>{
@@ -3092,6 +3139,92 @@ function normalizeImportText(text){
     .replace(/[\u200b\ufeff]/g,'')
     .replace(/[Ａ-Ｇａ-ｇ]/g,ch=>String.fromCharCode(ch.charCodeAt(0)-0xFEE0))
     .replace(/[０-９]/g,ch=>String.fromCharCode(ch.charCodeAt(0)-0xFEE0));
+}
+
+
+function shouldApplyDocxLostQuestionNumberRepairV584(text){
+  const s=String(text||'');
+  if(!s.trim())return false;
+  const hasDocxRich=/【DOCX表格开始】|【DOCX公式OMML：|\[\[DOCX_IMAGE_\d+\]\]|!\[[^\]]*\]\(data:image\//.test(s);
+  const chapterCount=(s.match(/(?:^|\n)\s*第[一二三四五六七八九十百千万0-9]+章/g)||[]).length;
+  const typeSectionCount=(s.match(/(?:^|\n)\s*(?:单项选择题|单选题|单选|多项选择题|多选题|多选|判断题|判断|填空题|填空|简答题|简答)\s*(?:$|\n)/g)||[]).length;
+  const strongNoCount=(s.match(/(?:^|\n)\s*(?:第\s*)?\d{1,4}\s*(?:题)?[、.．:：]/g)||[]).length;
+  const noPuncNoCount=(s.match(/(?:^|\n)\s*\d{1,3}(?=[^\d\s、.．:：）)\]】])/g)||[]).length;
+  // v58.4：这类补题号/补标点是给 DOCX 多章节、富文本抽取损失做的兜底，不能默认污染标准纯文本主线。
+  if(hasDocxRich && strongNoCount>=1)return true;
+  if(chapterCount>=2 && strongNoCount>=8)return true;
+  if(typeSectionCount>=2 && strongNoCount>=8 && noPuncNoCount>=1)return true;
+  if(noPuncNoCount>=2 && strongNoCount>=8 && /(?:^|\n)\s*A\s*[、.．:：，,\s]/i.test(s) && /(?:^|\n)\s*B\s*[、.．:：，,\s]/i.test(s))return true;
+  return false;
+}
+function repairDocxLostQuestionNumberLines(text){
+  if(!shouldApplyDocxLostQuestionNumberRepairV584(text))return String(text||'');
+  const lines=String(text||'').split('\n');
+  const out=[];let pendingFirst=0;let lastQuestionNo=0;
+  const isChapterLike=(s)=>/^第[一二三四五六七八九十百千万0-9]+章/.test(String(s||'').replace(/\s+/g,''));
+  const strongNoOf=(s)=>{
+    const t=String(s||'').trim();
+    const m=t.match(/^\s*(?:第\s*)?(\d{1,4})\s*(?:题)?[、.．:：]/) || t.match(/^\s*[（(【\[]\s*(\d{1,4})\s*[）)】\]]/);
+    return m?Number(m[1]):0;
+  };
+  const looksLikeChoiceA=(s)=>/^\s*A\s*[、.．:：，,\s]/i.test(String(s||''))||/^\s*Ａ\s*[、.．:：，,\s]/.test(String(s||''));
+  const looksLikeChoiceB=(s)=>/^\s*B\s*[、.．:：，,\s]/i.test(String(s||''))||/^\s*Ｂ\s*[、.．:：，,\s]/.test(String(s||''));
+  const hasInlineAB=(s)=>/A\s*[、.．:：，,\s].{0,100}B\s*[、.．:：，,\s]/i.test(String(s||''));
+  const hasNearbyOptions=(idx)=>{
+    let a=false,b=false,seen=0;
+    for(let j=idx+1;j<lines.length&&seen<8;j++){
+      const t=String(lines[j]||'').trim();if(!t)continue;seen++;
+      if(isChapterLike(t)||getHeadingType(t)||isVolumeHeading(t))break;
+      if(looksLikeChoiceA(t)||/^\s*A[.．、:：]/i.test(t)||hasInlineAB(t))a=true;
+      if(looksLikeChoiceB(t)||/^\s*B[.．、:：]/i.test(t)||hasInlineAB(t))b=true;
+    }
+    return a&&b;
+  };
+  const nextStrongNo=(idx)=>{
+    let seen=0;
+    for(let j=idx+1;j<lines.length&&seen<14;j++){
+      const t=String(lines[j]||'').trim();if(!t)continue;seen++;
+      if(isChapterLike(t)||getHeadingType(t)||isVolumeHeading(t))break;
+      const n=strongNoOf(t);if(n)return n;
+    }
+    return 0;
+  };
+  const canBeQuestionWithoutNumber=(s,idx)=>{
+    const t=String(s||'').trim();
+    if(!t||strongNoOf(t)||isOptionLine(t)||isAnswerLine(t)||isAnalysisLine(t)||getHeadingType(t)||isImportNoiseLine(t)||isChapterLike(t))return false;
+    if(t.length<8)return false;
+    if(!/[（(][^）)]{0,80}[）)]|[?？。]$|称为|属于|是|指/.test(t))return false;
+    return hasNearbyOptions(idx);
+  };
+  for(let i=0;i<lines.length;i++){
+    let raw=lines[i];let t=String(raw||'').trim();
+    if(!t){out.push(raw);continue;}
+    if(isChapterLike(t)||getHeadingType(t)||isVolumeHeading(t)){
+      pendingFirst=4;lastQuestionNo=0;out.push(raw);continue;
+    }
+    const originalStrong=strongNoOf(t);
+    if(pendingFirst>0 && canBeQuestionWithoutNumber(t,i)){
+      raw=String(raw).replace(t,'1．'+t);t=String(raw).trim();pendingFirst=0;
+    }else if(canBeQuestionWithoutNumber(t,i)){
+      const nextNo=nextStrongNo(i);
+      if(lastQuestionNo>0 && nextNo===lastQuestionNo+2){
+        raw=String(raw).replace(t,(lastQuestionNo+1)+'．'+t);t=String(raw).trim();
+      }
+    }else if(pendingFirst>0 && !isImportNoiseLine(t)){
+      pendingFirst--;
+    }
+    // DOCX/Word 有时会丢失题号后的标点，如“3下列……”。只在后续邻近存在 A/B 选项时补回，避免误伤普通数字文本。
+    const noPunc=t.match(/^(\d{1,3})(?=[^\d\s、.．:：）)\]】])/);
+    if(noPunc && hasNearbyOptions(i)){
+      raw=String(raw).replace(/^(\s*\d{1,3})(?=[^\d\s、.．:：）)\]】])/,'$1．');
+      t=String(raw).trim();
+    }
+    const n=strongNoOf(t);
+    if(n)lastQuestionNo=n;
+    else if(originalStrong)lastQuestionNo=originalStrong;
+    out.push(raw);
+  }
+  return out.join('\n');
 }
 
 function preSplitVolumeAndCompactQuestions(text){
