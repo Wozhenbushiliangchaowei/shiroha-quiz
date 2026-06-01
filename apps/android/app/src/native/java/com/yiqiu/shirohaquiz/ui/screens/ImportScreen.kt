@@ -2625,13 +2625,19 @@ private fun ReviewQuestionEditorContent(
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(Modifier.height(12.dp))
+            Text(
+                text = "单选 A，多选 ABC，判断 正确/错误",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = answerInputText(question),
                 onValueChange = { value ->
                     onQuestionChange(question.copy(answer = parseReviewAnswer(value, question.type)))
                 },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("答案：单选填 A，多选填 ABC 或 A,B,C，判断填 正确/错误") },
+                label = { Text("答案") },
                 singleLine = true
             )
             Spacer(Modifier.height(12.dp))
@@ -2657,7 +2663,7 @@ private fun ReviewQuestionEditorContent(
             )
             Spacer(Modifier.height(10.dp))
             Text(
-                text = "如果解析器把说明文字、页眉页脚或废片段识别成题目，可以直接删除本题。",
+                text = "误识别的说明、页眉页脚或碎片，可删除本题。",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
