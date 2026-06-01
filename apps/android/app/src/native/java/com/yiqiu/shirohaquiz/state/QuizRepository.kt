@@ -13,6 +13,7 @@ import com.yiqiu.shirohaquiz.importer.model.Question
 import com.yiqiu.shirohaquiz.importer.model.QuestionImage
 import com.yiqiu.shirohaquiz.importer.model.QuestionType
 import com.yiqiu.shirohaquiz.util.LauncherIconSwitcher
+import com.yiqiu.shirohaquiz.util.SafeZipReader
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -1899,11 +1900,13 @@ object QuizRepository {
                 while (entries.size < maxEntries) {
                     val entry = zip.nextEntry ?: break
                     if (entry.isDirectory) continue
-                    val data = zip.readBytes()
-                    if (data.size > maxEntrySize) continue
+                    val name = SafeZipReader.normalizeEntryName(entry.name)
+                    val data = SafeZipReader.readEntryBytes(zip, entry, maxEntrySize)
+                    if (totalSize + data.size > maxTotalSize) {
+                        throw IllegalArgumentException("ZIP total size exceeded.")
+                    }
                     totalSize += data.size
-                    if (totalSize > maxTotalSize) break
-                    entries[entry.name] = data
+                    entries[name] = data
                     zip.closeEntry()
                 }
             }
@@ -2156,6 +2159,7 @@ object QuizRepository {
             RegexOption.IGNORE_CASE
         ).find(dataUri.trim()) ?: return null
         val mimeSuffix = match.groupValues[1].lowercase(Locale.ROOT)
+        if (!isAllowedDataImageMimeSuffix(mimeSuffix)) return null
         val base64Text = match.groupValues[2].replace(Regex("\\s+"), "")
         val bytes = runCatching { Base64.decode(base64Text, Base64.DEFAULT) }.getOrNull()
         if (bytes == null || bytes.isEmpty()) return null
@@ -2172,8 +2176,14 @@ object QuizRepository {
             "gif" -> "gif"
             "webp" -> "webp"
             "bmp" -> "bmp"
-            "svg+xml" -> "svg"
             else -> "bin"
+        }
+    }
+
+    private fun isAllowedDataImageMimeSuffix(mimeSuffix: String): Boolean {
+        return when (mimeSuffix.lowercase(Locale.ROOT)) {
+            "jpeg", "jpg", "png", "gif", "webp", "bmp" -> true
+            else -> false
         }
     }
 

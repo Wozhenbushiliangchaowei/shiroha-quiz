@@ -1,9 +1,8 @@
 package com.yiqiu.shirohaquiz.importer.parser
 
-import java.io.ByteArrayOutputStream
+import com.yiqiu.shirohaquiz.util.SafeZipReader
 import java.nio.charset.Charset
 import java.util.Locale
-import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 
 object TextImportDecoder {
@@ -666,29 +665,17 @@ object TextImportDecoder {
                     val entry = zip.nextEntry ?: break
                     if (entry.isDirectory) continue
                     if (size >= maxEntries) break
-                    val data = zip.readBytes(entry, maxEntrySize)
+                    val name = SafeZipReader.normalizeEntryName(entry.name)
+                    val data = SafeZipReader.readEntryBytes(zip, entry, maxEntrySize)
+                    if (totalSize + data.size > maxTotalSize) {
+                        throw IllegalArgumentException("ZIP total size exceeded.")
+                    }
                     totalSize += data.size
-                    if (totalSize > maxTotalSize) break
-                    add(RawZipEntry(entry.name, data))
+                    add(RawZipEntry(name, data))
                 }
             }
         }
     }
-
-    private fun ZipInputStream.readBytes(entry: ZipEntry, maxSize: Long): ByteArray {
-        val output = ByteArrayOutputStream()
-        val buffer = ByteArray(8192)
-        var total = 0L
-        while (true) {
-            val read = read(buffer)
-            if (read <= 0) break
-            total += read
-            if (total > maxSize) break
-            output.write(buffer, 0, read)
-        }
-        return output.toByteArray()
-    }
-
     private val superscriptMap = mapOf(
         '0' to '\u2070', '1' to '\u00B9', '2' to '\u00B2', '3' to '\u00B3', '4' to '\u2074',
         '5' to '\u2075', '6' to '\u2076', '7' to '\u2077', '8' to '\u2078', '9' to '\u2079',
