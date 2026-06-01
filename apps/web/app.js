@@ -1,5 +1,5 @@
 (function(){
-const APP_VERSION='V33富文本导入优化版';
+const APP_VERSION='V33：富文本导入优化版';
 const RICH_CONTENT_VERSION_V57='shiroha-web-rich-v1';
 const BANK_DEFAULT_GROUP_V58='未分组';
 const CURRENT_SCHEMA_VERSION=1;
@@ -39,6 +39,11 @@ function migrateState(raw,sourceKey){
 function clearStoredState(){[KEY,...LEGACY_KEYS,...CLEAR_STORAGE_KEYS].forEach(k=>localStorage.removeItem(k))}
 function saveState(){localStorage.setItem(KEY,serializeState());toast('已保存到浏览器本地。','ok')}
 function now(){return new Date().toISOString()}
+function makeId(prefix='id',...parts){
+  const base=parts.filter(v=>v!=null&&String(v).trim()).map(v=>String(v).replace(/[^A-Za-z0-9_-]+/g,'_').slice(0,32)).filter(Boolean).join('_');
+  const random=(globalThis.crypto&&globalThis.crypto.randomUUID)?globalThis.crypto.randomUUID():Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,10);
+  return [prefix,base,random].filter(Boolean).join('_');
+}
 function activeBank(){return state.banks.find(b=>b.id===state.activeBankId)||state.banks[0]||{questions:[]}}
 function resetViewScrollV282(){
   try{
@@ -123,6 +128,25 @@ function existingBankGroupsV58(){
 function readImportBankGroupV58(){
   return normalizeBankGroupNameV58($('#import-bank-group-v58')?.value||'');
 }
+function readImportSaveModeV587(){
+  return $('#import-save-mode-v587')?.value==='append'?'append':'new';
+}
+function readImportAppendTargetIdV587(){
+  return $('#import-append-target-v587')?.value||'';
+}
+function renderImportAppendTargetV587(){
+  const mode=$('#import-save-mode-v587');
+  const targetField=$('#import-append-target-field-v587');
+  const target=$('#import-append-target-v587');
+  if(!mode||!target)return;
+  const old=target.value||state.activeBankId||'';
+  const banks=Array.isArray(state.banks)?state.banks:[];
+  target.innerHTML=banks.length?banks.map(b=>`<option value="${esc(b.id)}">${esc(bankPathLabelV58(b))}（${(b.questions||[]).length}题）</option>`).join(''):'<option value="">暂无已有题库</option>';
+  target.value=banks.some(b=>b.id===old)?old:(state.activeBankId||banks[0]?.id||'');
+  const appending=mode.value==='append';
+  if(targetField)targetField.hidden=!appending;
+  ['#confirm-import-btn','#dual-confirm-import-btn'].forEach(sel=>{const btn=$(sel);if(btn)btn.textContent=appending?'确认追加':'确认导入';});
+}
 function ensureBankGroupStylesV58(){
   if(typeof document==='undefined'||document.getElementById('shiroha-bank-group-style-v58'))return;
   const style=document.createElement('style');
@@ -136,6 +160,8 @@ function ensureBankGroupStylesV58(){
     .bank-group-head-v58 .muted{font-size:.88rem;}
     .bank-group-list-v58{display:grid;gap:10px;}
     .bank-group-badge-v58{display:inline-flex;align-items:center;border-radius:999px;padding:3px 9px;background:rgba(79,124,255,.10);color:var(--primary,#4f7cff);font-size:.78rem;font-weight:600;margin-left:8px;}
+    .import-save-mode-field-v587 select,.import-append-target-field-v587 select{width:100%;}
+    .import-append-target-field-v587[hidden]{display:none!important;}
   `;
   document.head.appendChild(style);
 }
@@ -149,6 +175,28 @@ function ensureBankGroupUiV58(){
     const anchor=nameInput.closest('label')||nameInput;
     anchor.insertAdjacentElement('afterend',holder);
   }
+  if(nameInput&&!$('#import-save-mode-v587')){
+    const holder=document.createElement('label');
+    holder.className='bank-group-field-v58 import-save-mode-field-v587';
+    holder.innerHTML='导入方式<select id="import-save-mode-v587"><option value="new">新建题库</option><option value="append">追加到已有题库</option></select>';
+    const anchor=$('#import-bank-group-v58')?.closest('label')||nameInput.closest('label')||nameInput;
+    anchor.insertAdjacentElement('afterend',holder);
+  }
+  if(nameInput&&!$('#import-append-target-v587')){
+    const holder=document.createElement('label');
+    holder.id='import-append-target-field-v587';
+    holder.className='bank-group-field-v58 import-append-target-field-v587';
+    holder.hidden=true;
+    holder.innerHTML='追加到<select id="import-append-target-v587"></select>';
+    const anchor=$('#import-save-mode-v587')?.closest('label')||$('#import-bank-group-v58')?.closest('label')||nameInput.closest('label')||nameInput;
+    anchor.insertAdjacentElement('afterend',holder);
+  }
+  const importSaveMode=$('#import-save-mode-v587');
+  if(importSaveMode&&!importSaveMode.dataset.boundV587){
+    importSaveMode.dataset.boundV587='1';
+    importSaveMode.onchange=renderImportAppendTargetV587;
+  }
+  renderImportAppendTargetV587();
   if(!$('#bank-group-list-v58')){
     const datalist=document.createElement('datalist');
     datalist.id='bank-group-list-v58';
@@ -336,7 +384,7 @@ function normalizeQuestion(q,i=0){
       analysisText='答案：'+ansLabel+'。'+analysisText.replace(/^[。．.、，,：:；;\s]+/,'');
     }
   }
-  return {id:q.id||'q_'+Date.now()+'_'+i,type,number:q.number||i+1,volume:q.volume||'',group:q.group||'',question:questionText,options,answer,analysis:analysisText,category:q.category||q.topic||q.group||'',images:structuredImages,score:Number(q.score||0)||undefined,normalized:normalizeText(questionText)}
+  return {id:q.id||makeId('q',i),type,number:q.number||i+1,volume:q.volume||'',group:q.group||'',question:questionText,options,answer,analysis:analysisText,category:q.category||q.topic||q.group||'',images:structuredImages,score:Number(q.score||0)||undefined,normalized:normalizeText(questionText)}
 }
 function toNativeQuestionType(type){
   const value=normalizeWebQuestionType(type);
@@ -451,7 +499,7 @@ function normalizeTextAnswerForCompare(s){return String(s||'').trim().replace(/[
 function normalizeText(t){return String(t).replace(/[\s\u3000]/g,'').replace(/[（）()【】\[\]{}。？?！!，,、：:；;\.\*]/g,'').toLowerCase()}
 function stripQuestionImages(s){return String(s||'').replace(/!\[[^\]]*\]\(data:image\/[^)]+\)/g,'[图片]')}
 function short(s,n){s=stripQuestionImages(String(s||''));return s.length>n?s.slice(0,n)+'…':s}
-function esc(s){return String(s??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]))}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function toast(msg,type='warn',title='提示'){
   const n=$('#import-summary');
   if(n){n.textContent=msg;n.className='notice '+type}
@@ -976,7 +1024,7 @@ function tableRowToQuestionV49(row,map,idx,sheetName=''){
   const answer=isTextType(type)?splitTextAnswer(rawAnswer):splitAnswerByType(rawAnswer,type);
   const correctFromOptions=options.filter(o=>o.correct).map(o=>o.key);
   const num=Number(String(rawNumber||'').match(/\d+/)?.[0]||0)||undefined;
-  return {id:'tbl_'+Date.now()+'_'+idx,type,number:num||idx+1,question,options:options.filter(o=>o.text),answer:answer.length?answer:correctFromOptions,analysis,category,group:category,score:tableCellV49(row,map.score)};
+  return {id:makeId('tbl',idx),type,number:num||idx+1,question,options:options.filter(o=>o.text),answer:answer.length?answer:correctFromOptions,analysis,category,group:category,score:tableCellV49(row,map.score)};
 }
 function stripLeadingOptionLabelV49(text,key=''){
   const k=String(key||'').toUpperCase();
@@ -1019,7 +1067,7 @@ async function extractDocxText(file){
         const imgEntry=entries.find(e=>e.name===entryName);
         if(!imgEntry)continue;
         const mime=docxImageMime(entryName);
-        if(/^image\/(?:png|jpe?g|gif|webp|bmp|svg\+xml)$/i.test(mime)){
+        if(/^image\/(?:png|jpe?g|gif|webp|bmp)$/i.test(mime)){
           const bytes=await unzipEntryBytes(buf,imgEntry);
           imageMap[rid]=await makeOptimizedDocxImageMarkdown(bytes,mime,imageNo,entryName);
         }else{
@@ -1049,13 +1097,17 @@ async function makeOptimizedDocxImageMarkdown(bytes,mime,no,entryName){
     if(!canCanvas||!raster)return rawMarkdown;
     const blob=new Blob([rawBytes],{type:mime});
     const url=URL.createObjectURL(blob);
-    const img=await new Promise((resolve,reject)=>{
+    let img;
+    try{
+      img=await new Promise((resolve,reject)=>{
       const im=new Image();
       im.onload=()=>resolve(im);
       im.onerror=()=>reject(new Error('图片解码失败'));
       im.src=url;
     });
-    URL.revokeObjectURL(url);
+    }finally{
+      URL.revokeObjectURL(url);
+    }
     const maxW=1400,maxH=1100;
     const w=img.naturalWidth||img.width||0,h=img.naturalHeight||img.height||0;
     if(!w||!h)return rawMarkdown;
@@ -1084,43 +1136,69 @@ async function makeOptimizedDocxImageMarkdown(bytes,mime,no,entryName){
   }
 }
 
+const ZIP_MAX_ENTRIES_V33=1200;
+const ZIP_MAX_ENTRY_COMPRESSED_V33=40*1024*1024;
+const ZIP_MAX_ENTRY_UNCOMPRESSED_V33=80*1024*1024;
+const ZIP_MAX_TOTAL_UNCOMPRESSED_V33=160*1024*1024;
+function isSafeZipEntryNameV33(name){
+  name=String(name||'').trim();
+  if(!name||name.includes('\0')||name.includes('\\')||name.startsWith('/')||name.startsWith('./')||/^[A-Za-z]:/.test(name))return false;
+  return name.split('/').every(part=>part&&part!=='.'&&part!=='..');
+}
+function assertZipEntrySafeV33(e,bufLength){
+  if(!e||!isSafeZipEntryNameV33(e.name))throw new Error('ZIP entry name is unsafe.');
+  if(e.compSize>ZIP_MAX_ENTRY_COMPRESSED_V33||e.uncompSize>ZIP_MAX_ENTRY_UNCOMPRESSED_V33)throw new Error('ZIP entry is too large.');
+  if(e.localOffset<0||e.localOffset>=bufLength)throw new Error('ZIP entry offset is invalid.');
+}
 function parseZipEntries(buf){
   const view=new DataView(buf);const bytes=new Uint8Array(buf);
   let eocd=-1;
   for(let i=bytes.length-22;i>=Math.max(0,bytes.length-66000);i--){if(view.getUint32(i,true)===0x06054b50){eocd=i;break}}
   if(eocd<0)throw new Error('无法识别 docx 压缩结构');
-  const total=view.getUint16(eocd+10,true);const cdOffset=view.getUint32(eocd+16,true);let off=cdOffset;const out=[];
+  const total=view.getUint16(eocd+10,true);if(total>ZIP_MAX_ENTRIES_V33)throw new Error('ZIP entry count exceeds limit.');
+  const cdOffset=view.getUint32(eocd+16,true);let off=cdOffset;const out=[];let totalUncompressed=0;
   for(let i=0;i<total;i++){
+    if(off<0||off+46>bytes.length)throw new Error('ZIP central directory is truncated.');
     if(view.getUint32(off,true)!==0x02014b50)break;
-    const method=view.getUint16(off+10,true),compSize=view.getUint32(off+20,true),nameLen=view.getUint16(off+28,true),extraLen=view.getUint16(off+30,true),commentLen=view.getUint16(off+32,true),localOffset=view.getUint32(off+42,true);
+    const method=view.getUint16(off+10,true),compSize=view.getUint32(off+20,true),uncompSize=view.getUint32(off+24,true),nameLen=view.getUint16(off+28,true),extraLen=view.getUint16(off+30,true),commentLen=view.getUint16(off+32,true),localOffset=view.getUint32(off+42,true);
+    if(off+46+nameLen+extraLen+commentLen>bytes.length)throw new Error('ZIP central directory entry is truncated.');
     const name=utf8(bytes.slice(off+46,off+46+nameLen));
-    out.push({name,method,compSize,localOffset});
+    const entry={name,method,compSize,uncompSize,localOffset};
+    assertZipEntrySafeV33(entry,bytes.length);
+    totalUncompressed+=uncompSize;
+    if(totalUncompressed>ZIP_MAX_TOTAL_UNCOMPRESSED_V33)throw new Error('ZIP total size exceeds limit.');
+    out.push(entry);
     off+=46+nameLen+extraLen+commentLen;
   }
   return out;
 }
 async function unzipEntry(buf,e){
   const view=new DataView(buf);const bytes=new Uint8Array(buf);let off=e.localOffset;
+  assertZipEntrySafeV33(e,bytes.length);
   if(view.getUint32(off,true)!==0x04034b50)throw new Error('docx 条目结构异常');
-  const nameLen=view.getUint16(off+26,true),extraLen=view.getUint16(off+28,true);const dataStart=off+30+nameLen+extraLen;const data=bytes.slice(dataStart,dataStart+e.compSize);
+  const nameLen=view.getUint16(off+26,true),extraLen=view.getUint16(off+28,true);const dataStart=off+30+nameLen+extraLen;if(dataStart+e.compSize>bytes.length)throw new Error('ZIP entry data is truncated.');const data=bytes.slice(dataStart,dataStart+e.compSize);
   if(e.method===0)return utf8(data);
   if(e.method!==8)throw new Error('不支持的 docx 压缩方式：'+e.method);
   if(!('DecompressionStream' in window))throw new Error('当前浏览器不支持本地解压 docx，请换新版 Chrome/Edge，或复制 Word 内容粘贴导入');
   let stream;
   try{stream=new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))}catch(err){warnDev('deflate-raw 解压失败，尝试 deflate。',err);stream=new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate'))}
   const ab=await new Response(stream).arrayBuffer();
+  if(ab.byteLength>ZIP_MAX_ENTRY_UNCOMPRESSED_V33)throw new Error('ZIP entry output is too large.');
   return new TextDecoder('utf-8').decode(ab);
 }
 async function unzipEntryBytes(buf,e){
   const view=new DataView(buf);const bytes=new Uint8Array(buf);let off=e.localOffset;
+  assertZipEntrySafeV33(e,bytes.length);
   if(view.getUint32(off,true)!==0x04034b50)throw new Error('docx 条目结构异常');
-  const nameLen=view.getUint16(off+26,true),extraLen=view.getUint16(off+28,true);const dataStart=off+30+nameLen+extraLen;const data=bytes.slice(dataStart,dataStart+e.compSize);
+  const nameLen=view.getUint16(off+26,true),extraLen=view.getUint16(off+28,true);const dataStart=off+30+nameLen+extraLen;if(dataStart+e.compSize>bytes.length)throw new Error('ZIP entry data is truncated.');const data=bytes.slice(dataStart,dataStart+e.compSize);
   if(e.method===0)return data;
   if(e.method!==8)throw new Error('不支持的 docx 压缩方式：'+e.method);
   if(!('DecompressionStream' in window))throw new Error('当前浏览器不支持本地解压 docx 图片');
   let stream;
   try{stream=new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))}catch(err){warnDev('deflate-raw 图片解压失败，尝试 deflate。',err);stream=new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate'))}
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+  const ab=await new Response(stream).arrayBuffer();
+  if(ab.byteLength>ZIP_MAX_ENTRY_UNCOMPRESSED_V33)throw new Error('ZIP entry output is too large.');
+  return new Uint8Array(ab);
 }
 function parseDocxImageRelationships(xml){
   const out={};let m;const re=/<Relationship\b[^>]*>/g;
@@ -1148,7 +1226,7 @@ function docxImageMime(name){
   if(ext==='gif')return 'image/gif';
   if(ext==='webp')return 'image/webp';
   if(ext==='bmp')return 'image/bmp';
-  if(ext==='svg')return 'image/svg+xml';
+  if(ext==='svg')return 'application/octet-stream';
   if(ext==='wmf')return 'image/x-wmf';
   if(ext==='emf')return 'image/x-emf';
   return 'application/octet-stream';
@@ -2512,7 +2590,7 @@ function makeRecruitmentQuestion(seg,ctx,idx,restore){
   const group=ctx.group||'';
   let type=recruitmentGroupToType(group);
   if(ans.length>1)type='multiple';
-  const q={id:'imp_'+Date.now()+'_'+idx,type,number:num,question,options,answer:ans,analysis:ctx.analysis||'',group,category:group};
+  const q={id:makeId('imp',idx),type,number:num,question,options,answer:ans,analysis:ctx.analysis||'',group,category:group};
   return normalizeQuestion(q,idx);
 }
 function parseRecruitmentQuestionPart(qText,answerMap={},analysisMap={},group='',restore=(x)=>x){
@@ -2962,7 +3040,7 @@ function parseStructuredExamText(text){
     answer=isTextType(type)?splitTextAnswer(fixed.answer.join('；')):normalizeAnswer(fixed.answer,mergedOptions,type);
     const finalOptions=(type==='judge'&&!mergedOptions.length)?[{key:'A',text:'正确'},{key:'B',text:'错误'}]:mergedOptions;
     questions.push({
-      id:'structured_'+Date.now()+'_'+questions.length,
+      id:makeId('structured',questions.length),
       type,
       number:current.number||questions.length+1,
       question:fixed.question,
@@ -3647,7 +3725,7 @@ function parseBlock(block,idx){
   answer=fixedQuestion.answer;
   if(type==='judge'&&!options.length)options=[{key:'A',text:'正确'},{key:'B',text:'错误'}];
   answer=isTextType(type)?splitTextAnswer(answer.join('；')):normalizeAnswer(answer,options,type);
-  return {id:'imp_'+Date.now()+'_'+idx,type,number,question,options,answer,analysis:formatAnswerAnalysisForReview(answer,analysis.trim()),group};
+  return {id:makeId('imp',idx),type,number,question,options,answer,analysis:formatAnswerAnalysisForReview(answer,analysis.trim()),group};
 }
 
 function normalizeOptionKey(k){
@@ -4195,9 +4273,24 @@ function confirmImport(){
   if(bankEditSessionV45){saveBankEditSessionV45();return}
   if(!importCache.length){showNotice('导入失败','当前没有可导入的题目。','danger');return}
   const warnings=collectImportWarnings(importCache);
+  if(readImportSaveModeV587()==='append'){
+    const targetId=readImportAppendTargetIdV587();
+    const target=state.banks.find(b=>b.id===targetId);
+    if(!target){showNotice('追加失败','请选择要追加到的已有题库。','danger');return}
+    target.questions=Array.isArray(target.questions)?target.questions:[];
+    const before=target.questions.length;
+    const added=importCache.map((q,i)=>cleanImportedQuestion({...q,id:makeId('q',before+i+1),number:before+i+1}));
+    target.questions.push(...added);
+    target.updatedAt=now();
+    state.activeBankId=target.id;
+    saveSilent();renderAll();
+    showNotice('追加成功',`已追加到“${bankPathLabelV58(target)}”，新增 ${added.length} 道题，当前共 ${target.questions.length} 道题。${warnings.length?`导入前有 ${warnings.length} 条提示，建议在题库管理中抽查。`:''}`,'ok');
+    toast(`已追加到题库：${target.name}，新增 ${added.length} 题。`,'ok','追加成功');
+    return;
+  }
   const name=$('#import-bank-name').value.trim()||'导入题库';
   const groupName=readImportBankGroupV58();
-  const bank={id:'bank_'+Date.now(),name,groupName,createdAt:now(),questions:importCache.map((q,i)=>cleanImportedQuestion({...q,id:'q_'+Date.now()+'_'+i,number:i+1}))};
+  const bank={id:makeId('bank'),name,groupName,createdAt:now(),updatedAt:now(),questions:importCache.map((q,i)=>cleanImportedQuestion({...q,id:makeId('q',i),number:i+1}))};
   state.banks.push(bank);state.activeBankId=bank.id;saveSilent();renderAll();
   showNotice('导入成功',`已创建题库“${name}”，共 ${bank.questions.length} 道题。${warnings.length?`导入前有 ${warnings.length} 条提示，建议在题库管理中抽查。`:''}`,'ok');
   toast(`已导入题库：${name}，共 ${bank.questions.length} 题。`,'ok','导入成功');
@@ -4205,9 +4298,9 @@ function confirmImport(){
 
 function renameActiveBank(){const b=activeBank();const val=$('#bank-rename-input').value.trim();if(!val){alert('请输入新的题库名称。');return}b.name=val;b.groupName=normalizeBankGroupNameV58($('#bank-group-rename-input-v58')?.value||b.groupName);b.updatedAt=now();$('#bank-rename-input').value='';const g=$('#bank-group-rename-input-v58');if(g){g.dataset.lastBankIdV58='';}saveSilent();renderAll()}
 function duplicateActiveBank(){duplicateBankById(activeBank().id)}
-function duplicateBankById(id){const b=state.banks.find(x=>x.id===id);if(!b)return;const copy=JSON.parse(JSON.stringify(b));copy.id='bank_'+Date.now();copy.name=b.name+' - 副本';copy.createdAt=now();copy.updatedAt=now();copy.questions=(copy.questions||[]).map((q,i)=>({...q,id:'q_'+Date.now()+'_'+i,number:i+1}));state.banks.push(copy);state.activeBankId=copy.id;saveSilent();renderAll()}
-function newEmptyBank(){const name=prompt('请输入新题库名称：','新建空题库');if(!name)return;const groupName=normalizeBankGroupNameV58(prompt('请输入一级分组名称，可留空：','')||'');const bank={id:'bank_'+Date.now(),name:name.trim()||'新建空题库',groupName,createdAt:now(),updatedAt:now(),questions:[]};state.banks.push(bank);state.activeBankId=bank.id;saveSilent();renderAll()}
-function mergeBankIntoActive(){const sourceId=$('#merge-bank-select').value;const target=activeBank();const src=state.banks.find(b=>b.id===sourceId);if(!src){alert('没有可合并的来源题库。');return}if(!confirm(`将“${src.name}”的 ${src.questions.length} 道题合并到当前题库“${target.name}”？`))return;const before=target.questions.length;const existing=new Set(target.questions.map(q=>normalizeText(q.question)));let added=0,skipped=0;src.questions.forEach((q)=>{const k=normalizeText(q.question);if(existing.has(k)){skipped++;return}existing.add(k);target.questions.push({...JSON.parse(JSON.stringify(q)),id:'q_'+Date.now()+'_'+Math.random().toString(16).slice(2),number:target.questions.length+1});added++});target.updatedAt=now();saveSilent();renderAll();alert(`合并完成：新增 ${added} 题，跳过重复 ${skipped} 题。合并前 ${before} 题，当前 ${target.questions.length} 题。`)}
+function duplicateBankById(id){const b=state.banks.find(x=>x.id===id);if(!b)return;const copy=JSON.parse(JSON.stringify(b));copy.id=makeId('bank');copy.name=b.name+' - 副本';copy.createdAt=now();copy.updatedAt=now();copy.questions=(copy.questions||[]).map((q,i)=>({...q,id:makeId('q',i),number:i+1}));state.banks.push(copy);state.activeBankId=copy.id;saveSilent();renderAll()}
+function newEmptyBank(){const name=prompt('请输入新题库名称：','新建空题库');if(!name)return;const groupName=normalizeBankGroupNameV58(prompt('请输入一级分组名称，可留空：','')||'');const bank={id:makeId('bank'),name:name.trim()||'新建空题库',groupName,createdAt:now(),updatedAt:now(),questions:[]};state.banks.push(bank);state.activeBankId=bank.id;saveSilent();renderAll()}
+function mergeBankIntoActive(){const sourceId=$('#merge-bank-select').value;const target=activeBank();const src=state.banks.find(b=>b.id===sourceId);if(!src){alert('没有可合并的来源题库。');return}if(!confirm(`将“${src.name}”的 ${src.questions.length} 道题合并到当前题库“${target.name}”？`))return;const before=target.questions.length;const existing=new Set(target.questions.map(q=>normalizeText(q.question)));let added=0,skipped=0;src.questions.forEach((q)=>{const k=normalizeText(q.question);if(existing.has(k)){skipped++;return}existing.add(k);target.questions.push({...JSON.parse(JSON.stringify(q)),id:makeId('q',target.questions.length+1),number:target.questions.length+1});added++});target.updatedAt=now();saveSilent();renderAll();alert(`合并完成：新增 ${added} 题，跳过重复 ${skipped} 题。合并前 ${before} 题，当前 ${target.questions.length} 题。`)}
 function exportBankById(id){const b=state.banks.find(x=>x.id===id);if(!b)return;const text=JSON.stringify(serializeBankForCrossExportV53(b),null,2);$('#export-output')&&($('#export-output').value=text);download((b.name||'题库')+'.json',text)}
 
 function dedupeActiveBank(){const b=activeBank();const map=new Map(),dups=[];b.questions.forEach(q=>{const k=normalizeText(q.question);if(map.has(k))dups.push(q);else map.set(k,q)});b.questions=[...map.values()].map((q,i)=>({...q,number:i+1}));saveSilent();renderAll();alert(`去重完成：删除 ${dups.length} 道重复题，剩余 ${b.questions.length} 道。`)}
@@ -4264,7 +4357,7 @@ function renderQuestionContent(s){
 }
 function renderQuestionInlineRichTextV55(raw){
   raw=String(raw||'');
-  const re=/!\[([^\]]{0,120})\]\((data:image\/(?:png|jpeg|jpg|gif|webp|bmp|svg\+xml);base64,[^)]+)\)/g;
+  const re=/!\[([^\]]{0,120})\]\((data:image\/(?:png|jpeg|jpg|gif|webp|bmp);base64,[^)]+)\)/g;
   let out='',last=0,m;
   while((m=re.exec(raw))){
     out+=renderInlineMathTextV56(raw.slice(last,m.index));
@@ -4443,7 +4536,7 @@ function pickRichTextFieldV57(q,field,fallback=''){
   }
   candidates.push(fallback);
   const found=candidates.find(v=>v!=null&&String(v).trim());
-  return String(found||'');
+  return sanitizeRichTextValueV57(found);
 }
 function pickRichOptionTextV57(q,index,opt){
   const fallback=opt&&(opt.text??opt.content??opt.label??'');
@@ -4453,14 +4546,19 @@ function pickRichOptionTextV57(q,index,opt){
     const options=fields&&fields.options;
     if(Array.isArray(options)){
       const item=options[index];
-      if(typeof item==='string'&&item.trim())return item;
+      if(typeof item==='string'&&item.trim())return sanitizeRichTextValueV57(item);
       if(item&&typeof item==='object'){
         const value=item.text??item.markdown??item.sourceText??item.fallbackText??item.plainText;
-        if(value!=null&&String(value).trim())return String(value);
+        if(value!=null&&String(value).trim())return sanitizeRichTextValueV57(value);
       }
     }
   }
-  return String(fallback||'');
+  return sanitizeRichTextValueV57(fallback);
+}
+function sanitizeRichTextValueV57(value){
+  let s=String(value||'');
+  if(s.length>200000)s=s.slice(0,200000);
+  return stripUnsafeImageDataUrisV83(s);
 }
 function detectRichFeaturesV57(text,extraImages){
   const s=String(text||'');
@@ -4501,11 +4599,16 @@ function buildRichContentCapabilitiesV57(banks){
   return caps;
 }
 
-function questionImageDataUriRegexV83(){return /^data:image\/(?:png|jpeg|jpg|gif|webp|bmp|svg\+xml);base64,[A-Za-z0-9+/=\r\n]+$/i}
-function markdownImageRegexV83(){return /!\[([^\]]{0,120})\]\((data:image\/(?:png|jpeg|jpg|gif|webp|bmp|svg\+xml);base64,[^)]+)\)/gi}
-function dataUriMimeExtV83(dataUri){const m=String(dataUri||'').match(/^data:image\/([^;]+);base64,/i);const t=(m&&m[1]||'webp').toLowerCase();if(t==='jpeg'||t==='jpg')return'jpg';if(t==='svg+xml')return'svg';return t.replace(/[^a-z0-9]+/g,'')||'webp'}
+function questionImageDataUriRegexV83(){return /^data:image\/(?:png|jpeg|jpg|gif|webp|bmp);base64,[A-Za-z0-9+/=\r\n]+$/i}
+function markdownImageRegexV83(){return /!\[([^\]]{0,120})\]\((data:image\/(?:png|jpeg|jpg|gif|webp|bmp);base64,[^)]+)\)/gi}
+function dataUriMimeExtV83(dataUri){const m=String(dataUri||'').match(/^data:image\/([^;]+);base64,/i);const t=(m&&m[1]||'webp').toLowerCase();if(t==='jpeg'||t==='jpg')return'jpg';return t.replace(/[^a-z0-9]+/g,'')||'webp'}
 function dataUriSizeBytesV83(dataUri){const b64=String(dataUri||'').split(',')[1]||'';return Math.max(0,Math.floor(b64.replace(/\s/g,'').length*3/4))}
 function safeImageIdV83(prefix,a,b){return String(prefix||'img')+'_'+String(a||'q').replace(/[^A-Za-z0-9_-]+/g,'_').slice(0,32)+'_'+String(b||1).replace(/[^A-Za-z0-9_-]+/g,'_')}
+function stripUnsafeImageDataUrisV83(text){
+  return String(text||'')
+    .replace(/!\[[^\]]{0,120}\]\((data:image\/(?:svg\+xml|[^;)]+);base64,[^)]+)\)/gi,'[图片已移除]')
+    .replace(/data:image\/(?:svg\+xml|[^;)]+);base64,[A-Za-z0-9+/=\r\n]+/gi,(m)=>questionImageDataUriRegexV83().test(m)?m:'[图片已移除]');
+}
 function normalizeQuestionImagesForWebV83(images){
   if(!Array.isArray(images))return[];
   return images.map((img,i)=>{
@@ -4603,7 +4706,7 @@ function removeWrong(id){const bid=activeBank().id;setWrongEntries(getWrongEntri
 function makeAnswerDetail(q,chosen,ok,score,totalScore){return {questionId:q.id,question:short(q.question,120),type:q.type,category:q.category||'',chosen:[...chosen],answer:[...q.answer],correct:!!ok,score:ok?score:0,fullScore:score,time:now()}}
 function finishPractice(exited=false){
   const total=practice.answered;
-  const rec={id:'rec_'+Date.now(),mode:'练习',bankId:activeBank().id,bankName:activeBank().name,total:practice.items.length,answered:total,correct:practice.correct,wrong:practice.wrong,accuracy:total?Math.round(practice.correct/total*100):0,score:null,date:now(),duration:Math.round((Date.now()-practice.start)/1000),details:practice.details||[]};
+  const rec={id:makeId('rec','practice'),mode:'练习',bankId:activeBank().id,bankName:activeBank().name,total:practice.items.length,answered:total,correct:practice.correct,wrong:practice.wrong,accuracy:total?Math.round(practice.correct/total*100):0,score:null,date:now(),duration:Math.round((Date.now()-practice.start)/1000),details:practice.details||[]};
   if(total||exited)state.records.unshift(rec);
   saveSilent();
   if(exited){
@@ -4803,7 +4906,7 @@ function upgradeState(){
   state.favorites=state.favorites&&typeof state.favorites==='object'?state.favorites:{};
   for(const b of state.banks){
     b.groupName=pickBankGroupNameFromJsonV58(b);
-    b.questions=(b.questions||[]).map((q,i)=>({...normalizeQuestion(q,i),id:q.id||('q_'+Date.now()+'_'+i),number:q.number||i+1}));
+    b.questions=(b.questions||[]).map((q,i)=>({...normalizeQuestion(q,i),id:q.id||makeId('q',i),number:q.number||i+1}));
     b.updatedAt=b.updatedAt||b.createdAt||now();
   }
   for(const bid of Object.keys(state.wrongBook)){
@@ -5033,10 +5136,10 @@ function normalizeBackupPayloadV23(data,fileName){
   if(!data||typeof data!=='object')throw new Error('JSON 根节点不是对象');
   let banks=[];let wrongBook={};let favorites={};let records=[];let settings={};let activeBankId='';
   if(Array.isArray(data.banks)){banks=data.banks;wrongBook=data.wrongBook||{};favorites=data.favorites||{};records=Array.isArray(data.records)?data.records:[];settings=data.settings||{};activeBankId=data.activeBankId||''}
-  else if(Array.isArray(data.questions)){banks=[{id:data.id||('bank_'+Date.now()),name:data.name||cleanFileNameV23(fileName).replace(/\.json$/i,'')||'导入题库',groupName:pickBankGroupNameFromJsonV58(data),createdAt:data.createdAt||now(),updatedAt:now(),questions:data.questions}]}
-  else if(Array.isArray(data)){banks=[{id:'bank_'+Date.now(),name:cleanFileNameV23(fileName).replace(/\.json$/i,'')||'导入题库',createdAt:now(),updatedAt:now(),questions:data}]}
+  else if(Array.isArray(data.questions)){banks=[{id:data.id||makeId('bank'),name:data.name||cleanFileNameV23(fileName).replace(/\.json$/i,'')||'导入题库',groupName:pickBankGroupNameFromJsonV58(data),createdAt:data.createdAt||now(),updatedAt:now(),questions:data.questions}]}
+  else if(Array.isArray(data)){banks=[{id:makeId('bank'),name:cleanFileNameV23(fileName).replace(/\.json$/i,'')||'导入题库',createdAt:now(),updatedAt:now(),questions:data}]}
   else throw new Error('不是 Shiroha Quiz 备份，也不是单题库 JSON');
-  banks=banks.map((b,i)=>({id:String(b.id||('bank_import_'+Date.now()+'_'+i)),name:String(b.name||b.title||('导入题库_'+(i+1))),groupName:pickBankGroupNameFromJsonV58(b),createdAt:b.createdAt||now(),updatedAt:now(),questions:(b.questions||[]).map((q,j)=>normalizeQuestion(q,j)).filter(q=>q.question)})).filter(b=>b.questions.length||b.name);
+  banks=banks.map((b,i)=>({id:String(b.id||makeId('bank_import',i)),name:String(b.name||b.title||('导入题库_'+(i+1))),groupName:pickBankGroupNameFromJsonV58(b),createdAt:b.createdAt||now(),updatedAt:now(),questions:(b.questions||[]).map((q,j)=>normalizeQuestion(q,j)).filter(q=>q.question)})).filter(b=>b.questions.length||b.name);
   return {banks,wrongBook,favorites,records,settings,activeBankId};
 }
 function mergeBackupBanksV23(normalized){
@@ -5053,10 +5156,10 @@ function mergeBackupBanksV23(normalized){
       name=base+n;
     }
     let id=bank.id;
-    if(existingIds.has(id))id='bank_import_'+Date.now()+'_'+idx;
+    if(existingIds.has(id))id=makeId('bank_import',idx);
     existingIds.add(id);
     existingKeys.add(bankNameKeyV58(groupName,name));
-    const next={...bank,id,name,groupName,createdAt:bank.createdAt||now(),updatedAt:now(),questions:(bank.questions||[]).map((q,i)=>({...normalizeQuestion(q,i),id:q.id||('q_'+Date.now()+'_'+idx+'_'+i),number:q.number||i+1}))};
+    const next={...bank,id,name,groupName,createdAt:bank.createdAt||now(),updatedAt:now(),questions:(bank.questions||[]).map((q,i)=>({...normalizeQuestion(q,i),id:q.id||makeId('q',idx,i),number:q.number||i+1}))};
     state.banks.push(next);
     if(normalized.wrongBook&&normalized.wrongBook[oldId])state.wrongBook[id]=normalized.wrongBook[oldId];
     if(normalized.favorites&&normalized.favorites[oldId])state.favorites[id]=normalized.favorites[oldId];
@@ -5241,7 +5344,7 @@ function submitExam(auto){
   if(exam.submitted)return;
   collectExamTextAnswers();exam.submitted=true;clearInterval(exam.timer);let got=0,total=0,correct=0;const details=[];const byType={};
   exam.items.forEach(q=>{const sc=scoreOf(q);total+=sc;const ans=exam.answers[q.id]||[];const ok=sameAnswerForQuestion(q,ans,q.answer);if(ok){got+=sc;correct++} addWrongOnExam(q.id,!ok);details.push(makeAnswerDetail(q,ans,ok,sc,sc));const k=q.type||'single';byType[k]=byType[k]||{total:0,correct:0,score:0,fullScore:0};byType[k].total++;if(ok)byType[k].correct++;byType[k].score+=ok?sc:0;byType[k].fullScore+=sc;});
-  const acc=Math.round(correct/exam.items.length*100);const rec={id:'rec_'+Date.now(),name:exam.name||'模拟考试',mode:'考试',bankId:activeBank().id,bankName:activeBank().name,total:exam.items.length,answered:Object.keys(exam.answers).length,correct,wrong:exam.items.length-correct,accuracy:acc,score:got,totalScore:total,passScore:exam.passScore,passed:got>=Number(exam.passScore||0),autoSubmitted:!!auto,date:now(),duration:Math.round((Date.now()-exam.start)/1000),details,byType};
+  const acc=Math.round(correct/exam.items.length*100);const rec={id:makeId('rec','exam'),name:exam.name||'模拟考试',mode:'考试',bankId:activeBank().id,bankName:activeBank().name,total:exam.items.length,answered:Object.keys(exam.answers).length,correct,wrong:exam.items.length-correct,accuracy:acc,score:got,totalScore:total,passScore:exam.passScore,passed:got>=Number(exam.passScore||0),autoSubmitted:!!auto,date:now(),duration:Math.round((Date.now()-exam.start)/1000),details,byType};
   state.records.unshift(rec);saveSilent();$('#submit-exam-btn').disabled=true;$('#exam-timer').textContent=auto?'已自动交卷':'已交卷';renderExamResult(rec);renderAll();
 }
 function renderExamResult(rec){
@@ -5329,7 +5432,7 @@ function saveBankEditSessionV45(){
   bank.name=name;
   bank.groupName=groupName;
   bank.updatedAt=now();
-  bank.questions=importCache.map((q,i)=>cleanImportedQuestion({...q,id:q.id||('q_'+Date.now()+'_'+i),number:i+1}));
+  bank.questions=importCache.map((q,i)=>cleanImportedQuestion({...q,id:q.id||makeId('q',i),number:i+1}));
   state.activeBankId=bank.id;
   saveSilent();
   bankEditSessionV45=null;
