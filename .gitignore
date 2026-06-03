@@ -71,3 +71,11 @@ assets/*.zip
 .codex/
 run-regression.ps1
 .gradle-user-home/
+
+# Admin / Server modules (only on content-admin branch)
+apps/admin/
+apps/server/
+
+# Server runtime
+*.sqlite
+.env
