@@ -7084,3 +7084,56 @@ body.exam-rail-collapsed-v34 #exam-answer-card-v30 .rail-show-btn-v34:hover{
     flex:1 1 100%;
   }
 }
+
+/* SHIROHA_WEB_V58_8_BANK_ACTION_NOWRAP_FIX_START */
+.bank-card-actions-v33{
+  width:86px !important;
+  min-width:86px !important;
+}
+.bank-card-actions-v33 [data-openbank]{
+  width:86px !important;
+  min-width:86px !important;
+  max-width:86px !important;
+  white-space:nowrap !important;
+  word-break:keep-all !important;
+  line-height:1 !important;
+  font-size:12px !important;
+}
+/* SHIROHA_WEB_V58_8_BANK_ACTION_NOWRAP_FIX_END */
+
+/* SHIROHA_WEB_V58_9_BANK_ACTION_AND_IMAGE_OPTION_FIX_START */
+.bank-card-actions-v33{
+  width:92px !important;
+  min-width:92px !important;
+  max-width:92px !important;
+  align-items:stretch !important;
+}
+.bank-card-actions-v33 [data-openbank],
+.bank-card-actions-v33 .bank-more-menu-v28,
+.bank-card-actions-v33 .bank-more-menu-v28 summary,
+.bank-card-actions-v33 .bank-delete-quick-v32{
+  width:92px !important;
+  min-width:92px !important;
+  max-width:92px !important;
+  height:34px !important;
+  min-height:34px !important;
+  max-height:34px !important;
+  margin:0 !important;
+  padding:0 !important;
+  box-sizing:border-box !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  white-space:nowrap !important;
+  word-break:keep-all !important;
+  line-height:1 !important;
+  font-size:12px !important;
+}
+.option.option-key-only-v59{
+  justify-content:flex-start;
+}
+.option.option-key-only-v59 .option-key{
+  min-width:auto;
+  font-size:18px;
+}
+/* SHIROHA_WEB_V58_9_BANK_ACTION_AND_IMAGE_OPTION_FIX_END */
