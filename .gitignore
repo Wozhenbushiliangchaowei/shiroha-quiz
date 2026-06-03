@@ -72,6 +72,9 @@ assets/*.zip
 run-regression.ps1
 .gradle-user-home/
 
+# Private / personal
+docs/copyright/
+
 # Admin / Server modules (only on content-admin branch)
 apps/admin/
 apps/server/
