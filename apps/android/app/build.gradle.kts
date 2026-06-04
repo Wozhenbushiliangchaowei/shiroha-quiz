@@ -22,7 +22,7 @@ android {
             dimension = "variant"
             applicationId = "com.yiqiu.shirohaquiz"
             versionCode = 28
-            versionName = "0.4.11-alpha"
+            versionName = "0.5.0-alpha"
         }
         create("native") {
             dimension = "variant"
