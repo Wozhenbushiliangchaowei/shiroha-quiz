@@ -7185,3 +7185,130 @@ body.exam-rail-collapsed-v34 #exam-answer-card-v30 .rail-show-btn-v34:hover{
   }
 }
 /* SHIROHA_WEB_V58_9_5_LIMIT_CONTROL_END */
+
+
+/* SHIROHA_WEB_V58_9_6_FAVORITES_HOTKEY_RAIL_START */
+.favorites-card-v596{overflow:hidden;}
+.favorites-hero-v596{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:14px;
+  margin:10px 0 16px;
+  padding:14px;
+  border:1px solid rgba(47,111,237,.12);
+  border-radius:20px;
+  background:linear-gradient(135deg,rgba(247,251,255,.96),rgba(255,255,255,.86));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.9);
+}
+.favorites-hero-v596 b{display:block;color:#10233f;font-size:16px;}
+.favorites-hero-v596 span{display:block;margin-top:4px;color:#64748b;font-size:13px;line-height:1.55;}
+.favorites-actions-top-v596{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap;}
+.favorites-list-v596{display:flex;flex-direction:column;gap:10px;}
+.favorite-item-v596{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:12px;
+  padding:13px 14px;
+  border:1px solid rgba(148,163,184,.22);
+  border-radius:18px;
+  background:rgba(255,255,255,.78);
+  box-shadow:0 8px 20px rgba(37,99,235,.035);
+}
+.favorite-item-title-v596{display:flex;align-items:center;gap:8px;min-width:0;}
+.favorite-item-title-v596 b{min-width:0;color:#10233f;line-height:1.45;}
+.favorite-item-main-v596 p{margin:6px 0 0;line-height:1.55;}
+.favorite-actions-v596{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;}
+body.practice-focus.practice-rail-collapsed-v34 #practice-card > .practice-side-v31{
+  width:auto !important;
+  max-height:none !important;
+  overflow:visible !important;
+  align-items:flex-end !important;
+  background:transparent !important;
+}
+body.practice-focus.practice-rail-collapsed-v34 #practice-card > .practice-side-v31 #practice-stat-card-v30{
+  width:auto !important;
+  min-width:0 !important;
+  max-width:none !important;
+  height:auto !important;
+  min-height:0 !important;
+  max-height:none !important;
+  padding:0 !important;
+  border:0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+  overflow:visible !important;
+}
+body.practice-focus.practice-rail-collapsed-v34 #practice-card > .practice-side-v31 #practice-stat-card-v30 > :not(.rail-show-btn-v34){display:none !important;}
+body.practice-focus.practice-rail-collapsed-v34 #practice-card > .practice-side-v31 #practice-stat-card-v30 > .rail-show-btn-v34{
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  width:auto !important;
+  min-width:58px !important;
+  max-width:none !important;
+  height:30px !important;
+  min-height:30px !important;
+  max-height:30px !important;
+  padding:0 12px !important;
+  border:1px solid rgba(210,223,246,.96) !important;
+  border-radius:999px !important;
+  background:rgba(255,255,255,.88) !important;
+  color:#7386a5 !important;
+  box-shadow:0 10px 24px rgba(132,156,204,.12) !important;
+  backdrop-filter:blur(10px) !important;
+  writing-mode:horizontal-tb !important;
+  letter-spacing:.02em !important;
+  font-size:11px !important;
+  font-weight:800 !important;
+  line-height:1 !important;
+  white-space:nowrap !important;
+}
+body.practice-focus.practice-rail-collapsed-v34 #practice-card > .practice-side-v31 #practice-stat-card-v30 > .rail-show-btn-v34:hover{
+  color:#5676ac !important;
+  border-color:rgba(174,198,236,.98) !important;
+  background:rgba(255,255,255,.96) !important;
+}
+@media(max-width:720px){
+  .favorites-hero-v596{grid-template-columns:1fr;}
+  .favorites-actions-top-v596{justify-content:flex-start;}
+  .favorite-item-v596{grid-template-columns:1fr;align-items:stretch;}
+  .favorite-actions-v596{justify-content:flex-start;}
+}
+/* SHIROHA_WEB_V58_9_6_FAVORITES_HOTKEY_RAIL_END */
+
+/* SHIROHA_WEB_V58_9_6_1_PRACTICE_STATS_TOGGLE_TRANSPARENT_FIX_START
+   刷题统计收起按钮对齐右下角人物“显示/隐藏”胶囊：半透明、弱边框、无重阴影。 */
+body.practice-focus.practice-rail-collapsed-v34 #practice-card > .practice-side-v31 #practice-stat-card-v30 > .rail-show-btn-v34{
+  width:auto !important;
+  min-width:50px !important;
+  max-width:none !important;
+  height:auto !important;
+  min-height:24px !important;
+  max-height:none !important;
+  padding:4px 10px !important;
+  border:1px solid rgba(205,220,246,.45) !important;
+  border-radius:999px !important;
+  background:rgba(255,255,255,.42) !important;
+  color:rgba(88,107,136,.72) !important;
+  box-shadow:none !important;
+  backdrop-filter:blur(10px) !important;
+  -webkit-backdrop-filter:blur(10px) !important;
+  opacity:.42 !important;
+  transform:translateX(6px) !important;
+  writing-mode:horizontal-tb !important;
+  letter-spacing:.02em !important;
+  font-size:11px !important;
+  font-weight:800 !important;
+  line-height:1 !important;
+  white-space:nowrap !important;
+}
+body.practice-focus.practice-rail-collapsed-v34 #practice-card > .practice-side-v31 #practice-stat-card-v30 > .rail-show-btn-v34:hover{
+  opacity:.88 !important;
+  background:rgba(255,255,255,.82) !important;
+  border-color:rgba(174,198,236,.72) !important;
+  color:#5676ac !important;
+  box-shadow:none !important;
+}
+/* SHIROHA_WEB_V58_9_6_1_PRACTICE_STATS_TOGGLE_TRANSPARENT_FIX_END */
