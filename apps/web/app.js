@@ -82,7 +82,7 @@ $('#dual-question-file').onchange=e=>readDualFile(e,'question');$('#dual-answer-
 $('#edit-close-btn').onclick=closeEditModal;$('#edit-save-btn').onclick=saveEditQuestion;$('#edit-delete-btn').onclick=deleteEditQuestion;const pf=$('#import-preview-filter');if(pf)pf.onchange=e=>{importPreviewFilter=e.target.value;renderImportPreview(importCache)};const bid=$('#batch-delete-import-btn');if(bid)bid.onclick=batchDeleteImportSelected;const cis=$('#clear-import-selection-btn');if(cis)cis.onclick=()=>{importSelected.clear();renderImportPreview(importCache)};
 $('#dedupe-btn').onclick=dedupeActiveBank;$('#rename-bank-btn').onclick=renameActiveBank;$('#duplicate-bank-btn').onclick=duplicateActiveBank;$('#new-empty-bank-btn').onclick=newEmptyBank;$('#merge-bank-btn').onclick=mergeBankIntoActive;$('#bank-sort-mode').onchange=renderBankList;$('#start-practice-btn').onclick=startPractice;$('#reset-practice-btn').onclick=()=>{exitPracticeFocus();$('#practice-card').innerHTML='<div class="empty">选择条件后点击“开始练习”。</div>';practice={items:[],idx:0,answered:0,correct:0,wrong:0,start:0};$('#practice-progress').textContent='0 / 0'};
 $('#start-exam-btn').onclick=startExam;$('#submit-exam-btn').onclick=()=>submitExam(false);$('#clear-wrong-btn').onclick=()=>{if(confirm('确定清空当前题库错题本？')){state.wrongBook[activeBank().id]=[];saveSilent();renderAll()}};
-$('#clear-records-btn').onclick=()=>{if(confirm('确定清空全部练习与考试记录？')){state.records=[];saveSilent();renderAll()}};$('#export-records-btn').onclick=exportRecords;$('#record-mode-filter').onchange=renderRecords;$('#record-limit').onchange=renderRecords;$('#record-refresh-btn').onclick=renderRecords;$('#wrong-status-filter').onchange=renderWrongBook;$('#wrong-sort-mode').onchange=renderWrongBook;$('#practice-wrong-btn').onclick=startWrongPractice;const practiceFavBtnV596=$('#practice-favorites-btn-v596');if(practiceFavBtnV596)practiceFavBtnV596.onclick=()=>switchPracticeSourceV27('favorite');const clearFavBtnV596=$('#clear-favorites-btn-v596');if(clearFavBtnV596)clearFavBtnV596.onclick=clearCurrentFavoritesV596;$('#export-json-btn').onclick=exportCurrentBank;$('#export-all-btn').onclick=exportAll;$('#reset-data-btn').onclick=resetData;bindLimitControlsV60();
+$('#clear-records-btn').onclick=()=>{if(confirm('确定清空全部练习与考试记录？')){state.records=[];saveSilent();renderAll()}};$('#export-records-btn').onclick=exportRecords;$('#record-mode-filter').onchange=renderRecords;$('#record-limit').onchange=renderRecords;$('#record-refresh-btn').onclick=renderRecords;$('#wrong-status-filter').onchange=renderWrongBook;$('#wrong-sort-mode').onchange=renderWrongBook;$('#practice-wrong-btn').onclick=startWrongPractice;const practiceFavBtnV596=$('#practice-favorites-btn-v596');if(practiceFavBtnV596)practiceFavBtnV596.onclick=()=>switchPracticeSourceV27('favorite');const clearFavBtnV596=$('#clear-favorites-btn-v596');if(clearFavBtnV596)clearFavBtnV596.onclick=clearCurrentFavoritesV596;const exportJsonBtn=$('#export-json-btn');if(exportJsonBtn)exportJsonBtn.onclick=exportCurrentBank;const exportAllBtn=$('#export-all-btn');if(exportAllBtn)exportAllBtn.onclick=exportAll;const importBackupQuickBtnV598=$('#import-backup-quick-btn-v598');if(importBackupQuickBtnV598)importBackupQuickBtnV598.onclick=()=>{backupImportModeV23=$('#settings-backup-mode-v23')?.value||'overwrite';$('#backup-json-file-v23')?.click()};$('#reset-data-btn').onclick=resetData;bindLimitControlsV60();
 }
 
 function cleanImportBankNameFromFile(fileName){
@@ -312,7 +312,7 @@ function renderBankList(){
             <div class="bank-more-panel-v28">
               <button class="ghost" data-editbank-v45="${esc(b.id)}" type="button">编辑 / 识别详情</button>
               <button class="ghost" data-copybank="${esc(b.id)}" type="button">复制</button>
-              <button class="ghost" data-exportbank="${esc(b.id)}" type="button">导出该题库</button>
+              <button class="ghost" data-exportbank="${esc(b.id)}" type="button">导出该题库 JSON</button>
             </div>
           </details>
           <button class="ghost danger mini-btn bank-delete-quick-v32" data-delbank="${esc(b.id)}" type="button" title="删除该题库">删除</button>
@@ -5008,7 +5008,7 @@ function renderRecords(){const list=$('#records-list');let rows=[...state.record
 function exportRecords(){const text=JSON.stringify(state.records||[],null,2);$('#export-output')&&($('#export-output').value=text);download('学习记录.json',text)}
 function fmt(s){return new Date(s).toLocaleString('zh-CN',{hour12:false})}
 function exportCurrentBank(){const text=JSON.stringify(serializeBankForCrossExportV53(activeBank()),null,2);$('#export-output').value=text;download(activeBank().name+'.json',text)}
-function exportAll(){const text=JSON.stringify(serializeStateForCrossExportV53({...state,schemaVersion:CURRENT_SCHEMA_VERSION}),null,2);$('#export-output').value=text;download('shiroha_quiz_all_data.json',text)}
+function exportAll(){exportAllBackupV23()}
 
 
 /* SHIROHA_V23_DATA_TOOLS_PATCH_START
@@ -5033,7 +5033,7 @@ function ensureBankManageExportPanelV23(){
   if($('#bank-bulk-export-panel-v23'))return;
   const bankList=$('#bank-list');if(!bankList)return;
   bankList.insertAdjacentHTML('beforebegin',`<div id="bank-bulk-export-panel-v23" class="data-tool-card-v23 bank-bulk-panel-v23 bank-manage-toolbar-v28">
-    <div class="section-head compact-head-v23"><div><h3>当前题库与批量管理</h3><p class="muted">在这里切换当前题库；勾选下方题库后，可以批量导出或删除。</p></div></div>
+    <div class="section-head compact-head-v23"><div><h3>当前题库与批量管理</h3><p class="muted">在这里切换当前题库；勾选下方题库后，可以批量导出题库 JSON 或删除。</p></div></div>
     <div class="bank-current-bar-v28">
       <label>当前题库<select id="bank-current-select-v28"></select></label>
       <span class="muted">切换后会同步预览、练习、考试和错题范围。</span>
@@ -5042,7 +5042,7 @@ function ensureBankManageExportPanelV23(){
       <label class="check-line-v23"><input id="export-bank-all-v23" type="checkbox">全选</label>
       <button class="ghost" id="export-bank-invert-v23" type="button">反选</button>
       <button class="ghost" id="export-bank-current-v23" type="button">仅选当前题库</button>
-      <button class="primary" id="export-selected-banks-v23" type="button">导出选中题库</button>
+      <button class="primary" id="export-selected-banks-v23" type="button">导出选中题库 JSON</button>
       <button class="ghost danger" id="delete-selected-banks-v32" type="button">删除选中题库</button>
     </div>
     <div id="export-bank-summary-v23" class="notice warn">请选择需要管理的题库。</div>
@@ -5061,19 +5061,17 @@ function ensureSettingsBackupPanelV23(){
   const settingsCard=$('#settings .card');if(!settingsCard)return;
   settingsCard.insertAdjacentHTML('beforeend',`<div id="settings-backup-panel-v23" class="data-tools-v23">
     <h2>备份与恢复</h2>
-    <p class="muted">用于完整备份/恢复本机 localStorage 中的 Shiroha Quiz 数据。手机 WebView 若无法下载文件，可使用“复制全部数据备份文本”。</p>
+    <p class="muted">设置页只处理完整数据备份：包含题库、错题本、收藏夹、练习记录和设置。单个题库或选中题库 JSON 请到“题库管理”页导出。</p>
     <div class="form-grid">
       <label>恢复方式<select id="settings-backup-mode-v23"><option value="merge">合并导入：保留当前数据，新增备份中的题库</option><option value="overwrite" selected>覆盖恢复：用备份替换当前本地数据</option></select></label>
-      <label>备份范围<input disabled value="全部题库、错题、记录、设置" /></label>
+      <label>备份范围<input disabled value="全部题库、错题本、收藏夹、记录、设置" /></label>
     </div>
     <div class="actions wrap-v23">
-      <button class="primary" id="settings-export-all-backup-v23" type="button">导出全部数据备份</button>
       <button class="ghost" id="settings-copy-all-backup-v23" type="button">复制全部数据备份文本</button>
-      <button class="ghost" id="settings-import-backup-v23" type="button">导入配置 / 备份 JSON</button>
+      <button class="ghost" id="settings-import-backup-v23" type="button">导入备份 JSON</button>
     </div>
-    <p class="muted">提示：覆盖恢复会替换本机数据；合并导入遇到同名题库会自动追加“_导入”。下方文本框会显示最近一次导出或导入的 JSON。</p>
+    <p class="muted">提示：顶部“导出全部数据备份”会生成完整备份包；覆盖恢复会替换本机数据；合并导入遇到同名题库会自动追加“_导入”。下方文本框会显示最近一次导出或导入的 JSON。</p>
   </div>`);
-  $('#settings-export-all-backup-v23').onclick=exportAllBackupV23;
   $('#settings-copy-all-backup-v23').onclick=copyAllBackupJsonV23;
   $('#settings-import-backup-v23').onclick=()=>{backupImportModeV23=$('#settings-backup-mode-v23')?.value||'overwrite';$('#backup-json-file-v23').click()};
   const oldAll=$('#export-all-btn');if(oldAll)oldAll.onclick=exportAllBackupV23;
@@ -5117,12 +5115,17 @@ function deleteBanksV32(ids){
 }
 function cleanFileNameV23(s){return String(s||'').replace(/[\\/:*?"<>|]/g,'_').replace(/\s+/g,'_').slice(0,80)||'bank'}
 function todayV23(){return new Date().toISOString().slice(0,10)}
+function buildQuestionBanksExportPayloadV598(banks){
+  const exported=(banks||[]).map(serializeBankForCrossExportV53);
+  if(exported.length===1)return exported[0];
+  return {app:'Shiroha Quiz',appVersion:APP_VERSION,schemaVersion:CURRENT_SCHEMA_VERSION,richContentVersion:RICH_CONTENT_VERSION_V57,richContentCapabilities:buildRichContentCapabilitiesV57(exported),exportType:'question_banks',exportedAt:now(),banks:exported,activeBankId:exported.some(b=>b.id===state.activeBankId)?state.activeBankId:(exported[0]?.id||'')};
+}
 function exportSelectedBanksV23(){
   const banks=selectedBanksV23();if(!banks.length){toast('请至少选择一个题库。','warn');return}
-  const payload=buildBackupPayloadV23(banks,banks.length===1?'single_bank':'selected_banks',false);
+  const payload=buildQuestionBanksExportPayloadV598(banks);
   const text=JSON.stringify(payload,null,2);setBackupPreviewV23(text);
-  const name=banks.length===1?`shiroha-quiz-bank-${cleanFileNameV23(banks[0].name)}-${todayV23()}.json`:`shiroha-quiz-selected-banks-${todayV23()}.json`;
-  download(name,text);toast(`已导出 ${banks.length} 个题库。该 JSON 可在“设置/导出”页的“导入配置 / 备份 JSON”中导入。`,'ok');
+  const name=banks.length===1?`shiroha-quiz-bank-${cleanFileNameV23(banks[0].name)}-${todayV23()}.json`:`shiroha-quiz-question-banks-${todayV23()}.json`;
+  download(name,text);toast(`已导出 ${banks.length} 个题库 JSON。题库管理页导出的 JSON 只包含题库内容，不包含错题、收藏、记录和设置。`,'ok');
 }
 function exportAllBackupV23(){
   const payload=buildBackupPayloadV23(state.banks||[],'all_data',true);
@@ -5131,8 +5134,8 @@ function exportAllBackupV23(){
 }
 async function copySelectedBanksJsonV23(){
   const banks=selectedBanksV23();if(!banks.length){toast('请至少选择一个题库。','warn');return}
-  const text=JSON.stringify(buildBackupPayloadV23(banks,banks.length===1?'single_bank':'selected_banks',false),null,2);setBackupPreviewV23(text);
-  await copyTextV23(text,'已复制选中题库备份文本。');
+  const text=JSON.stringify(buildQuestionBanksExportPayloadV598(banks),null,2);setBackupPreviewV23(text);
+  await copyTextV23(text,'已复制选中题库 JSON 文本。');
 }
 async function copyAllBackupJsonV23(){
   const text=JSON.stringify(buildBackupPayloadV23(state.banks||[],'all_data',true),null,2);setBackupPreviewV23(text);
