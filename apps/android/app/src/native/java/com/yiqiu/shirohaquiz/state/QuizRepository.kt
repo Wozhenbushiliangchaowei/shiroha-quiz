@@ -130,6 +130,13 @@ data class QuestionCheckResult(
 )
 
 object QuizRepository {
+    data class JsonImportPreview(
+        val banks: List<QuizBank>,
+        val kind: String,
+        val message: String,
+        val importBanksOnly: Boolean = true
+    )
+
     const val PRACTICE_MODE_INSTANT = "instant_feedback"
     const val PRACTICE_MODE_BATCH = "batch_review"
     const val PRACTICE_ORDER_RANDOM = "random"
@@ -1934,30 +1941,83 @@ object QuizRepository {
     }
 
     fun parseImportJsonBank(rawText: String): QuizBank? {
-        return runCatching { parseStandaloneJsonBanks(rawText).firstOrNull() }.getOrNull()
+        return parseImportJsonPreview(rawText)?.banks?.singleOrNull()
     }
 
-    private fun parseStandaloneJsonBanks(rawText: String): List<QuizBank> {
+    fun parseImportJsonPreview(rawText: String): JsonImportPreview? {
+        return runCatching { parseStandaloneJsonPreview(rawText) }.getOrNull()
+    }
+
+    private fun parseStandaloneJsonPreview(rawText: String): JsonImportPreview? {
         val text = rawText.trim()
-        if (text.isBlank()) return emptyList()
+        if (text.isBlank()) return null
 
         return if (text.startsWith("[")) {
             val array = JSONArray(text)
-            val firstObject = array.optJSONObject(0)
-            if (firstObject != null && firstObject.optJSONArray("questions") != null) {
-                parseBanksJson(array.toString())
+            if (looksLikeBankArray(array)) {
+                val parsedBanks = parseBanksJson(array.toString())
+                if (parsedBanks.isEmpty()) return null
+                JsonImportPreview(
+                    banks = parsedBanks,
+                    kind = "multi_bank_array",
+                    message = "检测到多题库 JSON：共 ${parsedBanks.size} 个题库，将只导入题库内容。"
+                )
             } else {
-                parseStandaloneQuestionArrayBank(array)?.let(::listOf).orEmpty()
+                val bank = parseStandaloneQuestionArrayBank(array) ?: return null
+                JsonImportPreview(
+                    banks = listOf(bank),
+                    kind = "question_array",
+                    message = "检测到题目数组 JSON：共 ${bank.questions.size} 题，将导入为一个新题库。"
+                )
             }
         } else {
             val root = JSONObject(text)
             val banksArray = root.optJSONArray("banks")
-            if (banksArray != null) {
-                parseBanksJson(banksArray.toString())
-            } else {
-                parseStandaloneBankJsonObject(root)?.let(::listOf).orEmpty()
+            val standaloneBank = parseStandaloneBankJsonObject(root)
+            when {
+                standaloneBank != null -> JsonImportPreview(
+                    banks = listOf(standaloneBank),
+                    kind = "single_bank",
+                    message = "检测到 JSON 单题库：${standaloneBank.name}，共 ${standaloneBank.questions.size} 题。"
+                )
+                banksArray != null -> {
+                    val parsedBanks = parseBanksJson(banksArray.toString())
+                    if (parsedBanks.isEmpty()) return null
+                    val webBackup = isWebBackupJson(root)
+                    JsonImportPreview(
+                        banks = parsedBanks,
+                        kind = if (webBackup) "web_backup" else "multi_bank_backup",
+                        message = if (webBackup) {
+                            "检测到 Web 备份包：共 ${parsedBanks.size} 个题库；原生端将只导入题库内容，不导入错题本、收藏夹、学习记录和设置。"
+                        } else {
+                            "检测到多题库 JSON：共 ${parsedBanks.size} 个题库，将只导入题库内容。"
+                        }
+                    )
+                }
+                else -> null
             }
         }
+    }
+
+    private fun parseStandaloneJsonBanks(rawText: String): List<QuizBank> {
+        return parseStandaloneJsonPreview(rawText)?.banks.orEmpty()
+    }
+
+    private fun looksLikeBankArray(array: JSONArray): Boolean {
+        if (array.length() == 0) return false
+        val firstObject = array.optJSONObject(0) ?: return false
+        return firstObject.optJSONArray("questions") != null
+    }
+
+    private fun isWebBackupJson(root: JSONObject): Boolean {
+        if (!root.has("banks")) return false
+        if (root.optString("kind").startsWith("shiroha_quiz")) return false
+        return root.optString("app").equals("Shiroha Quiz", ignoreCase = true) ||
+            root.has("schemaVersion") ||
+            root.has("exportType") ||
+            root.has("settings") ||
+            root.has("favorites") ||
+            root.has("records")
     }
 
     private fun parseStandaloneQuestionArrayBank(array: JSONArray): QuizBank? {
@@ -2101,24 +2161,30 @@ object QuizRepository {
         val assetDir = File(context.filesDir, "question_assets/backup_${System.currentTimeMillis()}").apply { mkdirs() }
         val root = runCatching {
             if (text.startsWith("[")) {
-                JSONObject().put("banks", JSONArray(text))
+                val array = JSONArray(text)
+                if (looksLikeBankArray(array)) {
+                    JSONObject().put("banks", array)
+                } else {
+                    JSONObject()
+                        .put("name", "导入题库")
+                        .put("groupName", DEFAULT_BANK_GROUP_NAME)
+                        .put("questions", array)
+                }
             } else {
                 JSONObject(text)
             }
-        }.getOrElse { return "导入失败：不是有效的备份文件。" }
+        }.getOrElse { return "导入失败：不是有效的 JSON / ZIP 备份文件。" }
 
-        val bankArray = root.optJSONArray("banks")
-        val importedBanks = runCatching {
-            if (bankArray != null) {
-                parseBanksJson(bankArray.toString())
-            } else {
-                parseStandaloneBankJsonObject(root)?.let(::listOf).orEmpty()
-            }
-        }
+        val preview = runCatching { parseStandaloneJsonPreview(text) }
             .getOrElse { return "导入失败：题库数据无法解析。" }
+            ?: return "导入失败：备份中没有可用题库。"
+        val importedBanks = preview.banks
             .map { bank -> normalizeImportedBankAssets(bank, zipAssets, assetDir) }
             .map(::sanitizeBank)
         if (importedBanks.isEmpty()) return "导入失败：备份中没有可用题库。"
+
+        val isWebBackup = isWebBackupJson(root)
+        val shouldRestoreNativeState = root.optString("kind").startsWith("shiroha_quiz") && !isWebBackup
 
         val idMap = mutableMapOf<String, String>()
         val now = System.currentTimeMillis()
@@ -2142,6 +2208,17 @@ object QuizRepository {
         }
         banks.addAll(addedBanks)
         if (activeBankId == null && addedBanks.isNotEmpty()) activeBankId = addedBanks.first().id
+
+        if (!shouldRestoreNativeState) {
+            resetPracticeState()
+            resetExam()
+            persist()
+            return if (isWebBackup) {
+                "已导入 ${addedBanks.size} 个题库；已忽略 Web 备份中的错题本、收藏夹、学习记录和设置。"
+            } else {
+                "已导入 ${addedBanks.size} 个题库。"
+            }
+        }
 
         val importedWrongBook = root.optJSONArray("wrongBook")?.let { array ->
             runCatching { parseWrongBookJson(array.toString()) }.getOrDefault(emptyList())
@@ -3380,27 +3457,83 @@ object QuizRepository {
         }
     }
 
+    private fun optionKeyForIndex(index: Int): String {
+        return ('A'.code + index).toChar().toString()
+    }
+
+    private fun parseFlexibleAnswer(questionJson: JSONObject): List<String> {
+        val answerArray = listOf(
+            questionJson.optJSONArray("answer"),
+            questionJson.optJSONArray("answers"),
+            questionJson.optJSONArray("correctAnswer"),
+            questionJson.optJSONArray("correctAnswers")
+        ).firstOrNull { it != null }
+        if (answerArray != null) {
+            return buildList {
+                for (k in 0 until answerArray.length()) {
+                    val value = answerArray.optString(k).trim()
+                    if (value.isNotBlank()) add(value)
+                }
+            }
+        }
+        val answerText = listOf(
+            questionJson.optString("answer"),
+            questionJson.optString("answers"),
+            questionJson.optString("correctAnswer"),
+            questionJson.optString("correctAnswers")
+        ).firstOrNull { it.isNotBlank() }.orEmpty().trim()
+        if (answerText.isBlank()) return emptyList()
+        return answerText
+            .split(Regex("[\\s,，;；/|]+"))
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+    }
+
     private fun parseQuestion(questionJson: JSONObject): Question {
-        val optionsArray = questionJson.optJSONArray("options") ?: JSONArray()
-        val answersArray = questionJson.optJSONArray("answer") ?: JSONArray()
+        val optionsArray = questionJson.optJSONArray("options")
+        val optionsObject = questionJson.optJSONObject("options")
 
         val options = buildList {
-            for (k in 0 until optionsArray.length()) {
-                val optionJson = optionsArray.optJSONObject(k) ?: continue
-                add(
-                    Option(
-                        key = optionJson.optString("key"),
-                        text = optionJson.optString("text")
-                    )
-                )
+            when {
+                optionsArray != null -> {
+                    for (k in 0 until optionsArray.length()) {
+                        val optionJson = optionsArray.optJSONObject(k)
+                        if (optionJson != null) {
+                            val key = optionJson.optString("key").ifBlank { optionKeyForIndex(k) }
+                            val text = listOf(
+                                optionJson.optString("text"),
+                                optionJson.optString("value"),
+                                optionJson.optString("content"),
+                                optionJson.optString("label")
+                            ).firstOrNull { it.isNotBlank() }.orEmpty()
+                            add(Option(key = key, text = text))
+                        } else {
+                            val text = optionsArray.optString(k).trim()
+                            if (text.isNotBlank()) add(Option(key = optionKeyForIndex(k), text = text))
+                        }
+                    }
+                }
+                optionsObject != null -> {
+                    val keys = optionsObject.keys()
+                    while (keys.hasNext()) {
+                        val key = keys.next().toString()
+                        val value = optionsObject.opt(key)
+                        val text = when (value) {
+                            is JSONObject -> listOf(
+                                value.optString("text"),
+                                value.optString("value"),
+                                value.optString("content"),
+                                value.optString("label")
+                            ).firstOrNull { it.isNotBlank() }.orEmpty()
+                            else -> value?.toString().orEmpty()
+                        }.trim()
+                        if (key.isNotBlank() && text.isNotBlank()) add(Option(key = key, text = text))
+                    }
+                }
             }
         }
 
-        val answers = buildList {
-            for (k in 0 until answersArray.length()) {
-                add(answersArray.optString(k))
-            }
-        }
+        val answers = parseFlexibleAnswer(questionJson)
 
         val imagesArray = questionJson.optJSONArray("images") ?: JSONArray()
         val images = buildList {

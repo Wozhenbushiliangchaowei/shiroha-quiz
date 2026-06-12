@@ -350,7 +350,11 @@ fun ImportScreen(
         importScope.launch {
             val result = runCatching {
                 withContext(Dispatchers.Default) {
-                    val jsonBank = if (!dualSnapshot) QuizRepository.parseImportJsonBank(rawSnapshot) else null
+                    val jsonPreview = if (!dualSnapshot) QuizRepository.parseImportJsonPreview(rawSnapshot) else null
+                    if (jsonPreview != null && jsonPreview.banks.size > 1) {
+                        throw IllegalArgumentException("${jsonPreview.message} 请在 我的 → 数据管理 → 导入题库 中导入多题库 JSON / 备份包。")
+                    }
+                    val jsonBank = jsonPreview?.banks?.singleOrNull()
                     val parsedResult = if (jsonBank != null) {
                         ImportResult(
                             questions = jsonBank.questions,
@@ -361,7 +365,7 @@ fun ImportScreen(
                                 blockCount = jsonBank.questions.size,
                                 answeredCount = jsonBank.questions.count { it.answer.isNotEmpty() },
                                 candidateCount = 1,
-                                notes = listOf("已识别为 JSON 题库：${jsonBank.name}")
+                                notes = listOf(jsonPreview.message)
                             )
                         )
                     } else if (dualSnapshot) {
@@ -374,18 +378,19 @@ fun ImportScreen(
                     } else {
                         parsedResult
                     }
-                    finalResult to jsonBank
+                    finalResult to jsonPreview
                 }
             }
             isImportBusy = false
-            result.onSuccess { (finalResult, jsonBank) ->
+            result.onSuccess { (finalResult, jsonPreview) ->
+                val jsonBank = jsonPreview?.banks?.singleOrNull()
                 if (jsonBank != null) {
                     newBankName = jsonBank.name.ifBlank { defaultImportBankName(selectedFileName) }
                     newBankGroupName = jsonBank.groupName.ifBlank { DEFAULT_BANK_GROUP_NAME }
                 }
                 applyParsedResult(finalResult)
-                if (jsonBank != null) {
-                    statusText = "已识别 JSON 题库：${jsonBank.name}，共 ${jsonBank.questions.size} 题。"
+                if (jsonPreview != null && jsonBank != null) {
+                    statusText = jsonPreview.message
                     isStatusWarn = false
                 }
             }.onFailure { error ->
