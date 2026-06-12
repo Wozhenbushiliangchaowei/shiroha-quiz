@@ -412,6 +412,7 @@ object StandardQuestionParser {
         return markers
             .filterNot { marker -> imageRanges.any { range -> marker.markerStart in range } }
             .filterNot { marker -> looksLikeOptionMarkerInsideAsciiWord(line, marker) }
+            .filterNot { marker -> looksLikeDottedEnglishAbbreviation(line, marker) }
             .filterNot { marker -> looksLikeInlineEnumerationMarker(line, marker) }
             .distinctBy { it.markerStart to it.key }
             .sortedBy { it.markerStart }
@@ -420,6 +421,18 @@ object StandardQuestionParser {
     private fun looksLikeOptionMarkerInsideAsciiWord(line: String, marker: OptionMarker): Boolean {
         val previous = line.getOrNull(marker.markerStart - 1) ?: return false
         return previous in 'A'..'Z' || previous in 'a'..'z' || previous in '0'..'9' || previous == '_'
+    }
+
+    private fun looksLikeDottedEnglishAbbreviation(line: String, marker: OptionMarker): Boolean {
+        val markerText = line.substring(marker.markerStart, marker.contentStart)
+        if ('.' !in markerText && '．' !in markerText) return false
+
+        val next = line.getOrNull(marker.contentStart) ?: return false
+        if (next !in 'A'..'Z') return false
+
+        val nextNext = line.getOrNull(marker.contentStart + 1)
+        if (nextNext == null || nextNext.isWhitespace()) return true
+        return nextNext in setOf('.', '．', ',', '，', ';', '；', ':', '：', ')', '）', ']', '】', '}', '》')
     }
 
     private fun looksLikeInlineEnumerationMarker(line: String, marker: OptionMarker): Boolean {

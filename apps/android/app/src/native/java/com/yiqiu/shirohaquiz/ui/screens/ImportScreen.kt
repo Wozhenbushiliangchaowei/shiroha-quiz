@@ -80,6 +80,7 @@ import androidx.compose.ui.unit.dp
 import com.yiqiu.shirohaquiz.ai.AiRefactorResult
 import com.yiqiu.shirohaquiz.ai.AiReviewSuggestion
 import com.yiqiu.shirohaquiz.ai.ShirohaAiClient
+import com.yiqiu.shirohaquiz.importer.model.ImportDiagnostics
 import com.yiqiu.shirohaquiz.importer.model.ImportResult
 import com.yiqiu.shirohaquiz.importer.model.ImportWarning
 import com.yiqiu.shirohaquiz.importer.model.Option
@@ -349,21 +350,44 @@ fun ImportScreen(
         importScope.launch {
             val result = runCatching {
                 withContext(Dispatchers.Default) {
-                    val parsedResult = if (dualSnapshot) {
+                    val jsonBank = if (!dualSnapshot) QuizRepository.parseImportJsonBank(rawSnapshot) else null
+                    val parsedResult = if (jsonBank != null) {
+                        ImportResult(
+                            questions = jsonBank.questions,
+                            strategyName = "JSON题库导入",
+                            warnings = emptyList(),
+                            diagnostics = ImportDiagnostics(
+                                normalizedLength = rawSnapshot.length,
+                                blockCount = jsonBank.questions.size,
+                                answeredCount = jsonBank.questions.count { it.answer.isNotEmpty() },
+                                candidateCount = 1,
+                                notes = listOf("已识别为 JSON 题库：${jsonBank.name}")
+                            )
+                        )
+                    } else if (dualSnapshot) {
                         QuizImportParser.parseDualText(rawSnapshot, answerSnapshot)
                     } else {
                         QuizImportParser.parseStandardText(rawSnapshot)
                     }
-                    if (imagesSnapshot.isNotEmpty()) {
+                    val finalResult = if (jsonBank == null && imagesSnapshot.isNotEmpty()) {
                         QuestionImageBinder.attach(parsedResult, imagesSnapshot)
                     } else {
                         parsedResult
                     }
+                    finalResult to jsonBank
                 }
             }
             isImportBusy = false
-            result.onSuccess { finalResult ->
+            result.onSuccess { (finalResult, jsonBank) ->
+                if (jsonBank != null) {
+                    newBankName = jsonBank.name.ifBlank { defaultImportBankName(selectedFileName) }
+                    newBankGroupName = jsonBank.groupName.ifBlank { DEFAULT_BANK_GROUP_NAME }
+                }
                 applyParsedResult(finalResult)
+                if (jsonBank != null) {
+                    statusText = "已识别 JSON 题库：${jsonBank.name}，共 ${jsonBank.questions.size} 题。"
+                    isStatusWarn = false
+                }
             }.onFailure { error ->
                 statusText = "解析失败：${error.message ?: "请检查题库文件格式"}"
                 isStatusWarn = true

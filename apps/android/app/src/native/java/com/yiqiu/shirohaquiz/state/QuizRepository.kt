@@ -455,10 +455,13 @@ object QuizRepository {
         appContext = context.applicationContext
         val cleanGroupName = normalizeBankGroupName(groupName)
         val cleanName = uniqueBankNameInGroup(name.trim().ifBlank { "导入题库" }, cleanGroupName)
+        val importedAssetDir = File(context.filesDir, "question_assets/import_json_${System.currentTimeMillis()}").apply { mkdirs() }
         val bank = QuizBank(
             id = "bank_${System.currentTimeMillis()}",
             name = cleanName,
-            questions = questions.map(::sanitizeQuestion),
+            questions = questions
+                .map { question -> normalizeImportedQuestionAssets(question, emptyMap(), importedAssetDir) }
+                .map(::sanitizeQuestion),
             groupName = cleanGroupName
         )
         banks += bank
@@ -473,7 +476,10 @@ object QuizRepository {
         val bankIndex = banks.indexOfFirst { it.id == bankId }
         if (bankIndex < 0) return false
         val bank = banks[bankIndex]
-        val appendedQuestions = bank.questions + newQuestions.map(::sanitizeQuestion)
+        val importedAssetDir = File(context.filesDir, "question_assets/import_json_${System.currentTimeMillis()}").apply { mkdirs() }
+        val appendedQuestions = bank.questions + newQuestions
+            .map { question -> normalizeImportedQuestionAssets(question, emptyMap(), importedAssetDir) }
+            .map(::sanitizeQuestion)
         banks[bankIndex] = bank.copy(questions = appendedQuestions)
         if (activeBankId == bankId) {
             resetPracticeState()
@@ -1927,6 +1933,72 @@ object QuizRepository {
         }
     }
 
+    fun parseImportJsonBank(rawText: String): QuizBank? {
+        return runCatching { parseStandaloneJsonBanks(rawText).firstOrNull() }.getOrNull()
+    }
+
+    private fun parseStandaloneJsonBanks(rawText: String): List<QuizBank> {
+        val text = rawText.trim()
+        if (text.isBlank()) return emptyList()
+
+        return if (text.startsWith("[")) {
+            val array = JSONArray(text)
+            val firstObject = array.optJSONObject(0)
+            if (firstObject != null && firstObject.optJSONArray("questions") != null) {
+                parseBanksJson(array.toString())
+            } else {
+                parseStandaloneQuestionArrayBank(array)?.let(::listOf).orEmpty()
+            }
+        } else {
+            val root = JSONObject(text)
+            val banksArray = root.optJSONArray("banks")
+            if (banksArray != null) {
+                parseBanksJson(banksArray.toString())
+            } else {
+                parseStandaloneBankJsonObject(root)?.let(::listOf).orEmpty()
+            }
+        }
+    }
+
+    private fun parseStandaloneQuestionArrayBank(array: JSONArray): QuizBank? {
+        val questions = parseQuestionsArray(array)
+        if (questions.isEmpty()) return null
+        return sanitizeBank(
+            QuizBank(
+                id = "bank_json_${System.currentTimeMillis()}",
+                name = "导入题库",
+                groupName = DEFAULT_BANK_GROUP_NAME,
+                questions = questions
+            )
+        )
+    }
+
+    private fun parseStandaloneBankJsonObject(root: JSONObject): QuizBank? {
+        val questionsArray = root.optJSONArray("questions") ?: return null
+        val questions = parseQuestionsArray(questionsArray)
+        if (questions.isEmpty()) return null
+
+        val rawName = listOf(
+            root.optString("name"),
+            root.optString("bankName"),
+            root.optString("title")
+        ).firstOrNull { it.isNotBlank() }.orEmpty()
+        val rawGroupName = listOf(
+            root.optString("groupName"),
+            root.optString("group"),
+            root.optString("category")
+        ).firstOrNull { it.isNotBlank() }.orEmpty()
+
+        return sanitizeBank(
+            QuizBank(
+                id = root.optString("id").ifBlank { "bank_json_${System.currentTimeMillis()}" },
+                name = rawName.ifBlank { "导入题库" },
+                groupName = rawGroupName.ifBlank { DEFAULT_BANK_GROUP_NAME },
+                questions = questions
+            )
+        )
+    }
+
     private data class BackupAsset(
         val backupPath: String,
         val file: File
@@ -2035,8 +2107,14 @@ object QuizRepository {
             }
         }.getOrElse { return "导入失败：不是有效的备份文件。" }
 
-        val bankArray = root.optJSONArray("banks") ?: return "导入失败：备份中没有题库数据。"
-        val importedBanks = runCatching { parseBanksJson(bankArray.toString()) }
+        val bankArray = root.optJSONArray("banks")
+        val importedBanks = runCatching {
+            if (bankArray != null) {
+                parseBanksJson(bankArray.toString())
+            } else {
+                parseStandaloneBankJsonObject(root)?.let(::listOf).orEmpty()
+            }
+        }
             .getOrElse { return "导入失败：题库数据无法解析。" }
             .map { bank -> normalizeImportedBankAssets(bank, zipAssets, assetDir) }
             .map(::sanitizeBank)
@@ -3363,7 +3441,11 @@ object QuizRepository {
                 options = options,
                 answer = answers,
                 analysis = questionJson.optString("analysis"),
-                category = questionJson.optString("category"),
+                category = listOf(
+                    questionJson.optString("category"),
+                    questionJson.optString("group"),
+                    questionJson.optString("volume")
+                ).firstOrNull { it.isNotBlank() }.orEmpty(),
                 images = images,
                 score = if (questionJson.has("score")) questionJson.optDouble("score") else null,
                 subject = questionJson.optString("subject"),

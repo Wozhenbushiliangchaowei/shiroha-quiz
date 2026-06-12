@@ -3069,7 +3069,12 @@ function parseStructuredExamText(text){
     const stem=stripLeadingQuestionTypeLabelV592((current.questionLines||[]).join(' ').replace(/\s+/g,' ').trim());
     const mergedOptions=mergeDuplicateOptions(repairEmbeddedOptions(current.options||[])).filter(o=>o.text);
     let answer=[...(current.answer||[])];
+    const groupType=mapType(current.group||'');
     let type=current.type||guessType(stem,mergedOptions,answer,current.group||'');
+    // v58.9.7：选项结构优先于题干填空/问答语义；只有显式分区/显式题型才保留 blank/short。
+    if(mergedOptions.length && !groupType && !current.explicitType && ['blank','short'].includes(type)){
+      type=guessType(stem,mergedOptions,answer,'');
+    }
     const fixed=cleanQuestionStemAndAnswer(stem,answer,type,mergedOptions);
     answer=isTextType(type)?splitTextAnswer(fixed.answer.join('；')):normalizeAnswer(fixed.answer,mergedOptions,type);
     const finalOptions=(type==='judge'&&!mergedOptions.length)?[{key:'A',text:'正确'},{key:'B',text:'错误'}]:mergedOptions;
@@ -3088,7 +3093,7 @@ function parseStructuredExamText(text){
   };
   const beginQuestion=(number,lineAfterNo)=>{
     flush();
-    current={number,questionLines:[],options:[],answer:[],analysisLines:[],group:currentType,volume:'',type:mapType(currentType)||''};
+    current={number,questionLines:[],options:[],answer:[],analysisLines:[],group:currentType,volume:'',type:mapType(currentType)||'',explicitType:false};
     if(lineAfterNo)current.questionLines.push(lineAfterNo.trim());
   };
   for(let i=0;i<lines.length;i++){
@@ -3153,7 +3158,7 @@ function parseStructuredExamText(text){
     const optionLike=isOptionLine(line)||!!extractInlineOptionsRich(line)||splitInlineOptions(line).length>=2;
     if(qm && !optionLike){
       beginQuestion(Number(qm[1]||qm[2]), stripLeadingQuestionTypeLabelV592(qm[3]||''));
-      if(forcedLineTypeV592&&current)current.type=forcedLineTypeV592;
+      if(forcedLineTypeV592&&current){current.type=forcedLineTypeV592;current.explicitType=true;}
       continue;
     }
     if(!current)continue;
@@ -3766,15 +3771,15 @@ function displayOptionTextV589(q,o){
 
 function parseBlock(block,idx){
   const lines=(Array.isArray(block)?block:block.lines||String(block).split('\n')).map(x=>String(x).trim()).filter(Boolean);
-  const group=block.group||'';let type=mapType(group)||'';let answer=[];let analysis='';let options=[];let qlines=[];let collectingAnalysis=false;let unkeyedMode=false;let pendingOptionKey='';let seenQuestion=false;let number=idx+1;let answerImageOptionsV589=[];let collectingAnswerImageOptionsV589=false;
+  const group=block.group||'';const groupTypeV592=mapType(group)||'';let type=groupTypeV592;let explicitTypeV592=false;let answer=[];let analysis='';let options=[];let qlines=[];let collectingAnalysis=false;let unkeyedMode=false;let pendingOptionKey='';let seenQuestion=false;let number=idx+1;let answerImageOptionsV589=[];let collectingAnswerImageOptionsV589=false;
   const full=lines.join('\n');const inlineType=detectType(full);if(inlineType)type=inlineType;
   for(let li=0;li<lines.length;li++){
     let line=lines[li].trim();
     const numberedTypedLineV592=getNumberedTypeQuestionLineV592(line);
-    if(numberedTypedLineV592){type=numberedTypedLineV592.type;number=numberedTypedLineV592.number;line=`${numberedTypedLineV592.number}. ${numberedTypedLineV592.stem}`;}
+    if(numberedTypedLineV592){type=numberedTypedLineV592.type;explicitTypeV592=true;number=numberedTypedLineV592.number;line=`${numberedTypedLineV592.number}. ${numberedTypedLineV592.stem}`;}
     const numberedTypeHeader=getNumberedTypeQuestionHeader(line);
-    if(numberedTypeHeader){type=numberedTypeHeader.type;number=numberedTypeHeader.number;collectingAnalysis=false;continue;}
-    const t=detectType(line);if(t)type=t;
+    if(numberedTypeHeader){type=numberedTypeHeader.type;explicitTypeV592=true;number=numberedTypeHeader.number;collectingAnalysis=false;continue;}
+    const t=detectType(line);if(t){type=t;explicitTypeV592=true;}
     const contextualTypeV592=type||inferQuestionTypeFromPromptV592([qlines.join(' '),line].filter(Boolean).join(' '),group);
     const inlineAnswerTag=extractInlineAnswerTag(line,contextualTypeV592);
     if(inlineAnswerTag.answer.length){if(!type&&contextualTypeV592)type=contextualTypeV592;answer.push(...inlineAnswerTag.answer);line=inlineAnswerTag.text;}
@@ -3978,6 +3983,7 @@ function parseBlock(block,idx){
   const stemARepairV589=repairStemTrailingAOptionTextV589(question,options,group);
   question=stemARepairV589.question;
   options=stemARepairV589.options;
+  if(options.length && !groupTypeV592 && !explicitTypeV592 && ['blank','short'].includes(type))type='';
   if(!type)type=guessType(question,options,answer,group);
   const fixedQuestion=cleanQuestionStemAndAnswer(question,answer,type,options);
   question=fixedQuestion.question;
@@ -4019,15 +4025,16 @@ function repairEmbeddedOptions(options){
     const base=keyCode(opt.key);
     for(let i=1;i<txt.length;i++){
       const ch=txt[i];
-      if(!/^[A-Ga-g]$/.test(ch))continue;
+      if(!/^[A-G]$/.test(ch))continue;
       const key=normalizeOptionKey(ch);
       if(keyCode(key)<=base)continue;
       const prev=txt[i-1]||'';
       const next=txt[i+1]||'';
       const nextOk=/[、.．:：，,；;\s]/.test(next)||/[\u4e00-\u9fa5]/.test(next);
       if(!nextOk)continue;
-      // 避免拆 HSE会议、API标准 这类英文缩写；但允许 0.2MPaB.0.3 这种单位后粘连选项。
-      if(/[A-Za-z]/.test(prev) && /[\u4e00-\u9fa5]/.test(next))continue;
+      // v58.9.7：标准英文选项内容中大量出现 a/b/c/d/e/f/g，不能拆成新选项。
+      // 只有大写 A-G 且处在独立标号边界时，才作为嵌入选项拆分。
+      if(prev && /[A-Za-z0-9]/.test(prev))continue;
       let len=1;
       while(i+len<txt.length && /[、.．:：，,；;\s]/.test(txt[i+len]))len++;
       hits.push({idx:i,len,key});
@@ -4345,19 +4352,26 @@ function extractInlineOptionsRich(line){
     }
   }
   const hits=[];
-  const re=/([A-Ga-g0])\s*(?:[、.．:：，,]|\s+)\s*/g;
+  const re=/([A-Ga-g0])\s*([、.．:：，,]|\s+)\s*/g;
   let m;
   while((m=re.exec(s))){
     const idx=m.index;
+    const keyRaw=m[1];
+    const sep=m[2]||'';
     const prev=idx>0?s[idx-1]:'';
     const next=s[re.lastIndex]||'';
     const after=s.slice(re.lastIndex).trimStart()[0]||'';
+    const whitespaceSepOnly=/^\s+$/.test(sep);
+    // v58.9.7：英文判断题题干里常有 “a vowel sound and ...”、"a television ..."。
+    // 不能把小写 a/b/c/d/e/f/g + 空格误当作 A-G 选项；否则标准英文判断题会粘连/拆坏。
+    // 真正的英文选项通常写成 A. / B.，或至少用大写 A/B/C/D 作为独立标号。
+    if(whitespaceSepOnly && /^[a-g]$/.test(keyRaw))continue;
     // 避免把 API、100Bc、A级油井水泥、题干括号里的答案“（D ）”误作选项。
     if(prev && /[A-Za-z0-9]/.test(prev))continue;
     if((/[（(]/.test(prev)||/[（(]\s*$/.test(s.slice(Math.max(0,idx-4),idx))) && /[）)〕]/.test(after))continue;
-    if(m[1]==='0' && (/^[\d]/.test(after)||/[\d.．]/.test(prev)))continue;
+    if(keyRaw==='0' && (/^[\d]/.test(after)||/[\d.．]/.test(prev)))continue;
     if(!next)continue;
-    hits.push({idx,len:m[0].length,key:m[1],correct:false});
+    hits.push({idx,len:m[0].length,key:keyRaw,correct:false});
   }
   // 兼容 A从左向右、B粉煤灰、C控制系统、D套管 这种没有标点的选项。
   const noSepRe=/([A-Da-d])(?=[\u4e00-\u9fa5])/g;
