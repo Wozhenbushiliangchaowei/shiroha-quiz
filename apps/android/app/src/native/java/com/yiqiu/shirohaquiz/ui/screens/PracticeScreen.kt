@@ -473,6 +473,9 @@ fun PracticeScreen(
         ) {
             practiceDisplayOptions(question, QuizRepository.practiceOptionShuffleEnabled, QuizRepository.practiceOptionShuffleSeed)
         }
+        val displayAnswerMap = remember(displayOptions) {
+            displayOptions.associate { option -> option.originalKey.trim().uppercase() to option.displayKey }
+        }
         val isCurrentQuestionFavorited = QuizRepository.isCurrentPracticeQuestionFavorited()
         val batchDraftAnsweredCount = QuizRepository.practiceDraftAnsweredCount()
         var showBatchSubmitConfirm by rememberSaveable(practiceQuestions.size, QuizRepository.practiceBatchSubmitted, batchGroupStart) { mutableStateOf(false) }
@@ -556,14 +559,16 @@ fun PracticeScreen(
                 singleQuestionAiError = null
                 autoNextScope.launch {
                     val requestUserAnswer = effectiveResult?.userAnswer ?: displayedSelection
+                    val aiQuestion = practiceQuestionForDisplay(question, displayOptions)
+                    val aiUserAnswer = practiceAnswersForDisplay(requestUserAnswer, displayAnswerMap)
                     val result = runCatching {
                         withContext(Dispatchers.IO) {
                             ShirohaAiClient.analyzeSingleQuestion(
                                 apiBaseUrl = QuizRepository.aiApiBaseUrl,
                                 apiKey = QuizRepository.aiApiKey,
                                 modelName = QuizRepository.aiModelName,
-                                question = question,
-                                userAnswer = requestUserAnswer,
+                                question = aiQuestion,
+                                userAnswer = aiUserAnswer,
                                 timeoutSeconds = QuizRepository.aiTimeoutSeconds
                             )
                         }
@@ -693,11 +698,11 @@ fun PracticeScreen(
                 QuestionType.JUDGE -> {
                     displayOptions.forEach { option ->
                         QuizOptionCard(
-                            label = option.key,
+                            label = option.displayKey,
                             text = option.text,
-                            selected = displayedSelection.contains(option.key),
+                            selected = displayedSelection.any { it.trim().equals(option.originalKey, ignoreCase = true) },
                             resultStyle = practiceOptionResultStyle(
-                                optionKey = option.key,
+                                optionKey = option.originalKey,
                                 correctAnswers = question.answer,
                                 result = effectiveResult,
                                 revealAnswer = isReciteMode
@@ -712,7 +717,7 @@ fun PracticeScreen(
                                         QuizRepository.practiceBatchAutoNextEnabled &&
                                         isInstantAutoSubmitQuestion
                                     QuizRepository.toggleAnswer(
-                                        key = option.key,
+                                        key = option.originalKey,
                                         multiple = question.type == QuestionType.MULTIPLE
                                     )
                                     if (shouldAutoSubmitInstant) {
@@ -882,7 +887,13 @@ fun PracticeScreen(
             }
 
             if (isReciteMode || effectiveResult != null) {
-                val answerText = effectiveResult?.answerText ?: question.answer.joinToString(" / ").ifBlank { "未识别答案" }
+                val answerText = when (question.type) {
+                    QuestionType.SINGLE,
+                    QuestionType.MULTIPLE -> practiceAnswersForDisplay(question.answer, displayAnswerMap)
+                        .joinToString(" / ")
+                        .ifBlank { "未识别答案" }
+                    else -> effectiveResult?.answerText ?: question.answer.joinToString(" / ").ifBlank { "未识别答案" }
+                }
                 Spacer(Modifier.height(16.dp))
                 if (!isReciteMode && effectiveResult != null) {
                     if (effectiveResult.autoScored) {
@@ -2595,15 +2606,62 @@ private fun formatAnalysisForDisplay(analysis: String): String {
         .trim()
 }
 
-private fun practiceDisplayOptions(question: Question, shuffleEnabled: Boolean, sessionSeed: Long): List<Option> {
-    if (!shuffleEnabled) return question.options
-    if (question.type != QuestionType.SINGLE && question.type != QuestionType.MULTIPLE && question.type != QuestionType.JUDGE) return question.options
-    if (question.options.size <= 1) return question.options
-    val seedSource = "${question.id}|${question.number}|${question.question}"
-    val seed = sessionSeed xor seedSource.hashCode().toLong()
-    return question.options.toMutableList().also { options ->
-        java.util.Collections.shuffle(options, java.util.Random(seed))
+private data class PracticeDisplayOption(
+    val displayKey: String,
+    val originalKey: String,
+    val text: String
+)
+
+private fun practiceDisplayOptions(
+    question: Question,
+    shuffleEnabled: Boolean,
+    sessionSeed: Long
+): List<PracticeDisplayOption> {
+    val canShuffle = shuffleEnabled &&
+        (question.type == QuestionType.SINGLE || question.type == QuestionType.MULTIPLE) &&
+        question.options.size > 1
+    val orderedOptions = if (canShuffle) {
+        val seedSource = "${question.id}|${question.number}|${question.question}"
+        val seed = sessionSeed xor seedSource.hashCode().toLong()
+        question.options.toMutableList().also { options ->
+            java.util.Collections.shuffle(options, java.util.Random(seed))
+        }
+    } else {
+        question.options
     }
+    return orderedOptions.mapIndexed { index, option ->
+        PracticeDisplayOption(
+            displayKey = if (canShuffle) practiceDisplayKey(index) else option.key,
+            originalKey = option.key,
+            text = option.text
+        )
+    }
+}
+
+private fun practiceDisplayKey(index: Int): String {
+    return if (index in 0..25) ('A'.code + index).toChar().toString() else (index + 1).toString()
+}
+
+private fun practiceAnswersForDisplay(
+    answers: List<String>,
+    originalToDisplay: Map<String, String>
+): List<String> {
+    return answers.map { answer ->
+        val normalized = answer.trim().uppercase()
+        originalToDisplay[normalized] ?: answer
+    }
+}
+
+private fun practiceQuestionForDisplay(
+    question: Question,
+    displayOptions: List<PracticeDisplayOption>
+): Question {
+    if (question.type != QuestionType.SINGLE && question.type != QuestionType.MULTIPLE) return question
+    val originalToDisplay = displayOptions.associate { it.originalKey.trim().uppercase() to it.displayKey }
+    return question.copy(
+        options = displayOptions.map { Option(key = it.displayKey, text = it.text) },
+        answer = practiceAnswersForDisplay(question.answer, originalToDisplay)
+    )
 }
 
 private val practiceTypeOrder = listOf(
