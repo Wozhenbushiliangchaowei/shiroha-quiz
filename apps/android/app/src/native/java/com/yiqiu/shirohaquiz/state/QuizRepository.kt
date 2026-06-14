@@ -2227,12 +2227,120 @@ object QuizRepository {
         banks.addAll(addedBanks)
         if (activeBankId == null && addedBanks.isNotEmpty()) activeBankId = addedBanks.first().id
 
-        if (!shouldRestoreNativeState) {
+        // v0.8：Web 备份也尝试映射状态数据
+        var importedStateCount = 0
+        if (isWebBackup) {
+            val questionIdToBank = mutableMapOf<String, String>()
+            addedBanks.forEach { bank ->
+                bank.questions.forEach { q ->
+                    questionIdToBank[q.id] = bank.id
+                }
+            }
+            // Web wrongBook: {bankId: [{id, wrongCount, rightCount, lastWrongAt, lastCorrectAt, status}]}
+            val webWrongBookObj = root.optJSONObject("wrongBook")
+            if (webWrongBookObj != null) {
+                val importedWrongBook = mutableListOf<WrongQuestionEntry>()
+                val bankIdKeys = webWrongBookObj.keys()
+                while (bankIdKeys.hasNext()) {
+                    val originalBankId = bankIdKeys.next()
+                    val mappedBankId = idMap[originalBankId] ?: continue
+                    val mappedBank = addedBanks.firstOrNull { it.id == mappedBankId } ?: continue
+                    val entries = webWrongBookObj.optJSONArray(originalBankId) ?: continue
+                    for (k in 0 until entries.length()) {
+                        val entry = entries.optJSONObject(k) ?: continue
+                        val qid = entry.optString("id")
+                        val question = mappedBank.questions.firstOrNull { it.id == qid } ?: continue
+                        importedWrongBook.add(
+                            WrongQuestionEntry(
+                                bankId = mappedBankId,
+                                bankName = mappedBank.name,
+                                question = question,
+                                lastAnswer = emptyList(),
+                                source = "web-backup",
+                                timestamp = System.currentTimeMillis(),
+                                wrongCount = entry.optInt("wrongCount", 1),
+                                rightCount = entry.optInt("rightCount", 0),
+                                lastWrongAt = entry.optLong("lastWrongAt", System.currentTimeMillis()),
+                                lastCorrectAt = if (entry.has("lastCorrectAt") && !entry.isNull("lastCorrectAt")) entry.optLong("lastCorrectAt") else null,
+                                status = entry.optString("status", "未掌握").ifBlank { "未掌握" }
+                            )
+                        )
+                    }
+                }
+                wrongBook.addAll(0, importedWrongBook)
+                importedStateCount += importedWrongBook.size
+            }
+            // Web favorites: {bankId: [questionId, ...]}
+            val webFavoritesObj = root.optJSONObject("favorites")
+            if (webFavoritesObj != null) {
+                val importedFavorites = mutableListOf<FavoriteQuestionEntry>()
+                val bankIdKeys = webFavoritesObj.keys()
+                while (bankIdKeys.hasNext()) {
+                    val originalBankId = bankIdKeys.next()
+                    val mappedBankId = idMap[originalBankId] ?: continue
+                    val mappedBank = addedBanks.firstOrNull { it.id == mappedBankId } ?: continue
+                    val qids = webFavoritesObj.optJSONArray(originalBankId) ?: continue
+                    for (k in 0 until qids.length()) {
+                        val qid = qids.optString(k)
+                        val question = mappedBank.questions.firstOrNull { it.id == qid } ?: continue
+                        importedFavorites.add(FavoriteQuestionEntry(question = question, bankId = mappedBankId, bankName = mappedBank.name, favoritedAt = System.currentTimeMillis()))
+                    }
+                }
+                favoriteQuestions.addAll(0, importedFavorites)
+                importedStateCount += importedFavorites.size
+            }
+            // Web records: [{mode, bankId, bankName, total, correct, ...}]
+            val webRecords = root.optJSONArray("records")
+            if (webRecords != null) {
+                val importedRecords = mutableListOf<StudyRecord>()
+                for (k in 0 until webRecords.length()) {
+                    val rec = webRecords.optJSONObject(k) ?: continue
+                    val mappedBankId = rec.optString("bankId").let { idMap[it] ?: it }
+                    val details = rec.optJSONArray("details")
+                    val questionResults = if (details != null) {
+                        val placeholderQuestion = Question(type = QuestionType.SHORT, question = "")
+                        buildList {
+                            for (d in 0 until details.length()) {
+                                val detail = details.optJSONObject(d) ?: continue
+                                add(
+                                StudyQuestionResult(
+                                        question = placeholderQuestion,
+                                        userAnswer = (0 until (detail.optJSONArray("chosen")?.length() ?: 0)).map { detail.optJSONArray("chosen")?.optString(it) ?: "" },
+                                        correct = detail.optBoolean("correct"),
+                                        answerText = (detail.optJSONArray("answer") ?: JSONArray()).let { arr -> (0 until arr.length()).map { arr.optString(it) }.joinToString(" / ") },
+                                        autoScored = true
+                                    )
+                                )
+                            }
+                        }
+                    } else emptyList()
+                    importedRecords.add(
+                        StudyRecord(
+                            id = rec.optString("id", "rec_${System.currentTimeMillis()}_$k"),
+                            bankId = mappedBankId.ifBlank { null },
+                            bankName = rec.optString("bankName"),
+                            source = "web",
+                            title = rec.optString("mode", "练习"),
+                            total = rec.optInt("total"),
+                            correct = rec.optInt("correct"),
+                            timestamp = rec.optLong("timestamp", System.currentTimeMillis()),
+                            durationSeconds = rec.optInt("duration").takeIf { it > 0 },
+                            autoSubmitted = rec.optBoolean("autoSubmitted"),
+                            startedAt = if (rec.has("startedAt") && !rec.isNull("startedAt")) rec.optLong("startedAt") else null,
+                            earnedScore = if (rec.has("score") && !rec.isNull("score")) rec.optDouble("score") else null,
+                            totalScore = if (rec.has("totalScore") && !rec.isNull("totalScore")) rec.optDouble("totalScore") else null,
+                            questionResults = questionResults
+                        )
+                    )
+                }
+                studyRecords.addAll(0, importedRecords)
+                importedStateCount += importedRecords.size
+            }
             resetPracticeState()
             resetExam()
             persist()
-            return if (isWebBackup) {
-                "已导入 ${addedBanks.size} 个题库；已忽略 Web 备份中的错题本、收藏夹、学习记录和设置。"
+            return if (importedStateCount > 0) {
+                "已导入 ${addedBanks.size} 个题库；已同步错题本、收藏夹和记录。"
             } else {
                 "已导入 ${addedBanks.size} 个题库。"
             }

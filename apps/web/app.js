@@ -6073,17 +6073,46 @@ function buildBackupPayloadV23(banks,exportType='selected_banks',includeAll=fals
   const wrongBook={};Object.keys(state.wrongBook||{}).forEach(id=>{if(includeAll||bankIds.has(id))wrongBook[id]=state.wrongBook[id]});
   const favorites={};Object.keys(state.favorites||{}).forEach(id=>{if(includeAll||bankIds.has(id))favorites[id]=state.favorites[id]});
   const exportedBanks=(banks||[]).map(serializeBankForCrossExportV53);
-  return {app:'Shiroha Quiz',appVersion:APP_VERSION,schemaVersion:CURRENT_SCHEMA_VERSION,richContentVersion:RICH_CONTENT_VERSION_V57,richContentCapabilities:buildRichContentCapabilitiesV57(exportedBanks),exportType,exportedAt:now(),banks:exportedBanks,wrongBook,favorites,records:includeAll?(state.records||[]):[],settings:includeAll?(state.settings||{}):{},activeBankId:includeAll?state.activeBankId:((banks&&banks[0]&&banks[0].id)||'')};
+  // v2.4：完整导出时同时输出 Native 互通字段
+  const nativeInterop=includeAll?buildNativeInteropStateV24(exportedBanks):{};
+  return {app:'Shiroha Quiz',appVersion:APP_VERSION,schemaVersion:CURRENT_SCHEMA_VERSION,richContentVersion:RICH_CONTENT_VERSION_V57,richContentCapabilities:buildRichContentCapabilitiesV57(exportedBanks),exportType,exportedAt:now(),banks:exportedBanks,wrongBook,favorites,records:includeAll?(state.records||[]):[],settings:includeAll?(state.settings||{}):{},activeBankId:includeAll?state.activeBankId:((banks&&banks[0]&&banks[0].id)||''),...nativeInterop};
+}
+/* SHIROHA_WEB_V24_CROSS_PLATFORM_NATIVE_INTEROP */
+function buildNativeInteropStateV24(exportedBanks){
+  const bankMap=new Map((exportedBanks||[]).map(b=>[b.id,b]));
+  const nativeWrongBook=[];Object.entries(state.wrongBook||{}).forEach(([bid,entries])=>{if(!bankMap.has(bid))return;const bank=bankMap.get(bid);const questionMap=new Map(bank.questions.map(q=>[q.id,q]));(entries||[]).forEach(e=>{const q=questionMap.get(e.id);if(!q)return;nativeWrongBook.push({bankId:bid,bankName:bank.name||bank.title||'',question:q,lastAnswer:[],source:'web-export',timestamp:Date.now(),wrongCount:e.wrongCount||1,rightCount:e.rightCount||0,lastWrongAt:e.lastWrongAt||new Date().toISOString(),lastCorrectAt:e.lastCorrectAt||null,status:e.status||'未掌握',lastReviewedAt:null,nextReviewAt:null,reviewLevel:0})})});
+  const nativeFavorites=[];Object.entries(state.favorites||{}).forEach(([bid,ids])=>{if(!bankMap.has(bid))return;const bank=bankMap.get(bid);const questionMap=new Map(bank.questions.map(q=>[q.id,q]));(ids||[]).forEach(qid=>{const q=questionMap.get(qid);if(!q)return;nativeFavorites.push({question:q,bankId:bid})})});
+  const nativeRecords=(state.records||[]).map(r=>{const bid=r.bankId||'';const bank=bid?bankMap.get(bid):null;return {id:r.id||makeId('rec'),bankId:bid,bankName:r.bankName||bank?.name||'',source:'web',title:r.name||r.mode||'',total:r.total||0,correct:r.correct||0,timestamp:new Date(r.date||Date.now()).getTime(),durationSeconds:r.duration||0,autoSubmitted:r.autoSubmitted||false,startedAt:r.startedAt?new Date(r.startedAt).getTime():null,earnedScore:r.score||0,totalScore:r.totalScore||0,questionResults:(r.details||[]).map(d=>({question:null,userAnswer:d.chosen||[],correct:!!d.correct,answerText:(d.answer||[]).join(' / '),autoScored:true}))}});
+  return {kind:'shiroha_quiz',schemaVersion:2,wrongBook:nativeWrongBook,favoriteQuestions:nativeFavorites,studyRecords:nativeRecords};
 }
 function normalizeBackupPayloadV23(data,fileName){
   if(!data||typeof data!=='object')throw new Error('JSON 根节点不是对象');
   let banks=[];let wrongBook={};let favorites={};let records=[];let settings={};let activeBankId='';
-  if(Array.isArray(data.banks)){banks=data.banks;wrongBook=data.wrongBook||{};favorites=data.favorites||{};records=Array.isArray(data.records)?data.records:[];settings=data.settings||{};activeBankId=data.activeBankId||''}
+  // v2.4：识别 Native 互通格式
+  if(data.kind==='shiroha_quiz'){
+    banks=Array.isArray(data.banks)?data.banks:[];
+    wrongBook=convertNativeWrongBookToWebV24(data.wrongBook||[]);
+    favorites=convertNativeFavoritesToWebV24(data.favoriteQuestions||[]);
+    records=convertNativeRecordsToWebV24(data.studyRecords||[]);
+    settings=data.webSettings||{};activeBankId=data.activeBankId||'';
+  }else if(Array.isArray(data.banks)){banks=data.banks;wrongBook=data.wrongBook||{};favorites=data.favorites||{};records=Array.isArray(data.records)?data.records:[];settings=data.settings||{};activeBankId=data.activeBankId||''}
   else if(Array.isArray(data.questions)){banks=[{id:data.id||makeId('bank'),name:data.name||cleanFileNameV23(fileName).replace(/\.json$/i,'')||'导入题库',groupName:pickBankGroupNameFromJsonV58(data),createdAt:data.createdAt||now(),updatedAt:now(),questions:data.questions}]}
   else if(Array.isArray(data)){banks=[{id:makeId('bank'),name:cleanFileNameV23(fileName).replace(/\.json$/i,'')||'导入题库',createdAt:now(),updatedAt:now(),questions:data}]}
   else throw new Error('不是 Shiroha Quiz 备份，也不是单题库 JSON');
   banks=banks.map((b,i)=>({id:String(b.id||makeId('bank_import',i)),name:String(b.name||b.title||('导入题库_'+(i+1))),groupName:pickBankGroupNameFromJsonV58(b),createdAt:b.createdAt||now(),updatedAt:now(),questions:(b.questions||[]).map((q,j)=>normalizeQuestion(q,j)).filter(q=>q.question)})).filter(b=>b.questions.length||b.name);
   return {banks,wrongBook,favorites,records,settings,activeBankId};
+}
+/* SHIROHA_WEB_V24_NATIVE_IMPORT_CONVERTERS */
+function convertNativeWrongBookToWebV24(nativeEntries){
+  const web={};(nativeEntries||[]).forEach(e=>{const bid=e.bankId||'';if(!bid||!e.question)return;const qid=e.question.id||e.question.questionId||'';if(!qid)return;if(!web[bid])web[bid]=[];web[bid].push({id:qid,wrongCount:e.wrongCount||1,rightCount:e.rightCount||0,lastWrongAt:e.lastWrongAt||'',lastCorrectAt:e.lastCorrectAt||null,status:e.status||'未掌握'})});
+  return web;
+}
+function convertNativeFavoritesToWebV24(nativeEntries){
+  const web={};(nativeEntries||[]).forEach(e=>{const bid=e.bankId||'';if(!bid||!e.question)return;const qid=e.question.id||e.question.questionId||'';if(!qid)return;if(!web[bid])web[bid]=[];web[bid].push(qid)});
+  return web;
+}
+function convertNativeRecordsToWebV24(nativeEntries){
+  return (nativeEntries||[]).map(r=>({id:r.id||makeId('rec'),mode:r.title||r.source||'练习',bankId:r.bankId||'',bankName:r.bankName||'',date:r.timestamp?new Date(r.timestamp).toISOString():now(),total:r.total||0,correct:r.correct||0,wrong:(r.total||0)-(r.correct||0),answered:r.total||0,accuracy:r.total>0?Math.round(r.correct/r.total*100):0,duration:r.durationSeconds||0,score:r.earnedScore||0,totalScore:r.totalScore||0,passScore:null,passed:null,details:(r.questionResults||[]).map(qr=>({questionId:'',question:'',type:'',category:'',chosen:qr.userAnswer||[],answer:qr.answerText?[qr.answerText]:[],correct:!!qr.correct,score:qr.correct?1:0,fullScore:1,time:''})),autoSubmitted:r.autoSubmitted||false}));
 }
 function mergeBackupBanksV23(normalized){
   const existingKeys=new Set(state.banks.map(b=>bankNameKeyV58(b.groupName,b.name)));
