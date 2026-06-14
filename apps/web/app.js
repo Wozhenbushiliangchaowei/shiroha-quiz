@@ -2066,6 +2066,12 @@ function collectSoftRiskWarnings(arr,profile){
 function countLocalRepairWarnings(qs,profile){
   return (qs||[]).reduce((n,q)=>n+(localRepairRiskStatus(q,profile)==='正常'?0:1),0);
 }
+/* SHIROHA_WEB_V58_9_12_LOCAL_REPAIR_AUDIT_FIX */
+function localRepairQuestionLimitV58912(count){
+  const n=Math.max(0,Number(count)||0);
+  if(n<=20)return Math.min(2,n);
+  return Math.min(8,Math.max(2,Math.ceil(n*0.04)));
+}
 function scoreLocalSegment(qs,profile){
   let score=(qs||[]).length*30 - countLocalRepairWarnings(qs,profile)*120;
   (qs||[]).forEach(q=>{
@@ -2090,6 +2096,20 @@ function localVisibleContentV599(qs){
     visibleQuestionTextForRisk(q.question||''),
     ...(q.options||[]).map(o=>visibleOptionTextForRisk(o.text||''))
   ].join('\n')).join('\n'));
+}
+function localRichContentStatsV58912(qs){
+  const all=(qs||[]).map(q=>[q?.question||'',q?.analysis||'',...(q?.options||[]).map(o=>o?.text||'')].join('\n')).join('\n');
+  const count=(re)=>(all.match(re)||[]).length;
+  const imageTokens=extractInlineImageTokensV589(all).length + count(/\[\[DOCX_IMAGE_\d+\]\]/g) + count(/【DOCX图片\d+[^】]*】/g);
+  return {
+    images:imageTokens+(qs||[]).reduce((n,q)=>n+(Array.isArray(q?.images)?q.images.length:0),0),
+    tables:count(/【DOCX表格开始】/g),
+    formulas:count(/【DOCX公式OMML(?::|】)/g)
+  };
+}
+function localRichContentPreservedV58912(beforeQs,afterQs){
+  const before=localRichContentStatsV58912(beforeQs),after=localRichContentStatsV58912(afterQs);
+  return after.images>=before.images&&after.tables>=before.tables&&after.formulas>=before.formulas;
 }
 function localSequenceAlignedV599(base,pairs){
   if(!base.length||base.length!==pairs.length)return false;
@@ -2120,6 +2140,7 @@ function localCandidateCanReplaceV599(originalQs,candidateQs,profile){
   const beforeAnswered=originalQs.filter(q=>(q.answer||[]).length).length;
   const afterAnswered=candidateQs.filter(q=>(q.answer||[]).length).length;
   if(afterAnswered<beforeAnswered)return false;
+  if(!localRichContentPreservedV58912(originalQs,candidateQs))return false;
   return scoreLocalSegment(candidateQs,profile)>scoreLocalSegment(originalQs,profile)+20;
 }
 
@@ -2164,6 +2185,7 @@ function questionLockedEquivalentV58910(original,candidate,profile){
   const beforeAnswered=(original.answer||[]).length>0,afterAnswered=(candidate.answer||[]).length>0;
   if(beforeAnswered&&!afterAnswered)return false;
   if(originalRisk==='正常'&&(candidate.options||[]).length<Math.min(2,(original.options||[]).length))return false;
+  if(!localRichContentPreservedV58912([original],[candidate]))return false;
   return true;
 }
 function blockTextV58910(blocks,start,end){
@@ -2202,7 +2224,7 @@ function inferLostNumbersBetweenAnchorsV58910(base){
     if(right>=out.length)break;
     const rm=getSourceMetaV58910(out[right]);
     const ln=Number(lm.originalNumber||out[left].number||0),rn=Number(rm.originalNumber||out[right].number||0);
-    const sameSection=String(lm.group||'')===String(rm.group||'')&&String(lm.volume||'')===String(rm.volume||'');
+    const sameSection=sameSourceSectionV58911(lm,rm);
     if(sameSection&&right-left>1&&rn-ln===right-left&&rn>ln){
       for(let i=left+1;i<right;i++){
         const inferred=ln+(i-left),old=out[i],meta=getSourceMetaV58910(old)||{};
@@ -2238,17 +2260,19 @@ function repairMissingAndStuckQuestionsBySourceV58910(original,standardQuestions
   for(let i=0;i<base.length-1;i++){
     const a=base[i],b=base[i+1],ma=getSourceMetaV58910(a),mb=getSourceMetaV58910(b);if(!ma||!mb)continue;
     const na=Number(a.number||0),nb=Number(b.number||0);
-    const sameSection=String(ma.group||'')===String(mb.group||'')&&String(ma.volume||'')===String(mb.volume||'');
+    const sameSection=sameSourceSectionV58911(ma,mb);
     if(sameSection&&na>0&&nb-na>=2&&nb-na<=8){
       const missing=[];for(let n=na+1;n<nb;n++)missing.push(n);
       addWindow(ma.sourceBlockStart,Math.max(ma.sourceBlockEnd,mb.sourceBlockStart-1),'题号缺口',missing.concat([na]));
     }
   }
   const usedBlocks=new Set();base.forEach(q=>{const m=getSourceMetaV58910(q);if(m)for(let i=m.sourceBlockStart;i<=m.sourceBlockEnd;i++)usedBlocks.add(i)});
-  const existingNumbers=new Set(base.map(q=>Number(q.number||0)).filter(Boolean));
+  const sectionNumberKey=(section,n)=>[normalizeSectionLabelV58911(section?.volume||''),normalizeSectionLabelV58911(section?.chapter||''),normalizeSectionLabelV58911(section?.group||''),Number(n)||0].join('|');
+  const existingSectionNumbers=new Set();
+  base.forEach(q=>{const m=getSourceMetaV58910(q)||{};const n=Number(m.originalNumber||q.number||0);if(n)existingSectionNumbers.add(sectionNumberKey(m,n));});
   blocks.forEach((block,idx)=>{
     if(usedBlocks.has(idx)||!block.sourceLikelyQuestion)return;
-    const nums=(block.sourceQuestionNumbers||[]).map(Number).filter(n=>n&&!existingNumbers.has(n));
+    const nums=(block.sourceQuestionNumbers||[]).map(Number).filter(n=>n&&!existingSectionNumbers.has(sectionNumberKey(block,n)));
     if(nums.length)addWindow(idx,idx,'未消费题目区间',nums);
   });
   const prepared=[...windows.values()].sort((a,b)=>a.blockStart-b.blockStart||a.blockEnd-b.blockEnd);
@@ -2289,6 +2313,7 @@ function repairMissingAndStuckQuestionsBySourceV58910(original,standardQuestions
       if(!lockedOk)continue;
       const oldRisk=countLocalRepairWarnings(originalSegment,profile),newRisk=countLocalRepairWarnings(qs,profile);
       if(newRisk>oldRisk)continue;
+      if(!localRichContentPreservedV58912(originalSegment,qs))continue;
       const rank=explained*500+newlyAdded.length*200-newRisk*120+scoreLocalSegment(qs,profile);
       if(!best||rank>best.rank)best={...candidate,questions:qs,rank,newlyAdded};
     }
@@ -2346,6 +2371,7 @@ function repairOverSplitQuestionsBySourceV58911(original,standardQuestions,profi
       if(beforeContent.length&&afterContent.length/beforeContent.length<0.78)continue;
       const beforeAnswered=originalSegment.filter(q=>(q.answer||[]).length).length,afterAnswered=qs.filter(q=>(q.answer||[]).length).length;
       if(beforeAnswered>0&&afterAnswered===0)continue;
+      if(!localRichContentPreservedV58912(originalSegment,qs))continue;
       const rank=scoreLocalSegment(qs,profile)-afterRisk*120+Math.min(180,afterContent.length)-Math.abs(afterContent.length-beforeContent.length)*0.1;
       if(!best||rank>best.rank)best={name:candidate.name,questions:qs,rank};
     }
@@ -2372,7 +2398,7 @@ function repairParsedQuestionsLocally(original,standardQuestions,profile){
   base.forEach((q,i)=>{if(localRepairRiskStatus(q,profile)!=='正常')risky.push(i);});
   if(!risky.length)return {questions:base,repaired:0,segments:[]};
   // 这里只处理少量“已存在题目的题内异常”。大量异常、漏题和粘题留给后续原文区间机制或整卷最后兜底。
-  if(risky.length>Math.max(8,Math.ceil(base.length*0.04)))return {questions:base,repaired:0,segments:[]};
+  if(risky.length>localRepairQuestionLimitV58912(base.length))return {questions:base,repaired:0,segments:[]};
   const replacements=[];let repaired=0;const segments=[];
   let r=0;
   while(r<risky.length){
@@ -2543,7 +2569,7 @@ function parseAnswerAnalysisEntries(text){
     let line=lines[i];const next=lines.slice(i+1,i+8);
     if(isAnswerSectionHeading(line,next)){inAnswerSection=true;currentEntry=null;currentNumber='';if(/解析|答案及解析|答案与解析|试题解析|真题答案/.test(line)){currentVolume='';currentChapter='';currentGroup='';}continue;}
     if(isVolumeHeading(line)){currentVolume=getVolumeLabel(line);currentChapter='';currentGroup='';currentEntry=null;currentNumber='';continue;}
-    if(isChapterHeadingV58911(line)){currentChapter=line;currentGroup='';currentEntry=null;currentNumber='';continue;}
+    if(isChapterHeadingV58911(line,next)){currentChapter=line;currentGroup='';currentEntry=null;currentNumber='';continue;}
     if(inAnswerSection&&isGenericQuestionSectionHeading(line,next)){currentEntry=null;currentNumber='';currentGroup=line;continue;}
     if(isGenericQuestionSectionHeading(line,next)){currentGroup=line;currentNumber='';currentEntry=null;continue;}
     const heading=getHeadingType(line);
@@ -3352,7 +3378,7 @@ function parseTextQuestions(text,strategy='auto'){
     primary={...primary,eval:primary.eval||evaluateCandidate(primary)};
 
     const localRisk=countLocalRepairWarnings(primary.questions||[],profile);
-    const localRepairWorthTrying=(primary.questions||[]).length>0 && primary.eval.qtyOk && primary.eval.typeOk && localRisk>0 && localRisk<=Math.max(8,Math.ceil((primary.questions||[]).length*0.04));
+    const localRepairWorthTrying=(primary.questions||[]).length>0 && primary.eval.qtyOk && primary.eval.typeOk && localRisk>0 && localRisk<=localRepairQuestionLimitV58912((primary.questions||[]).length);
     if(localRepairWorthTrying){
       const repaired=repairParsedQuestionsLocally(original,primary.questions,profile);
       if(repaired.repaired>0){
@@ -3531,9 +3557,9 @@ function estimateExpectedQuestionTypeCounts(text){
 function scoreQuestionNumberContinuity(qs){
   const arr=qs||[];
   const explicitNums=arr.map(q=>{const meta=getSourceMetaV58910(q);return meta?.explicitNumber?Number(meta.originalNumber||0):0}).filter(n=>n>0&&n<10000);
-  // v58.9.10：优先使用原文真实题号；自动补出的 1..N 不再伪造连续性高分。
-  const nums=explicitNums.length>=Math.max(3,Math.ceil(arr.length*0.6))?explicitNums:arr.map(q=>Number(String(q.number||'').match(/\d+/)?.[0]||0)).filter(n=>n>0&&n<10000);
-  if(nums.length<5)return 0;
+  // v58.9.12：连续性只评价原文真实题号。真实题号覆盖不足时直接不给分，禁止自动编号伪造连续性。
+  if(explicitNums.length<Math.max(5,Math.ceil(arr.length*0.6)))return 0;
+  const nums=explicitNums;
   const unique=[...new Set(nums)].sort((a,b)=>a-b);
   const min=unique[0],max=unique[unique.length-1];
   const span=max-min+1;
@@ -3550,7 +3576,7 @@ function isLeakedHeadingOptionTextV583(text){
   const t=String(text||'').trim();
   if(!t)return false;
   if(getHeadingType(t)||isVolumeHeading(t))return true;
-  if(/^第[一二三四五六七八九十百千万0-9]+章/.test(t.replace(/\s+/g,'')))return true;
+  if(isChapterHeadingV58911(t)||/^(?:模块|专题)[一二三四五六七八九十百千万0-9]+/.test(t.replace(/\s+/g,'')))return true;
   if(/^(?:单项选择题|单选题|多项选择题|多选题|判断题|填空题|简答题)$/.test(t.replace(/\s+/g,'')))return true;
   return false;
 }
@@ -3605,7 +3631,7 @@ function forceSplitCompactText(text){
 function parseStructuredExamText(text){
   const s=repairDocxLostQuestionNumberLines(normalizeImportText(text));
   const lines=s.split('\n').map(x=>x.trim()).filter(Boolean);
-  const questions=[]; let currentType=''; let current=null; let collectingAnalysis=false;
+  const questions=[]; let currentType=''; let currentVolume=''; let currentChapter=''; let current=null; let collectingAnalysis=false;
   const flush=()=>{
     if(!current)return;
     const stem=stripLeadingQuestionTypeLabelV592((current.questionLines||[]).join(' ').replace(/\s+/g,' ').trim());
@@ -3635,7 +3661,7 @@ function parseStructuredExamText(text){
   };
   const beginQuestion=(number,lineAfterNo)=>{
     flush();
-    current={number,questionLines:[],options:[],answer:[],analysisLines:[],group:currentType,volume:'',type:mapType(currentType)||'',explicitType:false};
+    current={number,questionLines:[],options:[],answer:[],analysisLines:[],group:currentType,volume:currentVolume,type:mapType(currentType)||'',explicitType:false};
     if(lineAfterNo)current.questionLines.push(lineAfterNo.trim());
   };
   for(let i=0;i<lines.length;i++){
@@ -3643,6 +3669,9 @@ function parseStructuredExamText(text){
     const numberedTypedLineV592=getNumberedTypeQuestionLineV592(line);
     const forcedLineTypeV592=numberedTypedLineV592?.type||'';
     if(numberedTypedLineV592)line=`${numberedTypedLineV592.number}. ${numberedTypedLineV592.stem}`;
+    const nextLines=lines.slice(i+1,i+9);
+    if(isVolumeHeading(line)){flush();currentVolume=getVolumeLabel(line);currentChapter='';continue;}
+    if(isChapterHeadingV58911(line,nextLines)){flush();currentChapter=line;continue;}
     const heading=getHeadingType(line);
     if(heading){flush();currentType=heading;continue;}
     if(isImportNoiseLine(line))continue;
@@ -3652,7 +3681,7 @@ function parseStructuredExamText(text){
       if(current&&collectingAnalysis){current.analysisLines.push(after);collectingAnalysis=false;}
       const combinedM=after.match(/^(\d{1,4})\s*[.、．]\s*(?:【答案】\s*)?([A-Ga-g]{1,7})\s*(?:【解析】\s*(.*))?$/);
       if(combinedM){
-        flush();current={number:Number(combinedM[1]),questionLines:[],options:[],answer:splitAnswerByType(combinedM[2],currentType||''),analysisLines:combinedM[3]?[combinedM[3].trim()]:[],group:currentType,volume:'',type:mapType(currentType)||''};collectingAnalysis=!!combinedM[3];
+        flush();current={number:Number(combinedM[1]),questionLines:[],options:[],answer:splitAnswerByType(combinedM[2],currentType||''),analysisLines:combinedM[3]?[combinedM[3].trim()]:[],group:currentType,volume:currentVolume,type:mapType(currentType)||''};collectingAnalysis=!!combinedM[3];
       } else {
         const compactReg=/(\d{1,4})\s*[.、．]\s*([A-Ga-g]{1,7})\s*(?=【|$)/g;let cm;const pairs=[];
         while((cm=compactReg.exec(after))!==null)pairs.push({no:Number(cm[1]),ans:cm[2]});
@@ -3660,7 +3689,7 @@ function parseStructuredExamText(text){
           flush();
           pairs.forEach((p,idx)=>{
             if(idx>0)flush();
-            current={number:p.no,questionLines:[],options:[],answer:splitAnswerByType(p.ans,currentType||''),analysisLines:[],group:currentType,volume:'',type:mapType(currentType)||''};
+            current={number:p.no,questionLines:[],options:[],answer:splitAnswerByType(p.ans,currentType||''),analysisLines:[],group:currentType,volume:currentVolume,type:mapType(currentType)||''};
           });
         } else {
           current.answer=splitAnswerByType(after,current.type||'');
@@ -3672,7 +3701,7 @@ function parseStructuredExamText(text){
     const analysisNum=line.match(/^\s*(\d{1,4})\s*[.、．]\s*【解析】\s*([A-Ga-g]{1,7})\s*[。.]?\s*(.*)$/);
     if(analysisNum){
       if(current&&collectingAnalysis){current.analysisLines.push(line);collectingAnalysis=false;}
-      else{flush();current={number:Number(analysisNum[1]),questionLines:[],options:[],answer:splitAnswerByType(analysisNum[2],currentType||''),analysisLines:analysisNum[3]?[analysisNum[3].trim()]:[],group:currentType,volume:'',type:mapType(currentType)||''};collectingAnalysis=!!analysisNum[3];}
+      else{flush();current={number:Number(analysisNum[1]),questionLines:[],options:[],answer:splitAnswerByType(analysisNum[2],currentType||''),analysisLines:analysisNum[3]?[analysisNum[3].trim()]:[],group:currentType,volume:currentVolume,type:mapType(currentType)||''};collectingAnalysis=!!analysisNum[3];}
       continue;
     }
     // Handle combined 【答案】...【解析】... format (e.g., 21.【答案】C【解析】explanation)
@@ -3680,7 +3709,7 @@ function parseStructuredExamText(text){
     if(combined){
       if(current&&collectingAnalysis){collectingAnalysis=false;}
       flush();
-      current={number:Number(combined[1]),questionLines:[],options:[],answer:splitAnswerByType(combined[2],currentType||''),analysisLines:combined[3]?[combined[3].trim()]:[],group:currentType,volume:'',type:mapType(currentType)||''};
+      current={number:Number(combined[1]),questionLines:[],options:[],answer:splitAnswerByType(combined[2],currentType||''),analysisLines:combined[3]?[combined[3].trim()]:[],group:currentType,volume:currentVolume,type:mapType(currentType)||''};
       collectingAnalysis=!!combined[3];
       continue;
     }
@@ -3692,7 +3721,7 @@ function parseStructuredExamText(text){
       if(current&&collectingAnalysis){collectingAnalysis=false;}
       pairs.forEach((p,idx)=>{
         if(idx===0&&current&&current.number===p.no&&!current.answer.length){current.answer=splitAnswerByType(p.ans,current.type||'');if(p.analysis)current.analysisLines.push(p.analysis);}
-        else{flush();current={number:p.no,questionLines:[],options:[],answer:splitAnswerByType(p.ans,currentType||''),analysisLines:p.analysis?[p.analysis]:[],group:currentType,volume:'',type:mapType(currentType)||''};}
+        else{flush();current={number:p.no,questionLines:[],options:[],answer:splitAnswerByType(p.ans,currentType||''),analysisLines:p.analysis?[p.analysis]:[],group:currentType,volume:currentVolume,type:mapType(currentType)||''};}
       });
       if(pairs.length)continue;
     }
@@ -3899,7 +3928,7 @@ function preSplitVolumeAndCompactQuestions(text){
   s=s.replace(/([^\n])\s+((?:单选题|单选|单项选择题|多选题|多选|多项选择题|判断题|判断|填空题|填空|简答题|简答|问答题)\s*(?:第\s*)?\d{1,4}\s*(?:题)?)(?=\s+\S)/g,'$1\n$2\n');
   s=s.replace(/(^|\n)\s*((?:单选题|单选|单项选择题|多选题|多选|多项选择题|判断题|判断|填空题|填空|简答题|简答|问答题)\s*(?:第\s*)?\d{1,4}\s*(?:题)?)\s+(?=\S)/g,'$1$2\n');
   // 让“第一卷/第二卷/第1套/试卷一”等标题独占一行，避免卷内重复 1-25 题被拼接。
-  s=s.replace(/\s*((?:第\s*[一二三四五六七八九十百千万0-9]+\s*(?:卷|套|部分|单元)|试卷\s*[一二三四五六七八九十百千万0-9]+|卷\s*[一二三四五六七八九十百千万0-9]+))\s*/g,'\n$1\n');
+  s=s.replace(/(^|\n|[ \t]{2,}|[。；;])\s*((?:第\s*[一二三四五六七八九十百千万0-9]+\s*(?:卷|套|部分|单元)|试卷\s*[一二三四五六七八九十百千万0-9]+|卷\s*[一二三四五六七八九十百千万0-9]+))(?=\s*(?:$|\n|(?:单选题|单选|单项选择题|多选题|多选|多项选择题|判断题|判断|填空题|填空|简答题|简答|问答题)|(?:第\s*)?\d{1,4}\s*(?:题)?[、.．:：]))/gm,(m,prefix,heading)=>`${prefix||'\n'}\n${heading}\n`);
   // 若多个题目在同一段里，用题号强制切题。
   // 增强：避免把选项值“A. 1.O m / B.1.2 m”里的“1.O”误认为新题号。
   s=s.replace(/([^\n])\s+((?:第\s*)?\d{1,4}\s*(?:题)?[、.．:：]\s*(?!\s*\d)(?!mm|cm|m|MPa|bar|kg|℃|%))/gi,(m,prev,next,offset,full)=>{
@@ -3915,15 +3944,18 @@ function preSplitVolumeAndCompactQuestions(text){
   return s;
 }
 function isVolumeHeading(line){
-  const s=String(line||'').replace(/\s/g,'');
-  return /^(?:第[一二三四五六七八九十百千万0-9]+(?:卷|套|部分|单元)|试卷[一二三四五六七八九十百千万0-9]+|卷[一二三四五六七八九十百千万0-9]+)$/.test(s)
-    || /^202\d年.*(?:试卷|考试).*?[·._-]?[一二三四五六七八九十百千万0-9]+卷$/.test(s);
+  const raw=String(line||'').trim();
+  const s=raw.replace(/\s/g,'');
+  if(/^(?:第[一二三四五六七八九十百千万0-9]+(?:卷|套|部分|单元)|试卷[一二三四五六七八九十百千万0-9]+|卷[一二三四五六七八九十百千万0-9]+)$/.test(s))return true;
+  if(/^202\d年.*(?:试卷|考试).*?[·._-]?[一二三四五六七八九十百千万0-9]+卷$/.test(s))return true;
+  return /^(?:第\s*[一二三四五六七八九十百千万0-9]+\s*(?:卷|套|部分|单元)|试卷\s*[一二三四五六七八九十百千万0-9]+|卷\s*[一二三四五六七八九十百千万0-9]+)(?:\s+|[-—_:：·.．]\s*)[^。？！?!；;]{1,24}$/.test(raw);
 }
 function getVolumeLabel(line){
-  const s=String(line||'').replace(/\s/g,'');
-  const m=s.match(/([一二三四五六七八九十百千万0-9]+)卷$/);
+  const raw=String(line||'').replace(/[\s　]+/g,' ').trim();
+  const compact=raw.replace(/\s/g,'');
+  const m=compact.match(/([一二三四五六七八九十百千万0-9]+)卷$/);
   if(m)return '第'+m[1]+'卷';
-  return s;
+  return raw;
 }
 function hasInlineAnswerTag(line){
   const s=String(line||'');
@@ -3986,11 +4018,15 @@ function splitSemicolonOptionsFromLine(line,answer=[]){
 }
 
 /* SHIROHA_WEB_V58_9_11_OVERSPLIT_SECTION_AWARE_ANSWER */
-function isChapterHeadingV58911(line){
+function isChapterHeadingV58911(line,nextLines=[]){
   const raw=String(line||'').trim();
-  if(!raw||raw.length>60||isOptionLine(raw)||isAnswerLine(raw)||isAnalysisLine(raw)||hasStrongQuestionNo(raw))return false;
+  if(!raw||raw.length>60||isOptionLine(raw)||isAnswerLine(raw)||isAnalysisLine(raw)||hasStrongQuestionNo(raw)||getHeadingType(raw))return false;
   const compact=raw.replace(/[\s　]+/g,'');
-  return /^(?:第[一二三四五六七八九十百千万0-9]+(?:章|节|单元|篇)|章节[一二三四五六七八九十百千万0-9]+)[^。？！?!；;]{0,36}$/.test(compact);
+  if(/^(?:第[一二三四五六七八九十百千万0-9]+(?:章|节|单元|篇)|章节[一二三四五六七八九十百千万0-9]+)[^。？！?!；;]{0,36}$/.test(compact))return true;
+  const scoped=/^(?:模块[一二三四五六七八九十百千万0-9]+|专题[一二三四五六七八九十百千万0-9]+|[（(][一二三四五六七八九十百千万0-9]+[）)]|[一二三四五六七八九十]+[、.．:：])[^。？！?!；;]{0,32}$/.test(compact);
+  if(!scoped)return false;
+  const look=(nextLines||[]).slice(0,8).map(x=>String(x||'').trim()).filter(Boolean);
+  return look.some(l=>hasStrongQuestionNo(l)||isAnswerAnalysisEntryLine(l)||/^\d{1,4}\s*[.、．:：]\s*$/.test(l));
 }
 function normalizeSectionLabelV58911(value){
   return String(value||'').replace(/[\s　]+/g,'').replace(/[【】\[\]()（）:：、，,。．.；;_-]+/g,'').toLowerCase();
@@ -4025,9 +4061,10 @@ function splitQuestionBlocks(text,inheritedGroup=''){
   const curHasRealQuestion=()=>cur.some(l=>!isOptionLine(l)&&!isAnswerLine(l)&&!isAnalysisLine(l)&&!getHeadingType(l));
   const curHasAnsweredStem=()=>cur.some(l=>hasInlineAnswerTag(l)||hasEmbeddedAnswerStem(l,curGroup||group));
   const curHasDocxTable=()=>cur.some(l=>/^【DOCX表格开始】$/.test(String(l||'').trim()))&&!cur.some(l=>isOptionLine(l)||isAnswerLine(l));
-  for(const raw of lines){
+  for(let lineIndex=0;lineIndex<lines.length;lineIndex++){
+    const raw=lines[lineIndex],nextLines=lines.slice(lineIndex+1,lineIndex+9);
     if(isVolumeHeading(raw)){flush();volume=getVolumeLabel(raw);curVolume=volume;chapter='';curChapter='';continue}
-    if(isChapterHeadingV58911(raw)){flush();chapter=raw;curChapter=chapter;continue}
+    if(isChapterHeadingV58911(raw,nextLines)){flush();chapter=raw;curChapter=chapter;continue}
     if(isImportNoiseLine(raw))continue
     const headingType=getHeadingType(raw);
     if(headingType){flush();group=headingType;curGroup=group;continue}
