@@ -145,6 +145,13 @@
       "sample": "samples/20_full_paper_explain_word_guard.txt",
       "expected": "expected/20_full_paper_explain_word_guard.json",
       "risk": "题干以说明文字开头时不能被前言过滤器误删"
+    },
+    {
+      "id": "21_english_abbreviation_guard",
+      "mode": "single",
+      "sample": "samples/21_english_abbreviation_guard.txt",
+      "expected": "expected/21_english_abbreviation_guard.json",
+      "risk": "Vitamin A/U.S.A./e.g.中字母不应误判为选项标记"
     }
   ]
 }
