@@ -10,6 +10,10 @@ import com.yiqiu.shirohaquiz.importer.score.ImportStrategyScorer
 import com.yiqiu.shirohaquiz.importer.validate.ImportValidator
 
 object QuizImportParser {
+    private val pureFrontMatterFragmentRegex = Regex(
+        """^(?:[【\[]?\s*)?(?:绝密|密卷|注意事项(?:\s*[:：].*)?|说明\s*[:：]\s*(?:请|考试|答题|作答|时间|考生).*|请(?:认真|仔细)作答|请在规定时间内完成(?:答题|作答)|请将答案(?:填写|填涂|写在|写到).*|请用\s*2B.*|请勿.*|答题前.*|答题卡.*|考试时间\s*[:：].*|时间\s*[:：].*|在考试结束.*|考试结束.*|全部测验到此结束.*|祝各位考生.*|监考老师.*)(?:\s*[】\]])?$""",
+        RegexOption.IGNORE_CASE
+    )
     fun parseStandardText(raw: String): ImportResult {
         val normalized = QuestionTextNormalizer.normalize(raw)
         val candidates = mutableListOf<Candidate>()
@@ -362,10 +366,26 @@ object QuizImportParser {
         questions: List<Question>,
         extraWarnings: List<ImportWarning> = emptyList()
     ): Candidate {
-        val repairedQuestions = questions.map(::repairQuestionForDisplay)
+        val repairedQuestions = questions
+            .filterNot(::isPureFrontMatterPseudoQuestion)
+            .map(::repairQuestionForDisplay)
         val warnings = ImportValidator.validate(repairedQuestions) + extraWarnings
         val score = ImportStrategyScorer.score(repairedQuestions, warnings)
         return Candidate(name, repairedQuestions, warnings, score)
+    }
+
+    private fun isPureFrontMatterPseudoQuestion(question: Question): Boolean {
+        if (question.type != QuestionType.SHORT && question.type != QuestionType.BLANK) return false
+        if (question.options.isNotEmpty() || question.answer.isNotEmpty() || question.analysis.isNotBlank()) return false
+
+        val fragments = question.question
+            .lineSequence()
+            .flatMap { line -> line.split(Regex("""[。；;!?！？]+""")).asSequence() }
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .toList()
+        if (fragments.isEmpty()) return false
+        return fragments.all { fragment -> pureFrontMatterFragmentRegex.matches(fragment) }
     }
 
     private fun repairQuestionForDisplay(question: Question): Question {

@@ -8,11 +8,16 @@ object StandardQuestionParser {
     private const val answerLabelPattern = "答案|正确答案|参考答案|标准答案|参考要点|参考思路|答题要点|答题思路|作答思路|评分要点|参考作答|答"
     private const val analysisLabelPattern = "答案解析|解题思路|解析思路|解题分析|参考解析|详解|分析|理由|解答|解析|说明"
     private const val objectiveAnswerValuePattern = "[A-Ga-g]{1,7}|对|错|正确|错误|是|否|√|×|True|False"
+    private const val embeddedChoiceLetterPattern =
+        "(?:[A-Ga-g]{1,7}|[A-Ga-g](?:\\s*[,，、;；/\\\\]\\s*[A-Ga-g]){1,6}|[A-Ga-g](?:\\s+[A-Ga-g]){1,6})"
     private const val answerSeparatorPattern = """(?:\s*(?:[:：,，、.．;；]|为)\s*|\s+|(?=\s*[\(（]))"""
     private val answerLineRegex = Regex("""^\s*(?:(?:[\[【]\s*(?:$answerLabelPattern)\s*[\]】]\s*)|(?:(?:本题)?(?:$answerLabelPattern)$answerSeparatorPattern))(.+?)\s*$""")
     private val analysisLineRegex = Regex("""^\s*(?:(?:[\[【]\s*(?:$analysisLabelPattern)\s*[\]】]\s*)|(?:(?:$analysisLabelPattern)\s*[:：]\s*))(.*)$""")
     private val bracketAnswerRegex = Regex("""[\[【\(（]\s*(?:$answerLabelPattern)$answerSeparatorPattern([^\]】\)）]+)\s*[\]】\)）]""")
-    private val embeddedChoiceAnswerRegex = Regex("""[\(（]\s*([A-Ga-g]{1,7}|对|错|正确|错误|是|否|√|×|True|False)\s*[\)）]""", RegexOption.IGNORE_CASE)
+    private val embeddedChoiceAnswerRegex = Regex(
+        """[\(（]\s*($embeddedChoiceLetterPattern|对|错|正确|错误|是|否|√|×|True|False)\s*[\)）]""",
+        RegexOption.IGNORE_CASE
+    )
     private val blankKeywords = Regex("""(填空|填入|补全|补充完整|空白处|空白|空格|横线|横线上|括号内|括号里|_{2,}|[\(（]\s*[\)）])""")
     private val solutionChoiceRegex = Regex(
         """^\s*(?:(?:本题)?(?:答案|正确答案|参考答案|标准答案|正确选项)\s*(?:为|是)|(?:本题)?(?:应选|故选))\s*($objectiveAnswerValuePattern)\b[.。,:：，、;；]?\s*(.*)$""",
@@ -161,13 +166,19 @@ object StandardQuestionParser {
         if (matches.isEmpty()) return null
 
         val answerTokens = AnswerTokenParser.parseObjectiveAnswers(existingAnswer)
+        val hasCompactOptionContext = CompactQuestionRepair.hasCompactOptionSequence(stem)
+        val hasChoiceIntent = Regex(
+            """(?:下列|以下).{0,24}(?:哪|正确|错误|不正确|符合)|选择|选出|最(?:合适|符合|恰当)|应(?:选择|选)"""
+        ).containsMatchIn(stem)
         val selected = matches.asReversed().firstOrNull { match ->
             val candidate = match.groupValues[1].trim()
             val candidateTokens = AnswerTokenParser.parseObjectiveAnswers(candidate)
+            val hasObjectiveContext = options.isNotEmpty() || hasCompactOptionContext || hasChoiceIntent
             when {
-                existingAnswer.isBlank() && candidateTokens.isNotEmpty() -> true
+                candidateTokens.isEmpty() -> false
                 candidateTokens.isNotEmpty() && answerTokens.isNotEmpty() && candidateTokens == answerTokens -> true
-                options.isNotEmpty() && AnswerTokenParser.isObjectiveAnswerText(candidate) -> true
+                AnswerTokenParser.isJudgeAnswerText(candidate) -> true
+                existingAnswer.isBlank() && hasObjectiveContext -> true
                 else -> false
             }
         } ?: return null

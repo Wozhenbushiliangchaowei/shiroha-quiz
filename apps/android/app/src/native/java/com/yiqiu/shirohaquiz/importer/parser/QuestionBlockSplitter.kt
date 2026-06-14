@@ -44,6 +44,10 @@ object QuestionBlockSplitter {
         """^\s*[+-]?\d+(?:\s*[.．]\s*\d+)?(?:[Ee][+-]?\d+)?\s*$""",
         RegexOption.IGNORE_CASE
     )
+    private val pureFrontMatterLineRegex = Regex(
+        """^(?:[【\[]?\s*)?(?:绝密|密卷|注意事项(?:\s*[:：].*)?|说明\s*[:：]\s*(?:请|考试|答题|作答|时间|考生).*|请(?:认真|仔细)作答|请在规定时间内完成(?:答题|作答)|请将答案(?:填写|填涂|写在|写到).*|请用\s*2B.*|请勿.*|答题前.*|答题卡.*|考试时间\s*[:：].*|时间\s*[:：].*|在考试结束.*|考试结束.*|全部测验到此结束.*|祝各位考生.*|监考老师.*)(?:\s*[】\]])?\s*[。.!！]?$""",
+        RegexOption.IGNORE_CASE
+    )
 
     fun split(
         text: String,
@@ -82,6 +86,7 @@ object QuestionBlockSplitter {
         text.lineSequence().forEach { rawLine ->
             val line = rawLine.trim()
             if (line.isBlank()) return@forEach
+            if (currentNumber == null && isPureFrontMatterLine(line)) return@forEach
             if (isMaterialIntroLine(line)) {
                 flush()
                 skippingMaterialIntro = true
@@ -295,8 +300,15 @@ object QuestionBlockSplitter {
         return true
     }
 
+    private fun isPureFrontMatterLine(line: String): Boolean {
+        val normalized = line.trim()
+        if (normalized.isBlank()) return false
+        return pureFrontMatterLineRegex.matches(normalized)
+    }
+
     private fun isLikelyUnnumberedQuestionLine(line: String): Boolean {
         if (line.length < 4) return false
+        if (isPureFrontMatterLine(line)) return false
         if (Regex("""^(?:用途|说明|备注|注意|提示)\s*[:：]""").containsMatchIn(line)) return false
         if (Regex("""^\s*[\[【]\s*(?:待确认|备注|提示|说明|注|注意)""").containsMatchIn(line)) return false
         if (CompactQuestionRepair.isStandardOptionLine(line)) return false
