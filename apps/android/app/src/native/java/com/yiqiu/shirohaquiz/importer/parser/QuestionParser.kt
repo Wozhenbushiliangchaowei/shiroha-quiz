@@ -60,7 +60,19 @@ object QuestionParser {
     private fun parseBlockStandardFirst(block: QuestionBlock): Question? {
         val standard = StandardQuestionParser.parseBlock(block)
         val rawBlock = block.lines.joinToString("\n")
+        val expectedOptionKeys = CompactQuestionRepair.compactOptionKeys(rawBlock)
         if (!CompactQuestionRepair.hasCompactPattern(rawBlock)) return standard
+
+        // 明确的主观题中，A./B./C. 很可能只是分项说明，不能按紧凑选择题拆分。
+        if (
+            expectedOptionKeys.isNotEmpty() &&
+            (block.forcedType == QuestionType.SHORT || block.forcedType == QuestionType.BLANK)
+        ) {
+            return standard
+        }
+        if (expectedOptionKeys.isNotEmpty() && looksLikeSubjectiveEnumeration(standard)) return standard
+        if (expectedOptionKeys.size == 1) return standard
+        if (expectedOptionKeys.size >= 2 && isCompleteStandardQuestion(standard, expectedOptionKeys)) return standard
 
         val repaired = CompactQuestionRepair.repair(rawBlock)
         if (repaired == rawBlock) return standard
@@ -72,13 +84,141 @@ object QuestionParser {
         if (repairedLines.isEmpty()) return standard
 
         val fallback = StandardQuestionParser.parseBlock(block.copy(lines = repairedLines))
-        val expectedOptionKeys = CompactQuestionRepair.compactOptionKeys(rawBlock)
 
-        return if (questionStructureScore(fallback, expectedOptionKeys) > questionStructureScore(standard, expectedOptionKeys)) {
+        if (expectedOptionKeys.isEmpty()) {
+            return if (inlineMetadataFallbackCanReplace(standard, fallback)) fallback else standard
+        }
+
+        return if (
+            localFallbackCanReplace(
+                block = block,
+                standard = standard,
+                fallback = fallback,
+                expectedOptionKeys = expectedOptionKeys
+            )
+        ) {
             fallback
         } else {
             standard
         }
+    }
+
+    private fun inlineMetadataFallbackCanReplace(
+        standard: Question?,
+        fallback: Question?
+    ): Boolean {
+        fallback ?: return false
+        if (fallback.question.isBlank()) return false
+        if (standard == null) return fallback.answer.isNotEmpty() || fallback.analysis.isNotBlank()
+
+        if (standard.answer.isNotEmpty() && standard.answer != fallback.answer) return false
+        if (standard.analysis.isNotBlank() && standard.analysis != fallback.analysis) return false
+
+        val standardOptions = standard.options.map { it.key to it.text }
+        val fallbackOptions = fallback.options.map { it.key to it.text }
+        val judgeUpgrade = standard.type == QuestionType.SHORT &&
+            fallback.type == QuestionType.JUDGE &&
+            standard.options.isEmpty() &&
+            fallback.answer.isNotEmpty()
+        if (!judgeUpgrade) {
+            if (standard.type != fallback.type) return false
+            if (!inlineMetadataOptionsPreserved(standardOptions, fallbackOptions)) return false
+        }
+
+        val questionPreserved = fallback.question == standard.question ||
+            standard.question.startsWith(fallback.question) ||
+            standard.question.contains(fallback.question)
+        if (!questionPreserved) return false
+
+        val answerImproved = standard.answer.isEmpty() && fallback.answer.isNotEmpty()
+        val analysisImproved = standard.analysis.isBlank() && fallback.analysis.isNotBlank()
+        return answerImproved || analysisImproved
+    }
+
+    private fun inlineMetadataOptionsPreserved(
+        standardOptions: List<Pair<String, String>>,
+        fallbackOptions: List<Pair<String, String>>
+    ): Boolean {
+        if (standardOptions.size != fallbackOptions.size) return false
+        return standardOptions.zip(fallbackOptions).all { (standardOption, fallbackOption) ->
+            if (standardOption.first != fallbackOption.first) return@all false
+            if (standardOption.second == fallbackOption.second) return@all true
+
+            val standardText = standardOption.second.trim()
+            val fallbackText = fallbackOption.second.trim()
+            standardText.startsWith(fallbackText) &&
+                Regex("""(?:答案|正确答案|参考答案|标准答案|解析|答案解析|说明)\s*[:：]""")
+                    .containsMatchIn(standardText.removePrefix(fallbackText))
+        }
+    }
+
+    private fun isCompleteStandardQuestion(
+        question: Question?,
+        expectedOptionKeys: Set<String>
+    ): Boolean {
+        question ?: return false
+        if (question.question.isBlank()) return false
+
+        val isObjective = question.type == QuestionType.SINGLE ||
+            question.type == QuestionType.MULTIPLE ||
+            question.type == QuestionType.JUDGE
+        if (!isObjective || question.options.size < 2) return false
+
+        val optionKeys = question.options.map { it.key.uppercase() }.toSet()
+        if (!optionKeys.containsAll(expectedOptionKeys)) return false
+        return question.answer.isEmpty() || question.answer.all { it.uppercase() in optionKeys }
+    }
+
+    private fun localFallbackCanReplace(
+        block: QuestionBlock,
+        standard: Question?,
+        fallback: Question?,
+        expectedOptionKeys: Set<String>
+    ): Boolean {
+        fallback ?: return false
+        if (fallback.question.isBlank()) return false
+        if (block.forcedType == QuestionType.SHORT || block.forcedType == QuestionType.BLANK) return false
+
+        val fallbackIsObjective = fallback.type == QuestionType.SINGLE ||
+            fallback.type == QuestionType.MULTIPLE ||
+            fallback.type == QuestionType.JUDGE
+        if (!fallbackIsObjective || fallback.options.size < 2) return false
+
+        val fallbackOptionKeys = fallback.options.map { it.key.uppercase() }.toSet()
+        if (!fallbackOptionKeys.containsAll(expectedOptionKeys)) return false
+        if (fallback.answer.any { it.uppercase() !in fallbackOptionKeys }) return false
+
+        // 标准结果已有明确文本答案时，禁止局部选择题修复把答案丢掉或改成字母答案。
+        val standardHasTextAnswer = standard?.answer.orEmpty().any { answer ->
+            !Regex("""^[A-G]$""").matches(answer.trim().uppercase())
+        }
+        if (standardHasTextAnswer) {
+            if (fallback.answer != standard?.answer) return false
+            if (fallback.type != standard.type) return false
+        }
+
+        return questionStructureScore(fallback, expectedOptionKeys) >
+            questionStructureScore(standard, expectedOptionKeys)
+    }
+
+    private fun looksLikeSubjectiveEnumeration(question: Question?): Boolean {
+        question ?: return false
+        if (question.type != QuestionType.SHORT && question.type != QuestionType.BLANK) return false
+
+        val stem = question.question.trim()
+        val choiceIntent = Regex(
+            """(?:下列|以下).{0,24}(?:哪|正确|错误|不正确|符合)|选择|选出|最(?:合适|符合|恰当)|应(?:选择|选)"""
+        ).containsMatchIn(stem)
+        if (choiceIntent) return false
+
+        val subjectiveLead = Regex(
+            """^(?:请|试)?(?:分别)?(?:说明|简述|阐述|论述|比较|解释|概述|谈谈|回答|分析)"""
+        ).containsMatchIn(stem)
+        val subjectivePurpose = Regex(
+            """(?:差异|区别|联系|原因|影响|措施|方法|原则|条件|优缺点|意义|作用|过程|依据|适用|如何|为什么|各自|分别)"""
+        ).containsMatchIn(stem)
+        val comparisonQuestion = Regex("""(?:有何|有什么).*(?:区别|差异|联系)""").containsMatchIn(stem)
+        return (subjectiveLead && subjectivePurpose) || comparisonQuestion
     }
 
     private fun questionStructureScore(question: Question?, expectedOptionKeys: Set<String>): Int {

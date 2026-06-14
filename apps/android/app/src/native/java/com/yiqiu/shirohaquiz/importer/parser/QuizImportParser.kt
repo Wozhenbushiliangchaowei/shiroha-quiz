@@ -50,7 +50,8 @@ object QuizImportParser {
             ?.let { buildCandidate("Excel/CSV 表格题库解析", it) }
             ?.also { candidates += it }
 
-        val fullPaperCandidate = if (FullPaperFallbackStrategy.shouldTry(normalized, primaryCandidate.questions)) {
+        // 整卷兜底是否需要启动，必须依据答案合并前的题目结构判断。
+        val fullPaperCandidate = if (FullPaperFallbackStrategy.shouldTry(normalized, primaryQuestions)) {
             FullPaperFallbackStrategy.parse(normalized)
                 .takeIf { it.isNotEmpty() }
                 ?.let { buildCandidate("整卷真题复杂兜底解析", it) }
@@ -104,13 +105,6 @@ object QuizImportParser {
             null
         }
 
-        val selectedQuestionCandidate = chooseBestCandidate(
-            normalized = normalizedQuestion,
-            primaryCandidate = primaryQuestionCandidate,
-            tableCandidate = tableQuestionCandidate,
-            fullPaperCandidate = fullPaperQuestionCandidate
-        )
-
         val answerCandidates = buildList {
             val plainAnswers = AnswerParser.parse(normalizedAnswer)
             if (plainAnswers.isNotEmpty()) add("普通答案表" to plainAnswers)
@@ -134,16 +128,30 @@ object QuizImportParser {
         }
 
         val mergedCandidates = mutableListOf<Candidate>()
-        answerCandidates.forEach { (answerStrategy, answers) ->
-            val merged = DualFileMerger.mergeAuto(selectedQuestionCandidate.questions, answers)
-            mergedCandidates += buildCandidate(
-                name = "${selectedQuestionCandidate.name} + $answerStrategy/${merged.name}",
-                questions = merged.questions,
-                extraWarnings = merged.warnings
-            )
+        fun mergeQuestionCandidate(questionCandidate: Candidate?): Candidate? {
+            questionCandidate ?: return null
+            val localMerged = answerCandidates.map { (answerStrategy, answers) ->
+                val merged = DualFileMerger.mergeAuto(questionCandidate.questions, answers)
+                buildCandidate(
+                    name = "${questionCandidate.name} + $answerStrategy/${merged.name}",
+                    questions = merged.questions,
+                    extraWarnings = merged.warnings
+                ).also { mergedCandidates += it }
+            }
+            return localMerged.maxByOrNull { it.score } ?: questionCandidate
         }
 
-        val best = mergedCandidates.maxByOrNull { it.score } ?: selectedQuestionCandidate
+        // 各题目策略先分别完成答案合并，再按受控规则选择题目策略，避免提前淘汰
+        // “未合并答案时看不出优势、合并后才正确”的候选。
+        val mergedPrimaryCandidate = mergeQuestionCandidate(primaryQuestionCandidate) ?: primaryQuestionCandidate
+        val mergedTableCandidate = mergeQuestionCandidate(tableQuestionCandidate)
+        val mergedFullPaperCandidate = mergeQuestionCandidate(fullPaperQuestionCandidate)
+        val best = chooseBestCandidate(
+            normalized = normalizedQuestion,
+            primaryCandidate = mergedPrimaryCandidate,
+            tableCandidate = mergedTableCandidate,
+            fullPaperCandidate = mergedFullPaperCandidate
+        )
         val diagnosticCandidates = questionCandidates + mergedCandidates
 
         return buildResult(
@@ -215,37 +223,107 @@ object QuizImportParser {
         val fullCount = fullPaper.questions.size
         val primaryErrors = primary.warnings.count { it.level == WarningLevel.ERROR }
         val fullErrors = fullPaper.warnings.count { it.level == WarningLevel.ERROR }
-        val primarySubjective = primary.questions.count {
-            it.type == QuestionType.SHORT || it.type == QuestionType.BLANK
-        }
+        val primarySuspiciousSubjective = primary.questions.count(::looksLikeMisparsedObjectiveQuestion)
+        val fullSuspiciousSubjective = fullPaper.questions.count(::looksLikeMisparsedObjectiveQuestion)
         val primaryShortStem = primary.questions.count {
+            it.question.trim().length <= 3 && it.options.isEmpty()
+        }
+        val fullShortStem = fullPaper.questions.count {
             it.question.trim().length <= 3 && it.options.isEmpty()
         }
         val primaryFrontMatter = primary.questions.count { question ->
             Regex("""^(?:说明|注意事项|密卷|绝密|祝各位考生|时间[:：]|考试时间[:：])""")
                 .containsMatchIn(question.question.trim())
         }
-        val primaryObjective = primary.questions.count {
-            it.type == QuestionType.SINGLE || it.type == QuestionType.MULTIPLE || it.type == QuestionType.JUDGE
+        val fullFrontMatter = fullPaper.questions.count { question ->
+            Regex("""^(?:说明|注意事项|密卷|绝密|祝各位考生|时间[:：]|考试时间[:：])""")
+                .containsMatchIn(question.question.trim())
         }
-        val fullObjective = fullPaper.questions.count {
-            it.type == QuestionType.SINGLE || it.type == QuestionType.MULTIPLE || it.type == QuestionType.JUDGE
-        }
+        val primaryValidObjective = primary.questions.count(::isStructurallyValidObjectiveQuestion)
+        val fullValidObjective = fullPaper.questions.count(::isStructurallyValidObjectiveQuestion)
+
+        if (downgradesExplicitSubjectiveQuestions(primary.questions, fullPaper.questions)) return false
 
         val primaryOverallUnreliable =
             primaryErrors >= (primaryCount / 5).coerceAtLeast(2) ||
-                primarySubjective > primaryCount / 3 ||
+                primarySuspiciousSubjective >= (primaryCount / 5).coerceAtLeast(2) ||
                 primaryShortStem >= 3 ||
                 primaryFrontMatter > 0
         if (!primaryOverallUnreliable) return false
 
         val countIsReasonable = fullCount >= (primaryCount * 0.7).toInt().coerceAtLeast(3)
-        val structureImproved =
+        val concreteStructureGain =
             fullErrors < primaryErrors ||
-                fullObjective > primaryObjective ||
-                fullPaper.score >= primary.score + 30
+                fullCount >= primaryCount + (primaryCount / 10).coerceAtLeast(2) ||
+                fullSuspiciousSubjective < primarySuspiciousSubjective ||
+                fullValidObjective >= primaryValidObjective + 2 ||
+                fullShortStem < primaryShortStem ||
+                fullFrontMatter < primaryFrontMatter
+        val scoreDoesNotRegressMaterially = fullPaper.score >= primary.score - 20
 
-        return countIsReasonable && structureImproved
+        return countIsReasonable && concreteStructureGain && scoreDoesNotRegressMaterially
+    }
+
+    private fun looksLikeMisparsedObjectiveQuestion(question: Question): Boolean {
+        if (question.type != QuestionType.SHORT && question.type != QuestionType.BLANK) return false
+        if (isExplicitSubjectiveQuestion(question)) return false
+        if (question.options.isNotEmpty()) return false
+        if (CompactQuestionRepair.hasCompactOptionSequence(question.question)) return true
+        return Regex("""(?:下列|以下|哪项|哪个|选择|选出|正确|错误|不正确|最合适|最符合)""")
+            .containsMatchIn(question.question)
+    }
+
+    private fun isStructurallyValidObjectiveQuestion(question: Question): Boolean {
+        val isObjective = question.type == QuestionType.SINGLE ||
+            question.type == QuestionType.MULTIPLE ||
+            question.type == QuestionType.JUDGE
+        if (!isObjective || question.options.size < 2) return false
+        val optionKeys = question.options.map { it.key.uppercase() }.toSet()
+        return question.answer.isEmpty() || question.answer.all { it.uppercase() in optionKeys }
+    }
+
+    private fun isExplicitSubjectiveQuestion(question: Question): Boolean {
+        if (question.type != QuestionType.SHORT && question.type != QuestionType.BLANK) return false
+        if (Regex("""(?:简答|填空|问答|论述|主观|案例分析|材料分析)""").containsMatchIn(question.category)) {
+            return true
+        }
+        if (looksLikeSubjectivePrompt(question.question)) return true
+        return question.answer.any { answer ->
+            !Regex("""^[A-G]$""").matches(answer.trim().uppercase())
+        }
+    }
+
+    private fun looksLikeSubjectivePrompt(stem: String): Boolean {
+        val normalized = stem.trim()
+        val choiceIntent = Regex(
+            """(?:下列|以下).{0,24}(?:哪|正确|错误|不正确|符合)|选择|选出|最(?:合适|符合|恰当)|应(?:选择|选)"""
+        ).containsMatchIn(normalized)
+        if (choiceIntent) return false
+
+        val subjectiveLead = Regex(
+            """^(?:请|试)?(?:分别)?(?:说明|简述|阐述|论述|比较|解释|概述|谈谈|回答|分析)"""
+        ).containsMatchIn(normalized)
+        val subjectivePurpose = Regex(
+            """(?:差异|区别|联系|原因|影响|措施|方法|原则|条件|优缺点|意义|作用|过程|依据|适用|如何|为什么|各自|分别)"""
+        ).containsMatchIn(normalized)
+        val comparisonQuestion = Regex("""(?:有何|有什么).*(?:区别|差异|联系)""").containsMatchIn(normalized)
+        return (subjectiveLead && subjectivePurpose) || comparisonQuestion
+    }
+
+    private fun downgradesExplicitSubjectiveQuestions(
+        primaryQuestions: List<Question>,
+        fullPaperQuestions: List<Question>
+    ): Boolean {
+        val fullByNumber = fullPaperQuestions.groupBy { it.number }
+        return primaryQuestions.withIndex().any { (index, primaryQuestion) ->
+            if (!isExplicitSubjectiveQuestion(primaryQuestion)) return@any false
+            val candidate = fullByNumber[primaryQuestion.number]?.firstOrNull()
+                ?: fullPaperQuestions.getOrNull(index)
+                ?: return@any false
+            candidate.type == QuestionType.SINGLE ||
+                candidate.type == QuestionType.MULTIPLE ||
+                candidate.type == QuestionType.JUDGE
+        }
     }
 
     private fun buildCandidate(
@@ -277,10 +355,17 @@ object QuizImportParser {
         candidates: List<Candidate>,
         best: Candidate
     ): ImportResult {
+        val finalWarnings = if (
+            best.questions.isEmpty() && best.warnings.none { it.level == WarningLevel.ERROR }
+        ) {
+            best.warnings + ImportWarning(WarningLevel.ERROR, null, "未识别到任何题目")
+        } else {
+            best.warnings
+        }
         return ImportResult(
             questions = best.questions,
             strategyName = best.name,
-            warnings = best.warnings,
+            warnings = finalWarnings,
             diagnostics = ImportDiagnostics(
                 normalizedLength = normalized.length,
                 blockCount = QuestionBlockSplitter.split(normalized).size,

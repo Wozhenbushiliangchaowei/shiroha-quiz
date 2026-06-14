@@ -1,7 +1,6 @@
 package com.yiqiu.shirohaquiz.importer.parser
 
 import com.yiqiu.shirohaquiz.importer.assets.QuestionImageMarker
-import com.yiqiu.shirohaquiz.importer.model.Option
 import com.yiqiu.shirohaquiz.importer.model.Question
 import com.yiqiu.shirohaquiz.importer.model.QuestionType
 
@@ -70,8 +69,8 @@ object FullPaperFallbackStrategy {
             val stem = question.question.take(40)
             stem.contains("说明") || stem.contains("绝密") || stem.contains("密卷") || stem.contains("注意事项")
         }
-        val hasTooManySubjective = standardQuestions.count { it.type == QuestionType.SHORT || it.type == QuestionType.BLANK } > standardQuestions.size / 3
-        return answeredCoverage < 0.85 || suspiciousQuestionCount > 0 || hasTooManySubjective
+        val suspiciousSubjectiveCount = standardQuestions.count(::looksLikeMisparsedObjectiveQuestion)
+        return answeredCoverage < 0.85 || suspiciousQuestionCount > 0 || suspiciousSubjectiveCount >= 2
     }
 
     fun looksLikeFullPaper(text: String): Boolean {
@@ -281,18 +280,46 @@ object FullPaperFallbackStrategy {
         return scopedQuestions.map { question ->
             val objectiveAnswer = question.answer.filter { Regex("""^[A-G]$""").matches(it) }
             val normalizedType = when {
-                objectiveAnswer.size > 1 -> QuestionType.MULTIPLE
-                objectiveAnswer.size == 1 && question.type in listOf(QuestionType.SHORT, QuestionType.BLANK) -> QuestionType.SINGLE
+                question.options.size >= 2 && objectiveAnswer.size > 1 -> QuestionType.MULTIPLE
+                question.options.size >= 2 && objectiveAnswer.size == 1 && question.type != QuestionType.JUDGE -> QuestionType.SINGLE
                 else -> question.type
             }
-            val options = when {
-                normalizedType in listOf(QuestionType.SINGLE, QuestionType.MULTIPLE) && question.options.isEmpty() ->
-                    listOf("A", "B", "C", "D").map { Option(it, "选项 $it") }
-                else -> question.options
-            }
             val category = enrichMaterialHint(question.category, question.question)
-            question.copy(type = normalizedType, options = options, category = category)
+            question.copy(type = normalizedType, category = category)
         }
+    }
+
+    private fun looksLikeMisparsedObjectiveQuestion(question: Question): Boolean {
+        if (question.type != QuestionType.SHORT && question.type != QuestionType.BLANK) return false
+        if (isExplicitSubjectiveCategory(question.category)) return false
+        if (looksLikeSubjectivePrompt(question.question)) return false
+        if (question.options.isNotEmpty()) return false
+
+        val stem = question.question.trim()
+        if (CompactQuestionRepair.hasCompactOptionSequence(stem)) return true
+        return questionLikeRegex.containsMatchIn(stem) &&
+            Regex("""(?:下列|以下|哪项|哪个|选择|选出|正确|错误|不正确|最合适|最符合)""").containsMatchIn(stem)
+    }
+
+    private fun isExplicitSubjectiveCategory(category: String): Boolean {
+        return Regex("""(?:简答|填空|问答|论述|主观|案例分析|材料分析)""").containsMatchIn(category)
+    }
+
+    private fun looksLikeSubjectivePrompt(stem: String): Boolean {
+        val normalized = stem.trim()
+        val choiceIntent = Regex(
+            """(?:下列|以下).{0,24}(?:哪|正确|错误|不正确|符合)|选择|选出|最(?:合适|符合|恰当)|应(?:选择|选)"""
+        ).containsMatchIn(normalized)
+        if (choiceIntent) return false
+
+        val subjectiveLead = Regex(
+            """^(?:请|试)?(?:分别)?(?:说明|简述|阐述|论述|比较|解释|概述|谈谈|回答|分析)"""
+        ).containsMatchIn(normalized)
+        val subjectivePurpose = Regex(
+            """(?:差异|区别|联系|原因|影响|措施|方法|原则|条件|优缺点|意义|作用|过程|依据|适用|如何|为什么|各自|分别)"""
+        ).containsMatchIn(normalized)
+        val comparisonQuestion = Regex("""(?:有何|有什么).*(?:区别|差异|联系)""").containsMatchIn(normalized)
+        return (subjectiveLead && subjectivePurpose) || comparisonQuestion
     }
 
     private fun assignImplicitSectionCategoriesForFullPaper(questions: List<Question>): List<Question> {
