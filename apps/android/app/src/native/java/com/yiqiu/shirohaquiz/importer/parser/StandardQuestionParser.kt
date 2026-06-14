@@ -1,6 +1,5 @@
 package com.yiqiu.shirohaquiz.importer.parser
 
-import com.yiqiu.shirohaquiz.importer.assets.QuestionImageMarker
 import com.yiqiu.shirohaquiz.importer.model.Option
 import com.yiqiu.shirohaquiz.importer.model.Question
 import com.yiqiu.shirohaquiz.importer.model.QuestionType
@@ -24,7 +23,6 @@ object StandardQuestionParser {
     )
 
     private data class OptionMarker(val key: String, val markerStart: Int, val contentStart: Int)
-    private data class ProtectedImageMarkerText(val text: String, val replacements: Map<String, String>)
     private data class LineAnswerExtraction(val cleanLine: String, val answerText: String? = null, val analysisText: String? = null)
     private data class EmbeddedStemAnswer(val cleanStem: String, val answerText: String)
     private data class InferredPlainOptions(val stem: List<String>, val options: List<Option>)
@@ -44,7 +42,7 @@ object StandardQuestionParser {
         ).mapNotNull(::parseBlock)
     }
 
-    private fun parseBlock(block: QuestionBlock): Question? {
+    internal fun parseBlock(block: QuestionBlock): Question? {
         if (block.lines.isEmpty()) return null
 
         val options = mutableListOf<Option>()
@@ -92,7 +90,7 @@ object StandardQuestionParser {
                     }
                 }
                 inSubjectiveAnswer -> subjectiveAnswerLines += line
-                appendOptionsOrStem(line, options, stemLines) -> Unit
+                appendOptionsOrStem(line, options) -> Unit
                 options.isNotEmpty() -> {
                     val last = options.removeLast()
                     options += last.copy(text = "${last.text} $line".replace(Regex("""\s+"""), " ").trim())
@@ -224,69 +222,33 @@ object StandardQuestionParser {
 
     private fun appendOptionsOrStem(
         line: String,
-        options: MutableList<Option>,
-        stemLines: MutableList<String>
+        options: MutableList<Option>
     ): Boolean {
         val optionLine = stripLeadingOptionLabel(line)
-        val protectedLine = protectImageMarkersForOptionSplit(optionLine)
-        val optionSplitLine = protectedLine.text
-        val markers = findOptionMarkers(optionSplitLine)
-        if (markers.isEmpty()) return false
-        if (markers.size == 1 && markers.first().markerStart > 0 && options.isNotEmpty()) return false
+        val marker = findLeadingOptionMarker(optionLine) ?: return false
+        val text = optionLine.substring(marker.contentStart)
+            .trim()
+            .trim(';', '；')
+            .trim()
+        if (text.isBlank()) return false
 
-        val firstMarker = markers.first()
-        if (firstMarker.markerStart > 0) {
-            val prefix = restoreProtectedImageMarkers(
-                optionSplitLine.substring(0, firstMarker.markerStart),
-                protectedLine
-            ).trim()
-            if (prefix.isNotBlank()) {
-                val inferredKey = missingPreviousOptionKey(firstMarker.key, options)
-                if (inferredKey != null && shouldUsePrefixAsMissingOption(prefix, inferredKey, firstMarker.key)) {
-                    options += Option(inferredKey, prefix)
-                } else {
-                    stemLines += prefix
-                }
+        val existingIndex = options.indexOfLast { it.key == marker.key }
+        if (existingIndex >= 0) {
+            val relabelKey = missingPreviousOptionKey(marker.key, options)
+            if (relabelKey != null) {
+                val old = options[existingIndex]
+                options[existingIndex] = old.copy(key = relabelKey)
+                options += Option(marker.key, text)
+            } else {
+                val old = options[existingIndex]
+                options[existingIndex] = old.copy(
+                    text = "${old.text} $text".replace(Regex("""\s+"""), " ").trim()
+                )
             }
-        }
-
-        markers.forEachIndexed { index, marker ->
-            val end = markers.getOrNull(index + 1)?.markerStart ?: optionSplitLine.length
-            val text = restoreProtectedImageMarkers(
-                optionSplitLine.substring(marker.contentStart, end),
-                protectedLine
-            )
-                .trim()
-                .trim(';', '；')
-                .trim()
-            if (text.isNotBlank()) {
-                val existingIndex = options.indexOfLast { it.key == marker.key }
-                if (existingIndex >= 0) {
-                    val relabelKey = missingPreviousOptionKey(marker.key, options)
-                    if (relabelKey != null) {
-                        val old = options[existingIndex]
-                        options[existingIndex] = old.copy(key = relabelKey)
-                        options += Option(marker.key, text)
-                    } else {
-                        val old = options[existingIndex]
-                        options[existingIndex] = old.copy(text = "${old.text} $text".replace(Regex("""\s+"""), " ").trim())
-                    }
-                } else {
-                    options += Option(marker.key, text)
-                }
-            }
+        } else {
+            options += Option(marker.key, text)
         }
         return true
-    }
-
-    private fun shouldUsePrefixAsMissingOption(prefix: String, inferredKey: String, firstMarkerKey: String): Boolean {
-        if (inferredKey != "A" || firstMarkerKey != "B") return false
-        val clean = prefix.trim()
-        if (clean.length > 80) return false
-        if (QuestionImageMarker.contains(clean)) return true
-        if (Regex("""^[+-]?\d+(?:\s*[.．]\s*\d+)?(?:%|[A-Za-z]*)?(?:\s*(?:和|与|、|,|，)\s*[+-]?\d+(?:\s*[.．]\s*\d+)?(?:%|[A-Za-z]*)?)*$""", RegexOption.IGNORE_CASE).matches(clean)) return true
-        if (Regex("""^[A-Za-z0-9\-+*/=^_()（）\[\]{}{}.,，。%％\s]{1,40}$""").matches(clean)) return true
-        return false
     }
 
     private fun inferPlainOptionLines(
@@ -339,88 +301,26 @@ object StandardQuestionParser {
         return line.replace(Regex("""^\s*(?:选项|备选项|选项内容|候选项)\s*[:：]\s*"""), "")
     }
 
-    private fun protectImageMarkersForOptionSplit(line: String): ProtectedImageMarkerText {
-        val ranges = QuestionImageMarker.rangesIn(line)
-        if (ranges.isEmpty()) return ProtectedImageMarkerText(line, emptyMap())
-        val replacements = linkedMapOf<String, String>()
-        val builder = StringBuilder()
-        var cursor = 0
-        ranges.forEachIndexed { index, range ->
-            if (range.first < cursor) return@forEachIndexed
-            builder.append(line.substring(cursor, range.first))
-            val token = "@@SHIROHA_IMG_MARKER_$index@@"
-            replacements[token] = line.substring(range)
-            builder.append(token)
-            cursor = range.last + 1
-        }
-        if (cursor < line.length) builder.append(line.substring(cursor))
-        return ProtectedImageMarkerText(builder.toString(), replacements)
-    }
-
-    private fun restoreProtectedImageMarkers(text: String, protectedText: ProtectedImageMarkerText): String {
-        if (protectedText.replacements.isEmpty()) return text
-        var restored = text
-        protectedText.replacements.forEach { (token, marker) ->
-            restored = restored.replace(token, marker)
-        }
-        return restored
-    }
-
-    private fun findOptionMarkers(line: String): List<OptionMarker> {
-        val markers = mutableListOf<OptionMarker>()
-
-        Regex("""([A-Ga-g])\s*[.、．:：]""").findAll(line).forEach { match ->
-            markers += OptionMarker(
-                key = match.groupValues[1].uppercase(),
-                markerStart = match.range.first,
-                contentStart = match.range.last + 1
-            )
-        }
-
-        Regex("""^\s*([A-Ga-g])\s*[)）]""").findAll(line).forEach { match ->
-            markers += OptionMarker(
-                key = match.groupValues[1].uppercase(),
-                markerStart = match.range.first,
-                contentStart = match.range.last + 1
-            )
-        }
-
-        val bracketOptionMatches = Regex("""[\(（\[【〔〖《]\s*([A-Ga-g])\s*[\)）\]】〕〗》]""").findAll(line).toList()
-        val bracketOptionsAreLikelyInlineOptions = bracketOptionMatches.size >= 2 &&
-            bracketOptionMatches.map { it.groupValues[1].uppercase() }.distinct().size >= 2
-        bracketOptionMatches.forEach { match ->
-            val isLeadingMarker = line.take(match.range.first).isBlank()
-            if (isLeadingMarker || bracketOptionsAreLikelyInlineOptions) {
-                markers += OptionMarker(
-                    key = match.groupValues[1].uppercase(),
-                    markerStart = match.range.first,
-                    contentStart = match.range.last + 1
-                )
-            }
-        }
-
-        Regex("""[;；]\s*([A-Ga-g])(?=\S)""").findAll(line).forEach { match ->
-            val keyGroup = match.groups[1] ?: return@forEach
-            markers += OptionMarker(
+    private fun findLeadingOptionMarker(line: String): OptionMarker? {
+        Regex("""^\s*([A-Ga-g])\s*[.、．:：)）]""").find(line)?.let { match ->
+            val keyGroup = match.groups[1] ?: return@let
+            val marker = OptionMarker(
                 key = keyGroup.value.uppercase(),
                 markerStart = keyGroup.range.first,
-                contentStart = keyGroup.range.last + 1
+                contentStart = match.range.last + 1
             )
+            if (!looksLikeDottedEnglishAbbreviation(line, marker)) return marker
         }
 
-        val imageRanges = QuestionImageMarker.rangesIn(line)
-        return markers
-            .filterNot { marker -> imageRanges.any { range -> marker.markerStart in range } }
-            .filterNot { marker -> looksLikeOptionMarkerInsideAsciiWord(line, marker) }
-            .filterNot { marker -> looksLikeDottedEnglishAbbreviation(line, marker) }
-            .filterNot { marker -> looksLikeInlineEnumerationMarker(line, marker) }
-            .distinctBy { it.markerStart to it.key }
-            .sortedBy { it.markerStart }
-    }
-
-    private fun looksLikeOptionMarkerInsideAsciiWord(line: String, marker: OptionMarker): Boolean {
-        val previous = line.getOrNull(marker.markerStart - 1) ?: return false
-        return previous in 'A'..'Z' || previous in 'a'..'z' || previous in '0'..'9' || previous == '_'
+        Regex("""^\s*[\(（\[【〔〖《]\s*([A-Ga-g])\s*[\)）\]】〕〗》]""").find(line)?.let { match ->
+            val keyGroup = match.groups[1] ?: return@let
+            return OptionMarker(
+                key = keyGroup.value.uppercase(),
+                markerStart = match.range.first,
+                contentStart = match.range.last + 1
+            )
+        }
+        return null
     }
 
     private fun looksLikeDottedEnglishAbbreviation(line: String, marker: OptionMarker): Boolean {
@@ -428,26 +328,13 @@ object StandardQuestionParser {
         if ('.' !in markerText && '．' !in markerText) return false
 
         val next = line.getOrNull(marker.contentStart) ?: return false
-        if (next !in 'A'..'Z') return false
-
+        if (next !in 'A'..'Z' && next !in 'a'..'z') return false
         val nextNext = line.getOrNull(marker.contentStart + 1)
-        if (nextNext == null || nextNext.isWhitespace()) return true
-        return nextNext in setOf('.', '．', ',', '，', ';', '；', ':', '：', ')', '）', ']', '】', '}', '》')
-    }
 
-    private fun looksLikeInlineEnumerationMarker(line: String, marker: OptionMarker): Boolean {
-        val markerText = line.substring(marker.markerStart, marker.contentStart)
-        if ('、' !in markerText) return false
-        val previous = line.getOrNull(marker.markerStart - 1)
-        val next = line.getOrNull(marker.contentStart)
-        if (previous != null && (previous in 'A'..'G' || previous in 'a'..'g')) return true
-        if (next != null && (next in 'A'..'G' || next in 'a'..'g')) {
-            val tail = line.substring(marker.contentStart).trimStart()
-            if (Regex("""^[A-Ga-g]\s*[.、．:：)）]""").containsMatchIn(tail)) return true
-        }
-        val prefix = line.take(marker.markerStart)
-        if (Regex("""[A-Ga-g]\s*、\s*$""").containsMatchIn(prefix)) return true
-        if (marker.markerStart > 0 && previous != null && previous.toString().matches(Regex("""[\u4e00-\u9fa5A-Za-z0-9]"""))) {
+        if (nextNext == '.' || nextNext == '．') return true
+        if (next.isUpperCase() && (nextNext == null || nextNext.isWhitespace() || nextNext in setOf(
+                ',', '，', ';', '；', ':', '：', ')', '）', ']', '】', '}', '》', '/', '\\'
+            ))) {
             return true
         }
         return false

@@ -16,7 +16,7 @@ object ImportStrategyScorer {
         val objectiveCount = questions.count {
             it.type == QuestionType.SINGLE || it.type == QuestionType.MULTIPLE || it.type == QuestionType.JUDGE
         }
-        val optionCoverage = if (objectiveCount == 0) 1.0 else {
+        val optionCoverage = if (objectiveCount == 0) 0.0 else {
             questions.count {
                 (it.type == QuestionType.SINGLE || it.type == QuestionType.MULTIPLE || it.type == QuestionType.JUDGE) && it.options.size >= 2
             }.toDouble() / objectiveCount.toDouble()

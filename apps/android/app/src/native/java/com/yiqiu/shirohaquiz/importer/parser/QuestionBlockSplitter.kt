@@ -32,7 +32,6 @@ object QuestionBlockSplitter {
     private val gluedQuestionStartRegex = Regex(
         """^\s*(\d{1,2})(?=[\u4e00-\u9fa5A-Za-z])(.*)$"""
     )
-    private val optionStartRegex = Regex("""^\s*(?:[A-Ga-g]\s*[.、．:：)）]|[\(（\[【〔〖《]\s*[A-Ga-g]\s*[\)）\]】〕〗》])""")
     private val answerLineRegex = Regex("""^\s*(?:[\[【]\s*)?(?:本题)?(?:答案|正确答案|参考答案|标准答案|参考要点|参考思路|答题要点|答题思路|作答思路|评分要点|参考作答|答)(?:\s*[\]】])?\s*(?:[:：]|为)?""")
     private val analysisLineRegex = Regex("""^\s*(?:(?:[\[【]\s*(?:答案解析|解题思路|解析思路|解题分析|参考解析|详解|分析|理由|解答|解析|说明)\s*[\]】]\s*)|(?:(?:答案解析|解题思路|解析思路|解题分析|参考解析|详解|分析|理由|解答|解析|说明)\s*[:：]\s*))""")
     private val embeddedAnswerRegex = Regex("""[\[【]\s*(?:答案|正确答案|参考答案|标准答案|参考要点|参考思路|答题要点|答题思路|作答思路|评分要点|参考作答)\s*(?:[:：]|[\]】])|(?:本题)?(?:答案|正确答案|参考答案|标准答案)\s*为""")
@@ -279,8 +278,10 @@ object QuestionBlockSplitter {
     private fun shouldStartNextSyntheticBlock(currentLines: List<String>, nextLine: String): Boolean {
         if (hasSubjectiveContinuationContext(currentLines)) return false
         if (!isLikelyUnnumberedQuestionLine(nextLine)) return false
-        if (optionStartRegex.containsMatchIn(nextLine)) return false
-        val hasOption = currentLines.any { optionStartRegex.containsMatchIn(it) || hasMultipleInlineOptions(it) }
+        if (CompactQuestionRepair.isStandardOptionLine(nextLine)) return false
+        val hasOption = currentLines.any {
+            CompactQuestionRepair.isStandardOptionLine(it) || CompactQuestionRepair.hasCompactOptionSequence(it)
+        }
         val hasAnswer = currentLines.any { embeddedAnswerRegex.containsMatchIn(it) || answerLineRegex.containsMatchIn(it) }
         return hasAnswer || hasOption
     }
@@ -288,7 +289,7 @@ object QuestionBlockSplitter {
     private fun isLikelyTypedQuestionLine(line: String, forcedType: QuestionType?): Boolean {
         if (forcedType == null) return false
         if (line.length < 2) return false
-        if (optionStartRegex.containsMatchIn(line)) return false
+        if (CompactQuestionRepair.isStandardOptionLine(line)) return false
         if (answerLineRegex.containsMatchIn(line) || analysisLineRegex.containsMatchIn(line)) return false
         if (SectionTitleParser.isSectionHeading(line)) return false
         return true
@@ -298,7 +299,7 @@ object QuestionBlockSplitter {
         if (line.length < 4) return false
         if (Regex("""^(?:用途|说明|备注|注意|提示)\s*[:：]""").containsMatchIn(line)) return false
         if (Regex("""^\s*[\[【]\s*(?:待确认|备注|提示|说明|注|注意)""").containsMatchIn(line)) return false
-        if (optionStartRegex.containsMatchIn(line)) return false
+        if (CompactQuestionRepair.isStandardOptionLine(line)) return false
         if (answerLineRegex.containsMatchIn(line) || analysisLineRegex.containsMatchIn(line)) return false
         if (SectionTitleParser.isSectionHeading(line)) return false
         QuestionTypeLabelParser.extractLeading(line)?.let { typed ->
@@ -312,7 +313,5 @@ object QuestionBlockSplitter {
         return false
     }
 
-    private fun hasMultipleInlineOptions(line: String): Boolean {
-        return Regex("""(?:[A-Ga-g]\s*[.、．:：)）]|[\(（\[【〔〖《]\s*[A-Ga-g]\s*[\)）\]】〕〗》])""").findAll(line).take(2).count() >= 2
-    }
+
 }

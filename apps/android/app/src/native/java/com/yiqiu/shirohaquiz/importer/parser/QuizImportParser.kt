@@ -13,80 +13,57 @@ object QuizImportParser {
     fun parseStandardText(raw: String): ImportResult {
         val normalized = QuestionTextNormalizer.normalize(raw)
         val candidates = mutableListOf<Candidate>()
-
-        val tableQuestions = ExcelQuestionTableParser.parse(normalized)
-        if (tableQuestions.isNotEmpty()) {
-            candidates += buildCandidate("Excel/CSV 表格题库解析", tableQuestions)
+        val hasAnswerSection = AnswerSectionParser.hasAnswerSection(normalized)
+        val questionArea = if (hasAnswerSection) {
+            AnswerSectionParser.splitSections(normalized).first
+        } else {
+            normalized
         }
 
-        if (!AnswerSectionParser.hasAnswerSection(normalized)) {
-            val sharedStemQuestions = SharedStemQuestionFallbackParser.parse(normalized)
-            if (sharedStemQuestions.isNotEmpty()) {
-                candidates += buildCandidate("共用题干/材料题兜底解析", sharedStemQuestions)
-            }
-        }
-
-        val standardQuestions = QuestionParser.parseStandard(normalized)
-        val standardCandidate = buildCandidate("标准优先解析", standardQuestions)
-        candidates += standardCandidate
-
-        var fullPaperCandidate: Candidate? = null
-        if (FullPaperFallbackStrategy.shouldTry(normalized, standardCandidate.questions)) {
-            val fullPaperQuestions = FullPaperFallbackStrategy.parse(normalized)
-            if (fullPaperQuestions.isNotEmpty()) {
-                fullPaperCandidate = buildCandidate("整卷真题复杂兜底解析", fullPaperQuestions)
-                candidates += fullPaperCandidate
-            }
-        }
-
-        if (QuestionParser.looksCompact(normalized)) {
-            val compactQuestions = QuestionParser.parseCompact(normalized)
-            if (compactQuestions.size >= standardQuestions.size) {
-                candidates += buildCandidate("紧凑排版拆分解析", compactQuestions)
-            }
-        }
-
-        if (QuestionParser.looksSectioned(normalized)) {
-            val sectionedQuestions = QuestionParser.parseSectioned(normalized)
-            candidates += buildCandidate("分区题型继承解析", sectionedQuestions)
-        }
-
-        if (AnswerSectionParser.hasAnswerSection(normalized)) {
-            val (questionArea, _) = AnswerSectionParser.splitSections(normalized)
-            val baseQuestionCandidates = buildList {
-                val sharedStemAreaQuestions = SharedStemQuestionFallbackParser.parse(questionArea)
-                if (sharedStemAreaQuestions.isNotEmpty()) {
-                    add("题目区共用题干/材料题兜底解析" to sharedStemAreaQuestions)
-                }
-                add("题目区标准解析" to QuestionParser.parseStandard(questionArea))
-                if (QuestionParser.looksCompact(questionArea)) {
-                    add("题目区紧凑解析" to QuestionParser.parseCompact(questionArea))
-                }
-                if (QuestionParser.looksSectioned(questionArea)) {
-                    add("题目区分区解析" to QuestionParser.parseSectioned(questionArea))
-                }
-            }.filter { it.second.isNotEmpty() }
-
+        val rewrittenQuestionArea = SharedStemQuestionFallbackParser.rewrite(questionArea)
+        val primaryQuestions = QuestionParser.parseStandardFirst(rewrittenQuestionArea ?: questionArea)
+        val primaryCandidate = if (hasAnswerSection) {
             val answerEntries = AnswerSectionParser.parse(normalized)
-            baseQuestionCandidates.forEach { (questionStrategy, questions) ->
-                val merged = DualFileMerger.mergeAuto(questions, answerEntries)
-                candidates += buildCandidate(
-                    name = "$questionStrategy + 答案集中区识别/${merged.name}",
-                    questions = merged.questions,
-                    extraWarnings = merged.warnings
-                )
-            }
+            val merged = DualFileMerger.mergeAuto(primaryQuestions, answerEntries)
+            buildCandidate(
+                name = buildPrimaryStrategyName(
+                    hasSharedStemRewrite = rewrittenQuestionArea != null,
+                    hasAnswerSection = true,
+                    mergeName = merged.name
+                ),
+                questions = merged.questions,
+                extraWarnings = merged.warnings
+            )
+        } else {
+            buildCandidate(
+                name = buildPrimaryStrategyName(
+                    hasSharedStemRewrite = rewrittenQuestionArea != null,
+                    hasAnswerSection = false
+                ),
+                questions = primaryQuestions
+            )
+        }
+        candidates += primaryCandidate
+
+        val tableCandidate = ExcelQuestionTableParser.parse(normalized)
+            .takeIf { it.isNotEmpty() }
+            ?.let { buildCandidate("Excel/CSV 表格题库解析", it) }
+            ?.also { candidates += it }
+
+        val fullPaperCandidate = if (FullPaperFallbackStrategy.shouldTry(normalized, primaryCandidate.questions)) {
+            FullPaperFallbackStrategy.parse(normalized)
+                .takeIf { it.isNotEmpty() }
+                ?.let { buildCandidate("整卷真题复杂兜底解析", it) }
+                ?.also { candidates += it }
+        } else {
+            null
         }
 
         val best = chooseBestCandidate(
             normalized = normalized,
-            candidates = candidates,
+            primaryCandidate = primaryCandidate,
+            tableCandidate = tableCandidate,
             fullPaperCandidate = fullPaperCandidate
-        ) ?: Candidate(
-            name = "标准优先解析",
-            questions = emptyList(),
-            warnings = listOf(ImportWarning(WarningLevel.ERROR, null, "未识别到任何题目")),
-            score = Int.MIN_VALUE
         )
 
         return buildResult(
@@ -99,27 +76,47 @@ object QuizImportParser {
     fun parseDualText(questionText: String, answerText: String): ImportResult {
         val normalizedQuestion = QuestionTextNormalizer.normalize(questionText)
         val normalizedAnswer = QuestionTextNormalizer.normalize(answerText)
+        val questionCandidates = mutableListOf<Candidate>()
 
-        val questionCandidates = buildList {
-            val sharedStemQuestions = SharedStemQuestionFallbackParser.parse(normalizedQuestion)
-            if (sharedStemQuestions.isNotEmpty()) {
-                add("共用题干/材料题兜底解析" to sharedStemQuestions)
-            }
-            add("标准题目解析" to QuestionParser.parseStandard(normalizedQuestion))
-            if (QuestionParser.looksCompact(normalizedQuestion)) {
-                add("紧凑题目解析" to QuestionParser.parseCompact(normalizedQuestion))
-            }
-            if (QuestionParser.looksSectioned(normalizedQuestion)) {
-                add("分区题目解析" to QuestionParser.parseSectioned(normalizedQuestion))
-            }
-        }.filter { it.second.isNotEmpty() }
+        val rewrittenQuestion = SharedStemQuestionFallbackParser.rewrite(normalizedQuestion)
+        val primaryQuestionCandidate = buildCandidate(
+            name = buildPrimaryStrategyName(
+                hasSharedStemRewrite = rewrittenQuestion != null,
+                hasAnswerSection = false
+            ),
+            questions = QuestionParser.parseStandardFirst(rewrittenQuestion ?: normalizedQuestion)
+        )
+        questionCandidates += primaryQuestionCandidate
+
+        val tableQuestionCandidate = ExcelQuestionTableParser.parse(normalizedQuestion)
+            .takeIf { it.isNotEmpty() }
+            ?.let { buildCandidate("Excel/CSV 表格题目解析", it) }
+            ?.also { questionCandidates += it }
+
+        val fullPaperQuestionCandidate = if (
+            FullPaperFallbackStrategy.shouldTry(normalizedQuestion, primaryQuestionCandidate.questions)
+        ) {
+            FullPaperFallbackStrategy.parse(normalizedQuestion)
+                .takeIf { it.isNotEmpty() }
+                ?.let { buildCandidate("整卷真题复杂题目兜底解析", it) }
+                ?.also { questionCandidates += it }
+        } else {
+            null
+        }
+
+        val selectedQuestionCandidate = chooseBestCandidate(
+            normalized = normalizedQuestion,
+            primaryCandidate = primaryQuestionCandidate,
+            tableCandidate = tableQuestionCandidate,
+            fullPaperCandidate = fullPaperQuestionCandidate
+        )
 
         val answerCandidates = buildList {
             val plainAnswers = AnswerParser.parse(normalizedAnswer)
             if (plainAnswers.isNotEmpty()) add("普通答案表" to plainAnswers)
             val sectionAnswers = AnswerSectionParser.parse(normalizedAnswer)
             if (sectionAnswers.isNotEmpty()) add("答案分区表" to sectionAnswers)
-            val fullParsedAnswers = QuestionParser.parseStandard(normalizedAnswer)
+            val fullParsedAnswers = QuestionParser.parseStandardFirst(normalizedAnswer)
                 .filter { it.answer.isNotEmpty() }
                 .mapIndexed { index, question ->
                     ParsedAnswerEntry(
@@ -137,56 +134,118 @@ object QuizImportParser {
         }
 
         val mergedCandidates = mutableListOf<Candidate>()
-        questionCandidates.forEach { (questionStrategy, questions) ->
-            answerCandidates.forEach { (answerStrategy, answers) ->
-                val merged = DualFileMerger.mergeAuto(questions, answers)
-                mergedCandidates += buildCandidate(
-                    name = "$questionStrategy + $answerStrategy/${merged.name}",
-                    questions = merged.questions,
-                    extraWarnings = merged.warnings
-                )
-            }
+        answerCandidates.forEach { (answerStrategy, answers) ->
+            val merged = DualFileMerger.mergeAuto(selectedQuestionCandidate.questions, answers)
+            mergedCandidates += buildCandidate(
+                name = "${selectedQuestionCandidate.name} + $answerStrategy/${merged.name}",
+                questions = merged.questions,
+                extraWarnings = merged.warnings
+            )
         }
 
-        val best = mergedCandidates.maxByOrNull { it.score } ?: Candidate(
-            name = "双文件智能合并",
-            questions = emptyList(),
-            warnings = listOf(ImportWarning(WarningLevel.ERROR, null, "双文件导入未得到有效题目")),
-            score = Int.MIN_VALUE
-        )
+        val best = mergedCandidates.maxByOrNull { it.score } ?: selectedQuestionCandidate
+        val diagnosticCandidates = questionCandidates + mergedCandidates
 
         return buildResult(
             normalized = normalizedQuestion + "\n" + normalizedAnswer,
-            candidates = mergedCandidates,
+            candidates = diagnosticCandidates,
             best = best
         )
     }
 
+    private fun buildPrimaryStrategyName(
+        hasSharedStemRewrite: Boolean,
+        hasAnswerSection: Boolean,
+        mergeName: String = ""
+    ): String {
+        val localFallback = if (hasSharedStemRewrite) {
+            "标准优先解析（单题紧凑修复 + 共用题干局部兜底）"
+        } else {
+            "标准优先解析（单题紧凑修复）"
+        }
+        return if (hasAnswerSection) {
+            "$localFallback + 答案集中区识别/$mergeName"
+        } else {
+            localFallback
+        }
+    }
 
     private fun chooseBestCandidate(
         normalized: String,
-        candidates: List<Candidate>,
+        primaryCandidate: Candidate,
+        tableCandidate: Candidate?,
         fullPaperCandidate: Candidate?
-    ): Candidate? {
-        val scoredBest = candidates.maxByOrNull { it.score } ?: return null
-        val fullPaper = fullPaperCandidate ?: return scoredBest
-        if (!FullPaperFallbackStrategy.looksLikeFullPaper(normalized)) return scoredBest
+    ): Candidate {
+        var best = primaryCandidate
 
+        if (tableCandidate != null && shouldUseSpecializedTable(primaryCandidate, tableCandidate)) {
+            best = tableCandidate
+        }
+
+        if (
+            fullPaperCandidate != null &&
+            shouldUseFullPaper(normalized, best, fullPaperCandidate)
+        ) {
+            best = fullPaperCandidate
+        }
+
+        return best
+    }
+
+    private fun shouldUseSpecializedTable(primary: Candidate, table: Candidate): Boolean {
+        if (primary.questions.isEmpty()) return true
+        val primaryErrors = primary.warnings.count { it.level == WarningLevel.ERROR }
+        val tableErrors = table.warnings.count { it.level == WarningLevel.ERROR }
+        val countFloor = (primary.questions.size * 0.8).toInt().coerceAtLeast(1)
+        val preservesMostQuestions = table.questions.size >= countFloor
+        val materiallyCleaner = tableErrors < primaryErrors || table.score >= primary.score + 30
+        return preservesMostQuestions && materiallyCleaner
+    }
+
+    private fun shouldUseFullPaper(
+        normalized: String,
+        primary: Candidate,
+        fullPaper: Candidate
+    ): Boolean {
+        if (!FullPaperFallbackStrategy.looksLikeFullPaper(normalized)) return false
+        if (fullPaper.questions.isEmpty()) return false
+        if (primary.questions.isEmpty()) return true
+
+        val primaryCount = primary.questions.size
         val fullCount = fullPaper.questions.size
-        val bestCount = scoredBest.questions.size
-        if (fullCount < 45 || scoredBest == fullPaper) return scoredBest
-
-        val bestSubjectiveCount = scoredBest.questions.count {
+        val primaryErrors = primary.warnings.count { it.level == WarningLevel.ERROR }
+        val fullErrors = fullPaper.warnings.count { it.level == WarningLevel.ERROR }
+        val primarySubjective = primary.questions.count {
             it.type == QuestionType.SHORT || it.type == QuestionType.BLANK
         }
-        val shortStemCount = scoredBest.questions.count { it.question.length <= 3 && it.options.isEmpty() }
-        val tableLikeStemCount = scoredBest.questions.count { question ->
-            Regex("""^\d+(?:\.\d+)?$|^(?:第一|第二|第三|固定资产|社会消费|地方财政|实际利用|进出口|指标|占全国|增长速度)""")
+        val primaryShortStem = primary.questions.count {
+            it.question.trim().length <= 3 && it.options.isEmpty()
+        }
+        val primaryFrontMatter = primary.questions.count { question ->
+            Regex("""^(?:说明|注意事项|密卷|绝密|祝各位考生|时间[:：]|考试时间[:：])""")
                 .containsMatchIn(question.question.trim())
         }
-        val overSplit = bestCount > (fullCount * 1.35).toInt()
-        val noisyBest = bestSubjectiveCount > bestCount / 4 || shortStemCount >= 5 || tableLikeStemCount >= 5
-        return if (overSplit && noisyBest) fullPaper else scoredBest
+        val primaryObjective = primary.questions.count {
+            it.type == QuestionType.SINGLE || it.type == QuestionType.MULTIPLE || it.type == QuestionType.JUDGE
+        }
+        val fullObjective = fullPaper.questions.count {
+            it.type == QuestionType.SINGLE || it.type == QuestionType.MULTIPLE || it.type == QuestionType.JUDGE
+        }
+
+        val primaryOverallUnreliable =
+            primaryErrors >= (primaryCount / 5).coerceAtLeast(2) ||
+                primarySubjective > primaryCount / 3 ||
+                primaryShortStem >= 3 ||
+                primaryFrontMatter > 0
+        if (!primaryOverallUnreliable) return false
+
+        val countIsReasonable = fullCount >= (primaryCount * 0.7).toInt().coerceAtLeast(3)
+        val structureImproved =
+            fullErrors < primaryErrors ||
+                fullObjective > primaryObjective ||
+                fullPaper.score >= primary.score + 30
+
+        return countIsReasonable && structureImproved
     }
 
     private fun buildCandidate(
@@ -236,6 +295,7 @@ object QuizImportParser {
         val typeSummary = best.questions.groupingBy { it.type }.eachCount()
         val typeNote = "题型分布：单选${typeSummary[QuestionType.SINGLE] ?: 0} / 多选${typeSummary[QuestionType.MULTIPLE] ?: 0} / 判断${typeSummary[QuestionType.JUDGE] ?: 0} / 填空${typeSummary[QuestionType.BLANK] ?: 0} / 简答${typeSummary[QuestionType.SHORT] ?: 0}"
         val candidateNotes = candidates
+            .distinctBy { it.name }
             .sortedByDescending { it.score }
             .take(5)
             .map { candidate ->
