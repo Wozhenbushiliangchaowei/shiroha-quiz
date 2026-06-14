@@ -2006,7 +2006,7 @@ object QuizRepository {
                         banks = parsedBanks,
                         kind = if (webBackup) "web_backup" else "multi_bank_backup",
                         message = if (webBackup) {
-                            "检测到 Web 备份包：共 ${parsedBanks.size} 个题库；原生端将只导入题库内容，不导入错题本、收藏夹、学习记录和设置。"
+                            "检测到 Web 备份包：共 ${parsedBanks.size} 个题库；将同步可映射的错题本、收藏夹和学习记录，平台专用设置不会跨端覆盖。"
                         } else {
                             "检测到多题库 JSON：共 ${parsedBanks.size} 个题库，将只导入题库内容。"
                         }
@@ -2029,7 +2029,9 @@ object QuizRepository {
 
     private fun isWebBackupJson(root: JSONObject): Boolean {
         if (!root.has("banks")) return false
-        if (root.optString("kind").startsWith("shiroha_quiz")) return false
+        val kind = root.optString("kind")
+        if (kind.startsWith("shiroha_quiz_web") || root.has("crossPlatform")) return true
+        if (kind.startsWith("shiroha_quiz")) return false
         return root.optString("app").equals("Shiroha Quiz", ignoreCase = true) ||
             root.has("schemaVersion") ||
             root.has("exportType") ||
@@ -2126,8 +2128,12 @@ object QuizRepository {
         assetMapping: MutableMap<String, BackupAsset>?
     ): JSONObject {
         val root = JSONObject()
+        root.put("app", "Shiroha Quiz")
         root.put("kind", kind)
-        root.put("version", 2)
+        root.put("version", 3)
+        root.put("schemaVersion", 3)
+        root.put("crossPlatformSchemaVersion", 1)
+        root.put("exportedBy", "native")
         root.put("exportedAt", System.currentTimeMillis())
         root.put("activeBankId", activeBankId)
         root.put("banks", JSONArray(banksToJson(selectedBanks, assetMapping)))
@@ -2167,6 +2173,29 @@ object QuizRepository {
         return importBackupJsonInternal(context, jsonBytes.toString(Charsets.UTF_8), assetEntries)
     }
 
+    private fun parseBackupTimeMillis(value: Any?, fallback: Long? = null): Long? {
+        if (value == null || value == JSONObject.NULL) return fallback
+        if (value is Number) return value.toLong().takeIf { it > 0 } ?: fallback
+        val raw = value.toString().trim()
+        if (raw.isBlank()) return fallback
+        raw.toLongOrNull()?.takeIf { it > 0 }?.let { return it }
+        val patterns = listOf(
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+            "yyyy-MM-dd HH:mm:ss"
+        )
+        patterns.forEach { pattern ->
+            val parsed = runCatching {
+                java.text.SimpleDateFormat(pattern, Locale.US).apply {
+                    isLenient = false
+                    timeZone = java.util.TimeZone.getTimeZone("UTC")
+                }.parse(raw)?.time
+            }.getOrNull()
+            if (parsed != null) return parsed
+        }
+        return fallback
+    }
+
     private fun importBackupJsonInternal(
         context: Context,
         rawText: String,
@@ -2202,7 +2231,8 @@ object QuizRepository {
         if (importedBanks.isEmpty()) return "导入失败：备份中没有可用题库。"
 
         val isWebBackup = isWebBackupJson(root)
-        val shouldRestoreNativeState = root.optString("kind").startsWith("shiroha_quiz") && !isWebBackup
+        val crossPlatformRoot = root.optJSONObject("crossPlatform")
+        val canonicalStateRoot = crossPlatformRoot ?: root
 
         val idMap = mutableMapOf<String, String>()
         val now = System.currentTimeMillis()
@@ -2225,17 +2255,14 @@ object QuizRepository {
             )
         }
         banks.addAll(addedBanks)
-        if (activeBankId == null && addedBanks.isNotEmpty()) activeBankId = addedBanks.first().id
+        val importedActiveBankId = root.optString("activeBankId")
+        val mappedActiveBankId = idMap[importedActiveBankId]
+        if (mappedActiveBankId != null) activeBankId = mappedActiveBankId
+        else if (activeBankId == null && addedBanks.isNotEmpty()) activeBankId = addedBanks.first().id
 
-        // v0.8：Web 备份也尝试映射状态数据
+        // 旧 Web 备份没有 crossPlatform 时，按旧对象结构映射状态。
         var importedStateCount = 0
-        if (isWebBackup) {
-            val questionIdToBank = mutableMapOf<String, String>()
-            addedBanks.forEach { bank ->
-                bank.questions.forEach { q ->
-                    questionIdToBank[q.id] = bank.id
-                }
-            }
+        if (isWebBackup && crossPlatformRoot == null) {
             // Web wrongBook: {bankId: [{id, wrongCount, rightCount, lastWrongAt, lastCorrectAt, status}]}
             val webWrongBookObj = root.optJSONObject("wrongBook")
             if (webWrongBookObj != null) {
@@ -2257,12 +2284,17 @@ object QuizRepository {
                                 question = question,
                                 lastAnswer = emptyList(),
                                 source = "web-backup",
-                                timestamp = System.currentTimeMillis(),
+                                timestamp = parseBackupTimeMillis(entry.opt("lastWrongAt"), System.currentTimeMillis()) ?: System.currentTimeMillis(),
                                 wrongCount = entry.optInt("wrongCount", 1),
                                 rightCount = entry.optInt("rightCount", 0),
-                                lastWrongAt = entry.optLong("lastWrongAt", System.currentTimeMillis()),
-                                lastCorrectAt = if (entry.has("lastCorrectAt") && !entry.isNull("lastCorrectAt")) entry.optLong("lastCorrectAt") else null,
-                                status = entry.optString("status", "未掌握").ifBlank { "未掌握" }
+                                reviewRightCount = entry.optInt("reviewRightCount", 0),
+                                streakCorrectCount = entry.optInt("streakCorrectCount", 0),
+                                lastWrongAt = parseBackupTimeMillis(entry.opt("lastWrongAt"), System.currentTimeMillis()) ?: System.currentTimeMillis(),
+                                lastCorrectAt = if (entry.has("lastCorrectAt") && !entry.isNull("lastCorrectAt")) parseBackupTimeMillis(entry.opt("lastCorrectAt")) else null,
+                                status = entry.optString("status", "未掌握").ifBlank { "未掌握" },
+                                lastReviewedAt = if (entry.has("lastReviewedAt") && !entry.isNull("lastReviewedAt")) parseBackupTimeMillis(entry.opt("lastReviewedAt")) else null,
+                                nextReviewAt = if (entry.has("nextReviewAt") && !entry.isNull("nextReviewAt")) parseBackupTimeMillis(entry.opt("nextReviewAt")) else null,
+                                reviewLevel = entry.optInt("reviewLevel", 0)
                             )
                         )
                     }
@@ -2289,25 +2321,47 @@ object QuizRepository {
                 favoriteQuestions.addAll(0, importedFavorites)
                 importedStateCount += importedFavorites.size
             }
-            // Web records: [{mode, bankId, bankName, total, correct, ...}]
+            // Web records: resolve questionId back to the imported bank so record details remain usable.
             val webRecords = root.optJSONArray("records")
             if (webRecords != null) {
                 val importedRecords = mutableListOf<StudyRecord>()
                 for (k in 0 until webRecords.length()) {
                     val rec = webRecords.optJSONObject(k) ?: continue
-                    val mappedBankId = rec.optString("bankId").let { idMap[it] ?: it }
+                    val originalBankId = rec.optString("bankId")
+                    val mappedBankId = idMap[originalBankId] ?: originalBankId
+                    val mappedBank = addedBanks.firstOrNull { it.id == mappedBankId }
                     val details = rec.optJSONArray("details")
                     val questionResults = if (details != null) {
-                        val placeholderQuestion = Question(type = QuestionType.SHORT, question = "")
                         buildList {
                             for (d in 0 until details.length()) {
                                 val detail = details.optJSONObject(d) ?: continue
+                                val nestedQuestion = detail.optJSONObject("question")?.let { runCatching { parseQuestion(it) }.getOrNull() }
+                                val questionId = detail.optString("questionId")
+                                val resolvedQuestion = nestedQuestion
+                                    ?: mappedBank?.questions?.firstOrNull { it.id == questionId }
+                                    ?: Question(
+                                        id = questionId.ifBlank { "record_question_${k}_$d" },
+                                        type = parseQuestionType(detail.optString("type")),
+                                        question = detail.optString("question"),
+                                        answer = detail.optJSONArray("answer")?.let { arr ->
+                                            buildList { for (i in 0 until arr.length()) add(arr.optString(i)) }
+                                        }.orEmpty(),
+                                        category = detail.optString("category")
+                                    )
+                                val chosen = detail.optJSONArray("chosen")?.let { arr ->
+                                    buildList { for (i in 0 until arr.length()) add(arr.optString(i)) }
+                                }.orEmpty()
+                                val referenceAnswer = detail.optJSONArray("answer")?.let { arr ->
+                                    buildList { for (i in 0 until arr.length()) add(arr.optString(i)) }
+                                }.orEmpty()
                                 add(
-                                StudyQuestionResult(
-                                        question = placeholderQuestion,
-                                        userAnswer = (0 until (detail.optJSONArray("chosen")?.length() ?: 0)).map { detail.optJSONArray("chosen")?.optString(it) ?: "" },
+                                    StudyQuestionResult(
+                                        question = resolvedQuestion,
+                                        userAnswer = chosen,
                                         correct = detail.optBoolean("correct"),
-                                        answerText = (detail.optJSONArray("answer") ?: JSONArray()).let { arr -> (0 until arr.length()).map { arr.optString(it) }.joinToString(" / ") },
+                                        answerText = referenceAnswer.joinToString(" / "),
+                                        earnedScore = if (detail.has("score") && !detail.isNull("score")) detail.optDouble("score") else null,
+                                        maxScore = if (detail.has("fullScore") && !detail.isNull("fullScore")) detail.optDouble("fullScore") else null,
                                         autoScored = true
                                     )
                                 )
@@ -2318,15 +2372,17 @@ object QuizRepository {
                         StudyRecord(
                             id = rec.optString("id", "rec_${System.currentTimeMillis()}_$k"),
                             bankId = mappedBankId.ifBlank { null },
-                            bankName = rec.optString("bankName"),
+                            bankName = rec.optString("bankName").ifBlank { mappedBank?.name.orEmpty() },
                             source = "web",
                             title = rec.optString("mode", "练习"),
-                            total = rec.optInt("total"),
-                            correct = rec.optInt("correct"),
-                            timestamp = rec.optLong("timestamp", System.currentTimeMillis()),
+                            total = rec.optInt("total", questionResults.size),
+                            correct = rec.optInt("correct", questionResults.count { it.correct }),
+                            timestamp = parseBackupTimeMillis(rec.opt("timestamp"), null)
+                                ?: parseBackupTimeMillis(rec.opt("date"), System.currentTimeMillis())
+                                ?: System.currentTimeMillis(),
                             durationSeconds = rec.optInt("duration").takeIf { it > 0 },
                             autoSubmitted = rec.optBoolean("autoSubmitted"),
-                            startedAt = if (rec.has("startedAt") && !rec.isNull("startedAt")) rec.optLong("startedAt") else null,
+                            startedAt = if (rec.has("startedAt") && !rec.isNull("startedAt")) parseBackupTimeMillis(rec.opt("startedAt")) else null,
                             earnedScore = if (rec.has("score") && !rec.isNull("score")) rec.optDouble("score") else null,
                             totalScore = if (rec.has("totalScore") && !rec.isNull("totalScore")) rec.optDouble("totalScore") else null,
                             questionResults = questionResults
@@ -2346,50 +2402,58 @@ object QuizRepository {
             }
         }
 
-        val importedWrongBook = root.optJSONArray("wrongBook")?.let { array ->
+        val importedWrongBook = canonicalStateRoot.optJSONArray("wrongBook")?.let { array ->
             runCatching { parseWrongBookJson(array.toString()) }.getOrDefault(emptyList())
         }.orEmpty()
         val mappedWrongBook = importedWrongBook.mapNotNull { entry ->
             val mappedBankId = idMap[entry.bankId] ?: return@mapNotNull null
-            val mappedBankName = addedBanks.firstOrNull { it.id == mappedBankId }?.name ?: entry.bankName
+            val mappedBank = addedBanks.firstOrNull { it.id == mappedBankId }
+            val mappedBankName = mappedBank?.name ?: entry.bankName
+            val mappedQuestion = mappedBank?.questions?.firstOrNull { it.id == entry.question.id }
+                ?: normalizeImportedQuestionAssets(entry.question, zipAssets, assetDir)
             sanitizeWrongEntry(
                 entry.copy(
                     bankId = mappedBankId,
                     bankName = mappedBankName,
-                    question = normalizeImportedQuestionAssets(entry.question, zipAssets, assetDir)
+                    question = mappedQuestion
                 )
             )
         }
         wrongBook.addAll(0, mappedWrongBook)
 
-        val importedFavorites = root.optJSONArray("favoriteQuestions")?.let { array ->
+        val importedFavorites = canonicalStateRoot.optJSONArray("favoriteQuestions")?.let { array ->
             runCatching { parseFavoriteQuestionsJson(array.toString()) }.getOrDefault(emptyList())
         }.orEmpty()
         val mappedFavorites = importedFavorites.mapNotNull { entry ->
             val mappedBankId = idMap[entry.bankId] ?: return@mapNotNull null
-            val mappedBankName = addedBanks.firstOrNull { it.id == mappedBankId }?.name ?: entry.bankName
+            val mappedBank = addedBanks.firstOrNull { it.id == mappedBankId }
+            val mappedBankName = mappedBank?.name ?: entry.bankName
+            val mappedQuestion = mappedBank?.questions?.firstOrNull { it.id == entry.question.id }
+                ?: normalizeImportedQuestionAssets(entry.question, zipAssets, assetDir)
             sanitizeFavoriteEntry(
                 entry.copy(
                     bankId = mappedBankId,
                     bankName = mappedBankName,
-                    question = normalizeImportedQuestionAssets(entry.question, zipAssets, assetDir)
+                    question = mappedQuestion
                 )
             )
         }
         favoriteQuestions.addAll(0, mappedFavorites)
 
-        val importedRecords = root.optJSONArray("studyRecords")?.let { array ->
+        val importedRecords = canonicalStateRoot.optJSONArray("studyRecords")?.let { array ->
             runCatching { parseStudyRecordsJson(array.toString()) }.getOrDefault(emptyList())
         }.orEmpty()
         val mappedRecords = importedRecords.map { record ->
             val mappedBankId = record.bankId?.let { idMap[it] }
-            val mappedBankName = mappedBankId?.let { id -> addedBanks.firstOrNull { it.id == id }?.name }
-                ?: record.bankName
+            val mappedBank = mappedBankId?.let { id -> addedBanks.firstOrNull { it.id == id } }
+            val mappedBankName = mappedBank?.name ?: record.bankName
             record.copy(
                 bankId = mappedBankId ?: record.bankId,
                 bankName = mappedBankName,
                 questionResults = record.questionResults.map { result ->
-                    result.copy(question = normalizeImportedQuestionAssets(result.question, zipAssets, assetDir))
+                    val mappedQuestion = mappedBank?.questions?.firstOrNull { it.id == result.question.id }
+                        ?: normalizeImportedQuestionAssets(result.question, zipAssets, assetDir)
+                    result.copy(question = mappedQuestion)
                 }
             )
         }
@@ -3518,7 +3582,11 @@ object QuizRepository {
                 add(
                     StudyRecord(
                         id = item.optString("id"),
-                        bankId = item.optString("bankId").ifBlank { null },
+                        bankId = if (item.has("bankId") && !item.isNull("bankId")) {
+                            item.optString("bankId").ifBlank { null }
+                        } else {
+                            null
+                        },
                         bankName = item.optString("bankName"),
                         source = item.optString("source"),
                         title = item.optString("title"),

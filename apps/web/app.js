@@ -12,7 +12,7 @@ let importCache=[];let tableImportResultV49=null;let importWarnings=[];let impor
 const $=s=>document.querySelector(s);const $$=s=>[...document.querySelectorAll(s)];
 init();
 function ensureDefaultBank(){if(!state.banks.length&&!state.settings?.suppressDefaultBank) state.banks.push(defaultBank()); if(!state.activeBankId) state.activeBankId=state.banks[0]?.id||'';}
-function blankState(){return {schemaVersion:CURRENT_SCHEMA_VERSION,banks:[],activeBankId:'',wrongBook:{},records:[],settings:{}}}
+function blankState(){return {schemaVersion:CURRENT_SCHEMA_VERSION,banks:[],activeBankId:'',wrongBook:{},favorites:{},records:[],settings:{},crossPlatformMeta:{favoriteQuestions:{}}}}
 function warnDev(message,error){try{console.warn('[Shiroha Quiz]',message,error||'')}catch(_){}}
 function loadState(){
   const keys=[KEY,...LEGACY_KEYS];
@@ -419,7 +419,7 @@ function normalizeQuestion(q,i=0){
       analysisText='答案：'+ansLabel+'。'+analysisText.replace(/^[。．.、，,：:；;\s]+/,'');
     }
   }
-  const normalizedQuestion={id:q.id||makeId('q',i),type,number:q.number||i+1,volume:q.volume||'',group:q.group||'',question:questionText,options,answer,analysis:analysisText,category:q.category||q.topic||q.group||'',images:structuredImages,score:Number(q.score||0)||undefined,normalized:normalizeText(questionText)};
+  const normalizedQuestion={id:q.id||makeId('q',i),type,number:q.number||i+1,volume:q.volume||'',group:q.group||'',question:questionText,options,answer,analysis:analysisText,category:q.category||q.topic||q.group||'',images:structuredImages,score:Number(q.score||0)||undefined,subject:q.subject||'',grade:q.grade||'',difficulty:q.difficulty||'',knowledgePoints:Array.isArray(q.knowledgePoints)?q.knowledgePoints:[],tags:Array.isArray(q.tags)?q.tags:[],source:q.source||'',sourceFileId:q.sourceFileId||'',version:Number(q.version||1)||1,reviewStatus:q.reviewStatus||'approved',aiConfidence:q.aiConfidence==null?null:Number(q.aiConfidence),warnings:Array.isArray(q.warnings)?q.warnings:[],normalized:normalizeText(questionText)};
   const sourceMeta=getSourceMetaV58910(q);
   if(sourceMeta)attachSourceMetaV58910(normalizedQuestion,sourceMeta);
   return normalizedQuestion;
@@ -5597,10 +5597,11 @@ function sameAnswerForQuestion(q,chosen,answer){
   return same(chosen,answer);
 }
 function markOptions(root,q,chosen){if(isTextType(q.type))return;$$(root+' .option').forEach(o=>{const k=o.dataset.key;if(q.answer.includes(k))o.classList.add('correct');else if(chosen.includes(k))o.classList.add('wrong')})}
-function getWrongEntries(bid=activeBank().id){const v=state.wrongBook[bid]||[];if(!Array.isArray(v))return[];return v.map(x=>typeof x==='string'?{id:x,wrongCount:1,rightCount:0,lastWrongAt:'',lastCorrectAt:'',status:'未掌握'}:{id:x.id,wrongCount:Number(x.wrongCount||0),rightCount:Number(x.rightCount||0),lastWrongAt:x.lastWrongAt||'',lastCorrectAt:x.lastCorrectAt||'',status:x.status||'未掌握'}).filter(x=>x.id)}
+function getWrongEntries(bid=activeBank().id){const v=state.wrongBook[bid]||[];if(!Array.isArray(v))return[];return v.map(x=>typeof x==='string'?{id:x,wrongCount:1,rightCount:0,reviewRightCount:0,streakCorrectCount:0,lastWrongAt:'',lastCorrectAt:'',lastReviewedAt:'',nextReviewAt:'',reviewLevel:0,lastAnswer:[],source:'web',timestamp:0,status:'未掌握'}:{...x,id:x.id,wrongCount:Number(x.wrongCount||0),rightCount:Number(x.rightCount||0),reviewRightCount:Number(x.reviewRightCount||0),streakCorrectCount:Number(x.streakCorrectCount||0),lastWrongAt:x.lastWrongAt||'',lastCorrectAt:x.lastCorrectAt||'',lastReviewedAt:x.lastReviewedAt||'',nextReviewAt:x.nextReviewAt||'',reviewLevel:Number(x.reviewLevel||0),lastAnswer:Array.isArray(x.lastAnswer)?x.lastAnswer:[],source:x.source||'web',timestamp:Number(x.timestamp||0),status:x.status||'未掌握'}).filter(x=>x.id)}
 function setWrongEntries(entries,bid=activeBank().id){state.wrongBook[bid]=entries}
-function addWrong(id){const bid=activeBank().id;const arr=getWrongEntries(bid);let e=arr.find(x=>x.id===id);if(!e){e={id,wrongCount:0,rightCount:0,lastWrongAt:'',lastCorrectAt:'',status:'未掌握'};arr.push(e)}e.wrongCount++;e.rightCount=0;e.lastWrongAt=now();e.status='未掌握';setWrongEntries(arr,bid)}
-function markRight(id){const bid=activeBank().id;const arr=getWrongEntries(bid);let e=arr.find(x=>x.id===id);if(!e)return;e.rightCount++;e.lastCorrectAt=now();e.status=e.rightCount>=2?'已掌握':'复习中';setWrongEntries(arr,bid)}
+function nextWrongReviewIsoV24(level,base=Date.now()){const days=[1,1,3,7,14,30,60][Math.max(0,Math.min(6,Number(level||0)))]||1;return new Date(base+days*86400000).toISOString()}
+function addWrong(id){const bid=activeBank().id;const arr=getWrongEntries(bid);let e=arr.find(x=>x.id===id);if(!e){e={id,wrongCount:0,rightCount:0,reviewRightCount:0,streakCorrectCount:0,lastWrongAt:'',lastCorrectAt:'',lastReviewedAt:'',nextReviewAt:'',reviewLevel:0,lastAnswer:[],source:'web',timestamp:0,status:'未掌握'};arr.push(e)}const ts=Date.now();e.wrongCount++;e.rightCount=0;e.reviewRightCount=0;e.streakCorrectCount=0;e.reviewLevel=0;e.lastWrongAt=new Date(ts).toISOString();e.lastReviewedAt=e.lastWrongAt;e.nextReviewAt=nextWrongReviewIsoV24(0,ts);e.timestamp=ts;e.source='web';e.status='未掌握';setWrongEntries(arr,bid)}
+function markRight(id){const bid=activeBank().id;const arr=getWrongEntries(bid);let e=arr.find(x=>x.id===id);if(!e)return;const ts=Date.now();e.rightCount++;e.reviewRightCount=Number(e.reviewRightCount||0)+1;e.streakCorrectCount=Number(e.streakCorrectCount||0)+1;const mastered=e.streakCorrectCount>=2;e.reviewLevel=mastered?Math.max(2,Number(e.reviewLevel||0)+1):Math.max(1,Number(e.reviewLevel||0));e.lastCorrectAt=new Date(ts).toISOString();e.lastReviewedAt=e.lastCorrectAt;e.nextReviewAt=nextWrongReviewIsoV24(e.reviewLevel,ts);e.timestamp=ts;e.status=mastered?'已掌握':'复习中';setWrongEntries(arr,bid)}
 function removeWrong(id){const bid=activeBank().id;setWrongEntries(getWrongEntries(bid).filter(x=>x.id!==id),bid)}
 function makeAnswerDetail(q,chosen,ok,score,totalScore){return {questionId:q.id,question:short(q.question,120),type:q.type,category:q.category||'',chosen:[...chosen],answer:[...q.answer],correct:!!ok,score:ok?score:0,fullScore:score,time:now()}}
 function finishPractice(exited=false){
@@ -5649,7 +5650,7 @@ function setupEnhancedDataToolsV23(){
 function ensureBackupFileInputV23(){
   if($('#backup-json-file-v23'))return;
   const input=document.createElement('input');
-  input.type='file';input.id='backup-json-file-v23';input.accept='.json,application/json';input.style.display='none';
+  input.type='file';input.id='backup-json-file-v23';input.accept='.json,.zip,application/json,application/zip';input.style.display='none';
   input.onchange=importBackupJsonFileV23;
   document.body.appendChild(input);
 }
@@ -5692,9 +5693,9 @@ function ensureSettingsBackupPanelV23(){
     </div>
     <div class="actions wrap-v23">
       <button class="ghost" id="settings-copy-all-backup-v23" type="button">复制全部数据备份文本</button>
-      <button class="ghost" id="settings-import-backup-v23" type="button">导入备份 JSON</button>
+      <button class="ghost" id="settings-import-backup-v23" type="button">导入备份 JSON/ZIP</button>
     </div>
-    <p class="muted">提示：顶部“导出全部数据备份”会生成完整备份包；覆盖恢复会替换本机数据；合并导入遇到同名题库会自动追加“_导入”。下方文本框会显示最近一次导出或导入的 JSON。</p>
+    <p class="muted">提示：顶部“导出全部数据备份”会生成完整备份包；覆盖恢复会替换本机数据；合并导入遇到同名题库会自动追加“_导入”。下方文本框会显示最近一次导出或导入的备份 JSON。</p>
   </div>`);
   $('#settings-copy-all-backup-v23').onclick=copyAllBackupJsonV23;
   $('#settings-import-backup-v23').onclick=()=>{backupImportModeV23=$('#settings-backup-mode-v23')?.value||'overwrite';$('#backup-json-file-v23').click()};
@@ -5732,7 +5733,7 @@ function deleteBanksV32(ids){
   if(!confirm(`确定删除 ${targets.length} 个题库：${preview}？删除后不会影响已导出的备份，但本机数据不可恢复。`))return;
   const delIds=new Set(targets.map(b=>b.id));
   state.banks=state.banks.filter(b=>!delIds.has(b.id));
-  delIds.forEach(id=>{delete state.wrongBook[id];if(state.favorites)delete state.favorites[id];exportBankSelectedV23.delete(id)});
+  delIds.forEach(id=>{delete state.wrongBook[id];if(state.favorites)delete state.favorites[id];if(state.crossPlatformMeta&&state.crossPlatformMeta.favoriteQuestions)delete state.crossPlatformMeta.favoriteQuestions[id];exportBankSelectedV23.delete(id)});
   if(!state.banks.length){state.activeBankId='';state.settings={...(state.settings||{}),suppressDefaultBank:true};}
   else if(!state.banks.some(b=>b.id===state.activeBankId))state.activeBankId=state.banks[0]?.id||'';
   saveSilent();renderAll();toast(`已删除 ${targets.length} 个题库。`,'ok');
@@ -5809,6 +5810,8 @@ function upgradeState(){
   state.wrongBook=state.wrongBook&&typeof state.wrongBook==='object'?state.wrongBook:{};
   state.settings=state.settings&&typeof state.settings==='object'?state.settings:{};
   state.favorites=state.favorites&&typeof state.favorites==='object'?state.favorites:{};
+  state.crossPlatformMeta=state.crossPlatformMeta&&typeof state.crossPlatformMeta==='object'?state.crossPlatformMeta:{favoriteQuestions:{}};
+  state.crossPlatformMeta.favoriteQuestions=state.crossPlatformMeta.favoriteQuestions&&typeof state.crossPlatformMeta.favoriteQuestions==='object'?state.crossPlatformMeta.favoriteQuestions:{};
   for(const b of state.banks){
     b.groupName=pickBankGroupNameFromJsonV58(b);
     b.questions=(b.questions||[]).map((q,i)=>({...normalizeQuestion(q,i),id:q.id||makeId('q',i),number:q.number||i+1}));
@@ -5817,7 +5820,7 @@ function upgradeState(){
   for(const bid of Object.keys(state.wrongBook)){
     const val=state.wrongBook[bid];
     if(Array.isArray(val)){
-      state.wrongBook[bid]=val.map(x=>typeof x==='string'?{id:x,wrongCount:1,rightCount:0,lastWrongAt:'',lastCorrectAt:'',status:'未掌握'}:{id:x.id,wrongCount:Number(x.wrongCount||1),rightCount:Number(x.rightCount||0),lastWrongAt:x.lastWrongAt||'',lastCorrectAt:x.lastCorrectAt||'',status:x.status||'未掌握'}).filter(x=>x.id);
+      state.wrongBook[bid]=val.map(x=>typeof x==='string'?{id:x,wrongCount:1,rightCount:0,reviewRightCount:0,streakCorrectCount:0,lastWrongAt:'',lastCorrectAt:'',lastReviewedAt:'',nextReviewAt:'',reviewLevel:0,lastAnswer:[],source:'web',timestamp:0,status:'未掌握'}:{...x,id:x.id,wrongCount:Number(x.wrongCount||1),rightCount:Number(x.rightCount||0),reviewRightCount:Number(x.reviewRightCount||0),streakCorrectCount:Number(x.streakCorrectCount||0),lastWrongAt:x.lastWrongAt||'',lastCorrectAt:x.lastCorrectAt||'',lastReviewedAt:x.lastReviewedAt||'',nextReviewAt:x.nextReviewAt||'',reviewLevel:Number(x.reviewLevel||0),lastAnswer:Array.isArray(x.lastAnswer)?x.lastAnswer:[],source:x.source||'web',timestamp:Number(x.timestamp||0),status:x.status||'未掌握'}).filter(x=>x.id);
     }else state.wrongBook[bid]=[];
   }
   for(const bid of Object.keys(state.favorites)){
@@ -6041,7 +6044,7 @@ function recordPracticeAnswer(q,chosen,ok){
   practice.details.push(makeAnswerDetail(q,chosen,ok,scoreOf(q),scoreOf(q)));
 }
 function getFavoriteIdsV27(bid=activeBank().id){state.favorites=state.favorites||{};return Array.isArray(state.favorites[bid])?state.favorites[bid]:[];}
-function setFavoriteIdsV27(ids,bid=activeBank().id){state.favorites=state.favorites||{};state.favorites[bid]=[...new Set((ids||[]).filter(Boolean))];}
+function setFavoriteIdsV27(ids,bid=activeBank().id){state.favorites=state.favorites||{};state.crossPlatformMeta=state.crossPlatformMeta&&typeof state.crossPlatformMeta==='object'?state.crossPlatformMeta:{favoriteQuestions:{}};state.crossPlatformMeta.favoriteQuestions=state.crossPlatformMeta.favoriteQuestions&&typeof state.crossPlatformMeta.favoriteQuestions==='object'?state.crossPlatformMeta.favoriteQuestions:{};const next=[...new Set((ids||[]).filter(Boolean))];state.favorites[bid]=next;const meta=state.crossPlatformMeta.favoriteQuestions[bid]&&typeof state.crossPlatformMeta.favoriteQuestions[bid]==='object'?state.crossPlatformMeta.favoriteQuestions[bid]:{};Object.keys(meta).forEach(qid=>{if(!next.includes(qid))delete meta[qid]});next.forEach(qid=>{if(!meta[qid])meta[qid]={favoritedAt:Date.now()}});state.crossPlatformMeta.favoriteQuestions[bid]=meta;}
 function isFavoriteV27(id,bid=activeBank().id){return getFavoriteIdsV27(bid).includes(id);}
 function toggleFavoriteV27(id,bid=activeBank().id){const ids=getFavoriteIdsV27(bid);if(ids.includes(id))setFavoriteIdsV27(ids.filter(x=>x!==id),bid);else setFavoriteIdsV27([...ids,id],bid);saveSilent();toast(ids.includes(id)?'已取消收藏。':'已收藏题目。','ok');}
 function ensureFavoritePanelV27(){return;}
@@ -6073,69 +6076,143 @@ function buildBackupPayloadV23(banks,exportType='selected_banks',includeAll=fals
   const wrongBook={};Object.keys(state.wrongBook||{}).forEach(id=>{if(includeAll||bankIds.has(id))wrongBook[id]=state.wrongBook[id]});
   const favorites={};Object.keys(state.favorites||{}).forEach(id=>{if(includeAll||bankIds.has(id))favorites[id]=state.favorites[id]});
   const exportedBanks=(banks||[]).map(serializeBankForCrossExportV53);
-  // v2.4：完整导出时同时输出 Native 互通字段
-  const nativeInterop=includeAll?buildNativeInteropStateV24(exportedBanks):{};
-  return {app:'Shiroha Quiz',appVersion:APP_VERSION,schemaVersion:CURRENT_SCHEMA_VERSION,richContentVersion:RICH_CONTENT_VERSION_V57,richContentCapabilities:buildRichContentCapabilitiesV57(exportedBanks),exportType,exportedAt:now(),banks:exportedBanks,wrongBook,favorites,records:includeAll?(state.records||[]):[],settings:includeAll?(state.settings||{}):{},activeBankId:includeAll?state.activeBankId:((banks&&banks[0]&&banks[0].id)||''),...nativeInterop};
+  const webRecords=includeAll?(state.records||[]):[];
+  const webSettings=includeAll?(state.settings||{}):{};
+  const crossPlatform=includeAll?buildNativeInteropStateV24(exportedBanks):null;
+  const payload={
+    app:'Shiroha Quiz',
+    kind:includeAll?'shiroha_quiz_web_full_backup':'shiroha_quiz_selected_banks',
+    appVersion:APP_VERSION,
+    schemaVersion:CURRENT_SCHEMA_VERSION,
+    crossPlatformSchemaVersion:1,
+    richContentVersion:RICH_CONTENT_VERSION_V57,
+    richContentCapabilities:buildRichContentCapabilitiesV57(exportedBanks),
+    exportType,
+    exportedAt:now(),
+    banks:exportedBanks,
+    // 保留 Web 原始状态，确保 Web 自身覆盖恢复不降级。
+    wrongBook,
+    favorites,
+    records:webRecords,
+    settings:webSettings,
+    webState:includeAll?{wrongBook,favorites,records:webRecords,settings:webSettings,crossPlatformMeta:state.crossPlatformMeta||{}}:undefined,
+    activeBankId:includeAll?state.activeBankId:((banks&&banks[0]&&banks[0].id)||'')
+  };
+  if(crossPlatform)payload.crossPlatform=crossPlatform;
+  return payload;
 }
 /* SHIROHA_WEB_V24_CROSS_PLATFORM_NATIVE_INTEROP */
+function parseCrossPlatformTimeV24(value,fallback=Date.now()){
+  if(value==null||value==='')return fallback;
+  if(typeof value==='number'&&Number.isFinite(value))return value;
+  const numeric=Number(value);if(Number.isFinite(numeric)&&numeric>0)return numeric;
+  const parsed=Date.parse(String(value));return Number.isFinite(parsed)?parsed:fallback;
+}
 function buildNativeInteropStateV24(exportedBanks){
   const bankMap=new Map((exportedBanks||[]).map(b=>[b.id,b]));
-  const nativeWrongBook=[];Object.entries(state.wrongBook||{}).forEach(([bid,entries])=>{if(!bankMap.has(bid))return;const bank=bankMap.get(bid);const questionMap=new Map(bank.questions.map(q=>[q.id,q]));(entries||[]).forEach(e=>{const q=questionMap.get(e.id);if(!q)return;nativeWrongBook.push({bankId:bid,bankName:bank.name||bank.title||'',question:q,lastAnswer:[],source:'web-export',timestamp:Date.now(),wrongCount:e.wrongCount||1,rightCount:e.rightCount||0,lastWrongAt:e.lastWrongAt||new Date().toISOString(),lastCorrectAt:e.lastCorrectAt||null,status:e.status||'未掌握',lastReviewedAt:null,nextReviewAt:null,reviewLevel:0})})});
-  const nativeFavorites=[];Object.entries(state.favorites||{}).forEach(([bid,ids])=>{if(!bankMap.has(bid))return;const bank=bankMap.get(bid);const questionMap=new Map(bank.questions.map(q=>[q.id,q]));(ids||[]).forEach(qid=>{const q=questionMap.get(qid);if(!q)return;nativeFavorites.push({question:q,bankId:bid})})});
-  const nativeRecords=(state.records||[]).map(r=>{const bid=r.bankId||'';const bank=bid?bankMap.get(bid):null;return {id:r.id||makeId('rec'),bankId:bid,bankName:r.bankName||bank?.name||'',source:'web',title:r.name||r.mode||'',total:r.total||0,correct:r.correct||0,timestamp:new Date(r.date||Date.now()).getTime(),durationSeconds:r.duration||0,autoSubmitted:r.autoSubmitted||false,startedAt:r.startedAt?new Date(r.startedAt).getTime():null,earnedScore:r.score||0,totalScore:r.totalScore||0,questionResults:(r.details||[]).map(d=>({question:null,userAnswer:d.chosen||[],correct:!!d.correct,answerText:(d.answer||[]).join(' / '),autoScored:true}))}});
-  return {kind:'shiroha_quiz',schemaVersion:2,wrongBook:nativeWrongBook,favoriteQuestions:nativeFavorites,studyRecords:nativeRecords};
+  const nativeWrongBook=[];
+  Object.entries(state.wrongBook||{}).forEach(([bid,entries])=>{
+    const bank=bankMap.get(bid);if(!bank)return;
+    const questionMap=new Map((bank.questions||[]).map(q=>[q.id,q]));
+    (entries||[]).forEach(e=>{
+      const q=questionMap.get(e.id)||(e.nativeQuestion&&typeof e.nativeQuestion==='object'?e.nativeQuestion:null);if(!q)return;
+      const lastWrongAt=parseCrossPlatformTimeV24(e.lastWrongAt,Date.now());
+      nativeWrongBook.push({
+        bankId:bid,bankName:bank.name||bank.title||'',question:q,lastAnswer:Array.isArray(e.lastAnswer)?e.lastAnswer:[],source:e.source||'web-export',timestamp:Number(e.timestamp||lastWrongAt),
+        wrongCount:Number(e.wrongCount||1),rightCount:Number(e.rightCount||0),reviewRightCount:Number(e.reviewRightCount||0),streakCorrectCount:Number(e.streakCorrectCount||0),
+        lastWrongAt,lastCorrectAt:e.lastCorrectAt?parseCrossPlatformTimeV24(e.lastCorrectAt,null):null,status:e.status||'未掌握',
+        lastReviewedAt:e.lastReviewedAt?parseCrossPlatformTimeV24(e.lastReviewedAt,null):null,nextReviewAt:e.nextReviewAt?parseCrossPlatformTimeV24(e.nextReviewAt,null):null,reviewLevel:Number(e.reviewLevel||0)
+      });
+    });
+  });
+  const nativeFavorites=[];
+  Object.entries(state.favorites||{}).forEach(([bid,ids])=>{
+    const bank=bankMap.get(bid);if(!bank)return;
+    const questionMap=new Map((bank.questions||[]).map(q=>[q.id,q]));
+    const favoriteMeta=state.crossPlatformMeta&&state.crossPlatformMeta.favoriteQuestions&&state.crossPlatformMeta.favoriteQuestions[bid]||{};(ids||[]).forEach(qid=>{const q=questionMap.get(qid)||(favoriteMeta[qid]&&favoriteMeta[qid].question);if(q)nativeFavorites.push({question:q,bankId:bid,bankName:bank.name||bank.title||'',favoritedAt:Number(favoriteMeta[qid]&&favoriteMeta[qid].favoritedAt||Date.now())})});
+  });
+  const nativeRecords=(state.records||[]).map(r=>{
+    const bid=r.bankId||'';const bank=bid?bankMap.get(bid):null;
+    const questionMap=new Map((bank&&bank.questions||[]).map(q=>[q.id,q]));
+    const questionResults=(r.details||[]).map((d,idx)=>{
+      const qid=d.questionId||'';
+      const found=questionMap.get(qid);
+      const fallbackQuestion=(d.nativeQuestion&&typeof d.nativeQuestion==='object'?d.nativeQuestion:null)||found||{
+        id:qid||makeId('record_q',idx),number:String(idx+1),type:toNativeQuestionType(d.type||'short'),question:d.question||'',options:[],answer:Array.isArray(d.answer)?d.answer:[],analysis:'',category:d.category||'',images:[]
+      };
+      return {question:fallbackQuestion,userAnswer:Array.isArray(d.chosen)?d.chosen:[],correct:!!d.correct,answerText:d.nativeAnswerText!=null?String(d.nativeAnswerText):(Array.isArray(d.answer)?d.answer.join(' / '):String(d.answer||'')),earnedScore:d.nativeEarnedScore!==undefined?d.nativeEarnedScore:(d.score??null),maxScore:d.nativeMaxScore!==undefined?d.nativeMaxScore:(d.fullScore??null),autoScored:d.autoScored!==false};
+    });
+    return {id:r.id||makeId('rec'),bankId:bid||null,bankName:r.bankName||bank?.name||'',source:r.nativeSource||'web',title:r.nativeTitle||r.name||r.mode||'练习',total:Number(r.total||questionResults.length||0),correct:Number(r.correct||0),timestamp:parseCrossPlatformTimeV24(r.date||r.timestamp,Date.now()),durationSeconds:Number(r.duration||0)||null,autoSubmitted:!!r.autoSubmitted,startedAt:r.startedAt?parseCrossPlatformTimeV24(r.startedAt,null):null,earnedScore:r.nativeEarnedScore!==undefined?r.nativeEarnedScore:(r.score??null),totalScore:r.nativeTotalScore!==undefined?r.nativeTotalScore:(r.totalScore??null),questionResults};
+  });
+  return {schemaVersion:1,wrongBook:nativeWrongBook,favoriteQuestions:nativeFavorites,studyRecords:nativeRecords};
 }
 function normalizeBackupPayloadV23(data,fileName){
   if(!data||typeof data!=='object')throw new Error('JSON 根节点不是对象');
-  let banks=[];let wrongBook={};let favorites={};let records=[];let settings={};let activeBankId='';
-  // v2.4：识别 Native 互通格式
-  if(data.kind==='shiroha_quiz'){
-    banks=Array.isArray(data.banks)?data.banks:[];
-    wrongBook=convertNativeWrongBookToWebV24(data.wrongBook||[]);
-    favorites=convertNativeFavoritesToWebV24(data.favoriteQuestions||[]);
-    records=convertNativeRecordsToWebV24(data.studyRecords||[]);
-    settings=data.webSettings||{};activeBankId=data.activeBankId||'';
-  }else if(Array.isArray(data.banks)){banks=data.banks;wrongBook=data.wrongBook||{};favorites=data.favorites||{};records=Array.isArray(data.records)?data.records:[];settings=data.settings||{};activeBankId=data.activeBankId||''}
-  else if(Array.isArray(data.questions)){banks=[{id:data.id||makeId('bank'),name:data.name||cleanFileNameV23(fileName).replace(/\.json$/i,'')||'导入题库',groupName:pickBankGroupNameFromJsonV58(data),createdAt:data.createdAt||now(),updatedAt:now(),questions:data.questions}]}
-  else if(Array.isArray(data)){banks=[{id:makeId('bank'),name:cleanFileNameV23(fileName).replace(/\.json$/i,'')||'导入题库',createdAt:now(),updatedAt:now(),questions:data}]}
-  else throw new Error('不是 Shiroha Quiz 备份，也不是单题库 JSON');
+  let banks=[];let wrongBook={};let favorites={};let records=[];let settings={};let activeBankId='';let hasWebSettings=false;let crossPlatformMeta={favoriteQuestions:{}};
+  const webState=data.webState&&typeof data.webState==='object'?data.webState:null;
+  const cross=data.crossPlatform&&typeof data.crossPlatform==='object'?data.crossPlatform:null;
+  const nativeLike=String(data.kind||'').startsWith('shiroha_quiz')||!!cross;
+  if(Array.isArray(data.banks)){
+    banks=data.banks;
+    const legacyWrong=(webState&&webState.wrongBook)||(!Array.isArray(data.wrongBook)&&data.wrongBook)||null;
+    const legacyFavorites=(webState&&webState.favorites)||(!Array.isArray(data.favorites)&&data.favorites)||null;
+    const legacyRecords=(webState&&webState.records)||(!cross&&Array.isArray(data.records)?data.records:null);
+    if(legacyWrong&&typeof legacyWrong==='object')wrongBook=legacyWrong;
+    else wrongBook=convertNativeWrongBookToWebV24((cross&&cross.wrongBook)||data.wrongBook||[]);
+    const nativeFavoriteEntries=(cross&&cross.favoriteQuestions)||data.favoriteQuestions||[];
+    if(legacyFavorites&&typeof legacyFavorites==='object')favorites=legacyFavorites;
+    else favorites=convertNativeFavoritesToWebV24(nativeFavoriteEntries);
+    crossPlatformMeta=(webState&&webState.crossPlatformMeta&&typeof webState.crossPlatformMeta==='object')?webState.crossPlatformMeta:{favoriteQuestions:extractNativeFavoriteMetaV24(nativeFavoriteEntries)};
+    if(Array.isArray(legacyRecords))records=legacyRecords;
+    else records=convertNativeRecordsToWebV24((cross&&cross.studyRecords)||data.studyRecords||[]);
+    hasWebSettings=!!((webState&&Object.prototype.hasOwnProperty.call(webState,'settings'))||Object.prototype.hasOwnProperty.call(data,'webSettings')||Object.prototype.hasOwnProperty.call(data,'settings'));
+    settings=(webState&&webState.settings)||data.webSettings||data.settings||{};
+    activeBankId=data.activeBankId||'';
+  }else if(Array.isArray(data.questions)){
+    banks=[{id:data.id||makeId('bank'),name:data.name||cleanFileNameV23(fileName).replace(/\.(?:json|zip)$/i,'')||'导入题库',groupName:pickBankGroupNameFromJsonV58(data),createdAt:data.createdAt||now(),updatedAt:now(),questions:data.questions}];
+  }else if(Array.isArray(data)){
+    banks=[{id:makeId('bank'),name:cleanFileNameV23(fileName).replace(/\.(?:json|zip)$/i,'')||'导入题库',createdAt:now(),updatedAt:now(),questions:data}];
+  }else throw new Error(nativeLike?'备份中没有 banks[] 题库数据':'不是 Shiroha Quiz 备份，也不是单题库 JSON');
   banks=banks.map((b,i)=>({id:String(b.id||makeId('bank_import',i)),name:String(b.name||b.title||('导入题库_'+(i+1))),groupName:pickBankGroupNameFromJsonV58(b),createdAt:b.createdAt||now(),updatedAt:now(),questions:(b.questions||[]).map((q,j)=>normalizeQuestion(q,j)).filter(q=>q.question)})).filter(b=>b.questions.length||b.name);
-  return {banks,wrongBook,favorites,records,settings,activeBankId};
+  if(!banks.some(b=>b.id===activeBankId))activeBankId=banks[0]?.id||'';
+  return {banks,wrongBook,favorites,records,settings,hasWebSettings,crossPlatformMeta,activeBankId};
 }
 /* SHIROHA_WEB_V24_NATIVE_IMPORT_CONVERTERS */
+function crossTimeToIsoV24(value){const ms=parseCrossPlatformTimeV24(value,NaN);return Number.isFinite(ms)?new Date(ms).toISOString():''}
 function convertNativeWrongBookToWebV24(nativeEntries){
-  const web={};(nativeEntries||[]).forEach(e=>{const bid=e.bankId||'';if(!bid||!e.question)return;const qid=e.question.id||e.question.questionId||'';if(!qid)return;if(!web[bid])web[bid]=[];web[bid].push({id:qid,wrongCount:e.wrongCount||1,rightCount:e.rightCount||0,lastWrongAt:e.lastWrongAt||'',lastCorrectAt:e.lastCorrectAt||null,status:e.status||'未掌握'})});
+  const web={};(Array.isArray(nativeEntries)?nativeEntries:[]).forEach(e=>{const bid=e&&e.bankId||'';const q=e&&e.question;const qid=q&&(q.id||q.questionId)||e&&e.questionId||'';if(!bid||!qid)return;if(!web[bid])web[bid]=[];web[bid].push({id:qid,wrongCount:Number(e.wrongCount||1),rightCount:Number(e.rightCount||0),reviewRightCount:Number(e.reviewRightCount||0),streakCorrectCount:Number(e.streakCorrectCount||0),lastWrongAt:crossTimeToIsoV24(e.lastWrongAt||e.timestamp),lastCorrectAt:e.lastCorrectAt?crossTimeToIsoV24(e.lastCorrectAt):'',lastReviewedAt:e.lastReviewedAt?crossTimeToIsoV24(e.lastReviewedAt):'',nextReviewAt:e.nextReviewAt?crossTimeToIsoV24(e.nextReviewAt):'',reviewLevel:Number(e.reviewLevel||0),lastAnswer:Array.isArray(e.lastAnswer)?e.lastAnswer:[],source:e.source||'native',timestamp:Number(e.timestamp||e.lastWrongAt||0),nativeQuestion:q,status:e.status||'未掌握'})});
   return web;
 }
 function convertNativeFavoritesToWebV24(nativeEntries){
-  const web={};(nativeEntries||[]).forEach(e=>{const bid=e.bankId||'';if(!bid||!e.question)return;const qid=e.question.id||e.question.questionId||'';if(!qid)return;if(!web[bid])web[bid]=[];web[bid].push(qid)});
-  return web;
+  const web={};(Array.isArray(nativeEntries)?nativeEntries:[]).forEach(e=>{const bid=e&&e.bankId||'';const q=e&&e.question;const qid=q&&(q.id||q.questionId)||e&&e.questionId||'';if(!bid||!qid)return;if(!web[bid])web[bid]=[];if(!web[bid].includes(qid))web[bid].push(qid)});return web;
 }
+function extractNativeFavoriteMetaV24(nativeEntries){const meta={};(Array.isArray(nativeEntries)?nativeEntries:[]).forEach(e=>{const bid=e&&e.bankId||'';const q=e&&e.question;const qid=q&&(q.id||q.questionId)||e&&e.questionId||'';if(!bid||!qid)return;if(!meta[bid])meta[bid]={};meta[bid][qid]={favoritedAt:Number(e.favoritedAt||Date.now()),question:q}});return meta}
+function splitNativeAnswerTextV24(text){const s=String(text||'').trim();if(!s)return[];return s.split(/\s*(?:\/|；|;)\s*/).map(x=>x.trim()).filter(Boolean)}
 function convertNativeRecordsToWebV24(nativeEntries){
-  return (nativeEntries||[]).map(r=>({id:r.id||makeId('rec'),mode:r.title||r.source||'练习',bankId:r.bankId||'',bankName:r.bankName||'',date:r.timestamp?new Date(r.timestamp).toISOString():now(),total:r.total||0,correct:r.correct||0,wrong:(r.total||0)-(r.correct||0),answered:r.total||0,accuracy:r.total>0?Math.round(r.correct/r.total*100):0,duration:r.durationSeconds||0,score:r.earnedScore||0,totalScore:r.totalScore||0,passScore:null,passed:null,details:(r.questionResults||[]).map(qr=>({questionId:'',question:'',type:'',category:'',chosen:qr.userAnswer||[],answer:qr.answerText?[qr.answerText]:[],correct:!!qr.correct,score:qr.correct?1:0,fullScore:1,time:''})),autoSubmitted:r.autoSubmitted||false}));
+  return (Array.isArray(nativeEntries)?nativeEntries:[]).map(r=>{
+    const details=(r.questionResults||[]).map((qr,idx)=>{const q=qr.question||{};const earned=qr.earnedScore;const max=qr.maxScore;return {questionId:q.id||'',question:q.question||'',type:normalizeWebQuestionType(q.type)||String(q.type||'').toLowerCase(),category:q.category||'',chosen:Array.isArray(qr.userAnswer)?qr.userAnswer:[],answer:Array.isArray(q.answer)&&q.answer.length?q.answer:splitNativeAnswerTextV24(qr.answerText),correct:!!qr.correct,score:earned==null?(qr.correct?1:0):Number(earned),fullScore:max==null?1:Number(max),nativeEarnedScore:earned??null,nativeMaxScore:max??null,nativeAnswerText:qr.answerText??'',autoScored:qr.autoScored!==false,time:''}});
+    const total=Number(r.total||details.length||0),correct=Number(r.correct||details.filter(d=>d.correct).length||0);
+    details.forEach((d,i)=>{const qr=(r.questionResults||[])[i];if(qr&&qr.question)d.nativeQuestion=qr.question});return {id:r.id||makeId('rec'),mode:r.title||r.source||'练习',nativeTitle:r.title||'',nativeSource:r.source||'',bankId:r.bankId||'',bankName:r.bankName||'',date:crossTimeToIsoV24(r.timestamp)||now(),total,correct,wrong:Math.max(0,total-correct),answered:total,accuracy:total>0?Math.round(correct/total*100):0,duration:Number(r.durationSeconds||0),score:r.earnedScore==null?0:Number(r.earnedScore),totalScore:r.totalScore==null?0:Number(r.totalScore),nativeEarnedScore:r.earnedScore??null,nativeTotalScore:r.totalScore??null,passScore:null,passed:null,details,autoSubmitted:!!r.autoSubmitted,startedAt:r.startedAt?crossTimeToIsoV24(r.startedAt):''};
+  });
 }
 function mergeBackupBanksV23(normalized){
   const existingKeys=new Set(state.banks.map(b=>bankNameKeyV58(b.groupName,b.name)));
   const existingIds=new Set(state.banks.map(b=>b.id));
+  const idMap={};const importedFavoriteMeta=normalized.crossPlatformMeta&&normalized.crossPlatformMeta.favoriteQuestions||{};state.crossPlatformMeta=state.crossPlatformMeta&&typeof state.crossPlatformMeta==='object'?state.crossPlatformMeta:{favoriteQuestions:{}};state.crossPlatformMeta.favoriteQuestions=state.crossPlatformMeta.favoriteQuestions&&typeof state.crossPlatformMeta.favoriteQuestions==='object'?state.crossPlatformMeta.favoriteQuestions:{};
   normalized.banks.forEach((bank,idx)=>{
     const oldId=bank.id;
     const groupName=normalizeBankGroupNameV58(bank.groupName);
     let name=bank.name||('导入题库_'+(idx+1));
-    if(existingKeys.has(bankNameKeyV58(groupName,name))){
-      let n=1;
-      const base=name+'_导入';
-      while(existingKeys.has(bankNameKeyV58(groupName,base+n)))n++;
-      name=base+n;
-    }
-    let id=bank.id;
-    if(existingIds.has(id))id=makeId('bank_import',idx);
-    existingIds.add(id);
-    existingKeys.add(bankNameKeyV58(groupName,name));
+    if(existingKeys.has(bankNameKeyV58(groupName,name))){let n=1;const base=name+'_导入';while(existingKeys.has(bankNameKeyV58(groupName,base+n)))n++;name=base+n;}
+    let id=bank.id;if(existingIds.has(id))id=makeId('bank_import',idx);
+    idMap[oldId]=id;existingIds.add(id);existingKeys.add(bankNameKeyV58(groupName,name));
     const next={...bank,id,name,groupName,createdAt:bank.createdAt||now(),updatedAt:now(),questions:(bank.questions||[]).map((q,i)=>({...normalizeQuestion(q,i),id:q.id||makeId('q',idx,i),number:q.number||i+1}))};
     state.banks.push(next);
     if(normalized.wrongBook&&normalized.wrongBook[oldId])state.wrongBook[id]=normalized.wrongBook[oldId];
-    if(normalized.favorites&&normalized.favorites[oldId])state.favorites[id]=normalized.favorites[oldId];
+    if(normalized.favorites&&normalized.favorites[oldId])state.favorites[id]=normalized.favorites[oldId];if(importedFavoriteMeta[oldId])state.crossPlatformMeta.favoriteQuestions[id]=importedFavoriteMeta[oldId];
   });
+  const importedRecords=(normalized.records||[]).map(r=>({...r,bankId:r.bankId&&idMap[r.bankId]?idMap[r.bankId]:r.bankId}));
+  if(importedRecords.length)state.records=[...(state.records||[]),...importedRecords];
   state.activeBankId=state.banks[state.banks.length-normalized.banks.length]?.id||state.activeBankId;
 }
 function download(name,text){
@@ -6146,25 +6223,47 @@ function download(name,text){
   const a=document.createElement('a');const url=URL.createObjectURL(new Blob([text],{type:'application/json;charset=utf-8'}));a.href=url;a.download=name;document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
+function backupMimeFromPathV24(path){const ext=String(path||'').split('.').pop().toLowerCase();return ({png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp',bmp:'image/bmp'})[ext]||'application/octet-stream'}
+function bytesToDataUriV24(bytes,mime){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||''));r.onerror=()=>reject(new Error('备份图片读取失败'));r.readAsDataURL(new Blob([bytes],{type:mime}))})}
+async function readBackupFileV24(file){
+  const buf=await file.arrayBuffer();const bytes=new Uint8Array(buf);const isZip=/\.zip$/i.test(file.name)||bytes.length>=4&&(bytes[0]===0x50&&bytes[1]===0x4b);
+  if(!isZip)return {text:new TextDecoder('utf-8').decode(bytes),assets:{}};
+  const entries=parseZipEntries(buf);const jsonEntry=entries.find(e=>e.name==='backup.json')||entries.find(e=>/\.json$/i.test(e.name));if(!jsonEntry)throw new Error('ZIP 备份中没有 backup.json');
+  const text=await unzipEntry(buf,jsonEntry);const assets={};
+  for(const entry of entries.filter(e=>e.name.startsWith('assets/'))){const data=await unzipEntryBytes(buf,entry);assets[entry.name]=await bytesToDataUriV24(data,backupMimeFromPathV24(entry.name));}
+  return {text,assets};
+}
+function applyBackupAssetsV24(value,assets,seen=new Set()){
+  if(!value||typeof value!=='object'||seen.has(value))return;seen.add(value);
+  if(Array.isArray(value)){value.forEach(x=>applyBackupAssetsV24(x,assets,seen));return;}
+  const path=String(value.localPath||'').replace(/\\/g,'/').replace(/^\//,'');
+  if(path&&assets[path]){value.localPath=assets[path];value.dataUrl=assets[path];}
+  Object.values(value).forEach(x=>applyBackupAssetsV24(x,assets,seen));
+}
+function countUnresolvedBackupImagesV24(value,seen=new Set()){if(!value||typeof value!=='object'||seen.has(value))return 0;seen.add(value);if(Array.isArray(value))return value.reduce((n,x)=>n+countUnresolvedBackupImagesV24(x,seen),0);let count=0;if(Array.isArray(value.images))count+=value.images.filter(img=>{const src=String(img&& (img.dataUrl||img.localPath)||'');return src&&!/^data:image\//i.test(src)}).length;for(const [k,x] of Object.entries(value)){if(k!=='images')count+=countUnresolvedBackupImagesV24(x,seen)}return count}
+
 function importBackupJsonFileV23(e){
   const file=e.target.files&&e.target.files[0];if(!file)return;
   (async()=>{
     try{
-      const text=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||''));r.onerror=()=>reject(new Error('文件读取失败'));r.readAsText(file,'UTF-8')});
+      const loaded=await readBackupFileV24(file);const text=loaded.text;
       setBackupPreviewV23(text);
-      const data=JSON.parse(text);const normalized=normalizeBackupPayloadV23(data,file.name);
+      const data=JSON.parse(text);applyBackupAssetsV24(data,loaded.assets||{});const unresolvedImageCount=countUnresolvedBackupImagesV24(data);const normalized=normalizeBackupPayloadV23(data,file.name);
       if(!normalized.banks.length){toast('没有在 JSON 中找到可导入的题库。','warn');return}
       const mode=backupImportModeV23||'merge';
+      const previousStateJson=JSON.stringify(state);
       if(mode==='overwrite'){
         if(!confirm(`覆盖恢复会清空当前本地数据，并导入 ${normalized.banks.length} 个题库。确定继续？`))return;
-        state.schemaVersion=CURRENT_SCHEMA_VERSION;state.banks=normalized.banks.map(b=>({...b,groupName:normalizeBankGroupNameV58(b.groupName)}));state.activeBankId=normalized.activeBankId||state.banks[0]?.id||'';state.wrongBook=normalized.wrongBook||{};state.favorites=normalized.favorites||{};state.records=Array.isArray(normalized.records)?normalized.records:[];state.settings=normalized.settings&&typeof normalized.settings==='object'?normalized.settings:{};
+        const previousWebSettings=state.settings&&typeof state.settings==='object'?state.settings:{};state.schemaVersion=CURRENT_SCHEMA_VERSION;state.banks=normalized.banks.map(b=>({...b,groupName:normalizeBankGroupNameV58(b.groupName)}));state.activeBankId=normalized.activeBankId||state.banks[0]?.id||'';state.wrongBook=normalized.wrongBook||{};state.favorites=normalized.favorites||{};state.records=Array.isArray(normalized.records)?normalized.records:[];state.settings=normalized.hasWebSettings&&normalized.settings&&typeof normalized.settings==='object'?normalized.settings:previousWebSettings;state.crossPlatformMeta=normalized.crossPlatformMeta&&typeof normalized.crossPlatformMeta==='object'?normalized.crossPlatformMeta:{favoriteQuestions:{}};
       }else{
         mergeBackupBanksV23(normalized);
       }
-      upgradeState();ensureDefaultBank();saveSilent();renderAll();setupEnhancedDataToolsV23();
+      upgradeState();ensureDefaultBank();
+      try{saveSilent()}catch(storageError){const previous=JSON.parse(previousStateJson);Object.keys(state).forEach(k=>delete state[k]);Object.assign(state,previous);upgradeState();throw new Error('导入内容超过浏览器本地存储容量，已恢复导入前数据。可减少图片后重试，或只导入部分题库。')}
+      renderAll();setupEnhancedDataToolsV23();
       const total=normalized.banks.reduce((n,b)=>n+(b.questions||[]).length,0);
-      toast(`导入完成：${normalized.banks.length} 个题库，${total} 道题。`,'ok');
-    }catch(err){toast('导入备份 JSON 失败：'+err.message,'danger')}
+      toast(`导入完成：${normalized.banks.length} 个题库，${total} 道题。${unresolvedImageCount?` 另有 ${unresolvedImageCount} 张图片未包含在备份文件中，Web 端无法显示。`:''}`,unresolvedImageCount?'warn':'ok');
+    }catch(err){toast('导入备份失败：'+err.message,'danger')}
     finally{e.target.value=''}
   })();
 }
