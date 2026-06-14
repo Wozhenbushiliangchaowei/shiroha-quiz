@@ -1958,7 +1958,7 @@ function locateQuestionBlocksV58910(sourceText,blocks){
 }
 function sourceMetaForBlockV58910(block,blockIndex){
   const nums=block?.sourceQuestionNumbers||[];
-  return {sourceStart:block?.sourceStart??-1,sourceEnd:block?.sourceEnd??-1,sourceBlockStart:blockIndex,sourceBlockEnd:blockIndex,blockIndex,originalNumber:nums.length?nums[0]:null,sourceQuestionNumbers:[...nums],explicitNumber:nums.length>0,group:block?.group||'',volume:block?.volume||''};
+  return {sourceStart:block?.sourceStart??-1,sourceEnd:block?.sourceEnd??-1,sourceBlockStart:blockIndex,sourceBlockEnd:blockIndex,blockIndex,originalNumber:nums.length?nums[0]:null,sourceQuestionNumbers:[...nums],explicitNumber:nums.length>0,group:block?.group||'',volume:block?.volume||'',chapter:block?.chapter||''};
 }
 function parseTextQuestionsBaseDetailed(text){
   const protectedPack=protectDocxImageMarkdownForParser(text);
@@ -2167,7 +2167,16 @@ function questionLockedEquivalentV58910(original,candidate,profile){
   return true;
 }
 function blockTextV58910(blocks,start,end){
-  return (blocks||[]).slice(start,end+1).map(b=>[(b.volume||''),(b.group||''),(b.lines||[]).join('\n')].filter(Boolean).join('\n')).join('\n');
+  let lastVolume='',lastChapter='',lastGroup='';const parts=[];
+  (blocks||[]).slice(start,end+1).forEach(b=>{
+    const head=[];
+    if((b.volume||'')!==lastVolume&&b.volume)head.push(b.volume);
+    if((b.chapter||'')!==lastChapter&&b.chapter)head.push(b.chapter);
+    if((b.group||'')!==lastGroup&&b.group)head.push(b.group);
+    const body=(b.lines||[]).join('\n');parts.push([...head,body].filter(Boolean).join('\n'));
+    lastVolume=b.volume||lastVolume;lastChapter=b.chapter||lastChapter;lastGroup=b.group||lastGroup;
+  });
+  return parts.join('\n');
 }
 function candidateExplicitNumbersV58910(qs){return (qs||[]).map(q=>Number(q.number||0)).filter(n=>n>0&&n<10000)}
 function renumberLocalGapCandidateV58910(qs,originalSegment,expectedSet,profile){
@@ -2284,7 +2293,7 @@ function repairMissingAndStuckQuestionsBySourceV58910(original,standardQuestions
       if(!best||rank>best.rank)best={...candidate,questions:qs,rank,newlyAdded};
     }
     if(!best)continue;
-    const spanMeta={sourceStart:blocks[win.blockStart]?.sourceStart??-1,sourceEnd:blocks[win.blockEnd]?.sourceEnd??-1,sourceBlockStart:win.blockStart,sourceBlockEnd:win.blockEnd,blockIndex:win.blockStart,sourceQuestionNumbers:[...expectedSet],group:blocks[win.blockStart]?.group||'',volume:blocks[win.blockStart]?.volume||''};
+    const spanMeta={sourceStart:blocks[win.blockStart]?.sourceStart??-1,sourceEnd:blocks[win.blockEnd]?.sourceEnd??-1,sourceBlockStart:win.blockStart,sourceBlockEnd:win.blockEnd,blockIndex:win.blockStart,sourceQuestionNumbers:[...expectedSet],group:blocks[win.blockStart]?.group||'',volume:blocks[win.blockStart]?.volume||'',chapter:blocks[win.blockStart]?.chapter||''};
     best.questions.forEach(q=>attachSourceMetaV58910(q,{...spanMeta,originalNumber:Number(q.number)||null,explicitNumber:expectedSet.has(Number(q.number))}));
     replacements.push({start:insertAt,end:baseEnd,questions:best.questions});
     occupiedBlocks.push([win.blockStart,win.blockEnd]);repaired+=best.newlyAdded.length;
@@ -2293,6 +2302,63 @@ function repairMissingAndStuckQuestionsBySourceV58910(original,standardQuestions
   if(!replacements.length)return {questions:base,repaired,segments,sourceAligned:alignment.matched};
   const out=[...base];
   replacements.sort((a,b)=>b.start-a.start).forEach(rep=>out.splice(rep.start,Math.max(0,rep.end-rep.start+1),...rep.questions));
+  return {questions:out.map((q,i)=>normalizeQuestion(q,i)),repaired,segments,sourceAligned:alignment.matched};
+}
+
+function repairOverSplitQuestionsBySourceV58911(original,standardQuestions,profile,detailedInput){
+  const detailed=detailedInput||parseTextQuestionsBaseDetailed(original);
+  const base=(standardQuestions||[]).map((q,i)=>normalizeQuestion(q,i));
+  const alignment=attachDetailedSourceMetaToQuestionsV58910(base,detailed);
+  if(base.length<3||alignment.ratio<0.6)return {questions:base,repaired:0,segments:[],sourceAligned:alignment.matched};
+  const blocks=detailed.blocks||[],windows=[];
+  const anchors=[];
+  base.forEach((q,i)=>{const m=getSourceMetaV58910(q);if(m?.explicitNumber&&Number(m.originalNumber||0)>0)anchors.push({index:i,number:Number(m.originalNumber),meta:m})});
+  for(let a=0;a<anchors.length-1;a++){
+    const left=anchors[a],right=anchors[a+1];
+    if(!sameSourceSectionV58911(left.meta,right.meta)||right.number<=left.number)continue;
+    const parsedCount=right.index-left.index,expectedCount=right.number-left.number,extra=parsedCount-expectedCount;
+    if(extra<=0||extra>3||expectedCount<1||expectedCount>8)continue;
+    const blockStart=Number(left.meta.sourceBlockStart),blockEnd=Number(right.meta.sourceBlockStart)-1;
+    if(!Number.isFinite(blockStart)||!Number.isFinite(blockEnd)||blockEnd<blockStart||blockEnd>=blocks.length)continue;
+    windows.push({start:left.index,end:right.index-1,blockStart,blockEnd,leftNumber:left.number,rightNumber:right.number,extra});
+  }
+  if(!windows.length)return {questions:base,repaired:0,segments:[],sourceAligned:alignment.matched};
+  const replacements=[],occupied=[];const segments=[];let repaired=0;
+  for(const win of windows){
+    if(occupied.some(([a,b])=>!(win.end<a||win.start>b)))continue;
+    const originalSegment=base.slice(win.start,win.end+1),targetNumbers=[];
+    for(let n=win.leftNumber;n<win.rightNumber;n++)targetNumbers.push(n);
+    const rawText=blockTextV58910(blocks,win.blockStart,win.blockEnd);
+    const candidates=parseLocalRepairCandidates(rawText);
+    try{
+      const forced=parseTextQuestionsBase(forceSplitSourceQuestionAnchorsV58910(rawText)).map((q,i)=>normalizeQuestion(q,i)).filter(q=>q.question);
+      if(forced.length)candidates.push({name:'局部题号边界解析',questions:forced});
+    }catch(e){warnDev('过度拆题局部边界解析失败。',e)}
+    let best=null;
+    for(const candidate of candidates){
+      let qs=(candidate.questions||[]).map((q,i)=>normalizeQuestion(q,i)).filter(q=>q.question);
+      if(qs.length!==targetNumbers.length)continue;
+      qs=qs.map((q,i)=>normalizeQuestion({...q,number:targetNumbers[i]},i));
+      if(!questionLockedEquivalentV58910(originalSegment[0],qs[0],profile))continue;
+      const beforeRisk=countLocalRepairWarnings(originalSegment,profile),afterRisk=countLocalRepairWarnings(qs,profile);
+      if(afterRisk>beforeRisk)continue;
+      const beforeContent=localVisibleContentV599(originalSegment),afterContent=localVisibleContentV599(qs);
+      if(beforeContent.length&&afterContent.length/beforeContent.length<0.78)continue;
+      const beforeAnswered=originalSegment.filter(q=>(q.answer||[]).length).length,afterAnswered=qs.filter(q=>(q.answer||[]).length).length;
+      if(beforeAnswered>0&&afterAnswered===0)continue;
+      const rank=scoreLocalSegment(qs,profile)-afterRisk*120+Math.min(180,afterContent.length)-Math.abs(afterContent.length-beforeContent.length)*0.1;
+      if(!best||rank>best.rank)best={name:candidate.name,questions:qs,rank};
+    }
+    if(!best)continue;
+    const firstBlock=blocks[win.blockStart],lastBlock=blocks[win.blockEnd];
+    const spanMeta={sourceStart:firstBlock?.sourceStart??-1,sourceEnd:lastBlock?.sourceEnd??-1,sourceBlockStart:win.blockStart,sourceBlockEnd:win.blockEnd,blockIndex:win.blockStart,sourceQuestionNumbers:[...targetNumbers],group:firstBlock?.group||'',volume:firstBlock?.volume||'',chapter:firstBlock?.chapter||''};
+    best.questions.forEach((q,i)=>attachSourceMetaV58910(q,{...spanMeta,originalNumber:targetNumbers[i],explicitNumber:i===0||((blocks||[]).slice(win.blockStart,win.blockEnd+1).some(b=>(b.sourceQuestionNumbers||[]).includes(targetNumbers[i])))}));
+    replacements.push({start:win.start,end:win.end,questions:best.questions});occupied.push([win.start,win.end]);repaired+=win.extra;
+    segments.push(`题号${win.leftNumber}-${win.rightNumber}之间：${best.name}合并${win.extra}道过度拆分结果`);
+  }
+  if(!replacements.length)return {questions:base,repaired:0,segments:[],sourceAligned:alignment.matched};
+  const out=[...base];
+  replacements.sort((a,b)=>b.start-a.start).forEach(rep=>out.splice(rep.start,rep.end-rep.start+1,...rep.questions));
   return {questions:out.map((q,i)=>normalizeQuestion(q,i)),repaired,segments,sourceAligned:alignment.matched};
 }
 
@@ -2438,15 +2504,15 @@ function extractObjectiveAnswerFromText(raw,allowLeading=true){
 }
 function parseAnswerAnalysisEntries(text){
   const lines=normalizeImportText(text).split('\n').map(x=>x.trim()).filter(Boolean);
-  const entries=[];let currentGroup='';let inAnswerSection=false;let currentNumber='';let currentEntry=null;
+  const entries=[];let currentVolume='';let currentChapter='';let currentGroup='';let inAnswerSection=false;let currentNumber='';let currentEntry=null;
   const ansToken='[A-Ga-g]{1,7}|对|错|正确|错误|√|✓|✔|×|X|x|T|F|True|False';
-  const push=(number,ans,analysis='',raw='',group=currentGroup)=>{
+  const push=(number,ans,analysis='',raw='',group=currentGroup,volume=currentVolume,chapter=currentChapter)=>{
     const a=Array.isArray(ans)?ans:splitAnswer(ans);
     if(!number||!a.length)return;
     // 答案解析区只接收客观题/判断题答案；纯数字“2、3、5”这类是解析文字，不是答案。
     const valid=a.filter(x=>/^[A-G]$/.test(String(x||'').toUpperCase())||isJudgeSymbolAnswer(x));
     if(!valid.length)return;
-    const entry={number:String(number),group:group||'',answer:valid.map(x=>String(x).toUpperCase()),analysis:String(analysis||'').trim(),raw:String(raw||'')};
+    const entry={number:String(number),volume:volume||'',chapter:chapter||'',group:group||'',answer:valid.map(x=>String(x).toUpperCase()),analysis:String(analysis||'').trim(),raw:String(raw||'')};
     entries.push(entry);currentEntry=entry;currentNumber=String(number);
   };
   const appendAnalysis=(txt)=>{if(currentEntry&&txt){const t=String(txt||'').trim();if(t)currentEntry.analysis=(currentEntry.analysis?currentEntry.analysis+'\n':'')+t;}};
@@ -2475,11 +2541,13 @@ function parseAnswerAnalysisEntries(text){
   };
   for(let i=0;i<lines.length;i++){
     let line=lines[i];const next=lines.slice(i+1,i+8);
-    if(isAnswerSectionHeading(line,next)){inAnswerSection=true;currentEntry=null;currentNumber='';if(/解析|答案及解析|答案与解析|试题解析|真题答案/.test(line))currentGroup='';continue;}
-    if(inAnswerSection&&isGenericQuestionSectionHeading(line,next)){inAnswerSection=false;currentEntry=null;currentNumber='';currentGroup=line;continue;}
+    if(isAnswerSectionHeading(line,next)){inAnswerSection=true;currentEntry=null;currentNumber='';if(/解析|答案及解析|答案与解析|试题解析|真题答案/.test(line)){currentVolume='';currentChapter='';currentGroup='';}continue;}
+    if(isVolumeHeading(line)){currentVolume=getVolumeLabel(line);currentChapter='';currentGroup='';currentEntry=null;currentNumber='';continue;}
+    if(isChapterHeadingV58911(line)){currentChapter=line;currentGroup='';currentEntry=null;currentNumber='';continue;}
+    if(inAnswerSection&&isGenericQuestionSectionHeading(line,next)){currentEntry=null;currentNumber='';currentGroup=line;continue;}
     if(isGenericQuestionSectionHeading(line,next)){currentGroup=line;currentNumber='';currentEntry=null;continue;}
     const heading=getHeadingType(line);
-    if(heading){currentGroup=heading;continue;}
+    if(heading){currentGroup=heading;currentEntry=null;currentNumber='';continue;}
 
     // 优先处理紧凑答案表：1【答案】D 2【答案】D 3【答案】B ...
     if((inAnswerSection || /\d{1,4}\s*(?:题)?\s*【\s*(?:答案|正确答案|参考答案|标准答案)\s*】/.test(line)) && (line.match(/【\s*(?:答案|正确答案|参考答案|标准答案)\s*】/g)||[]).length>=2){
@@ -2546,7 +2614,7 @@ function parseAnswerAnalysisEntries(text){
   const out=[];
   entries.forEach(e=>{
     const last=out[out.length-1];
-    if(last&&last.number===e.number&&(last.answer||[]).join('')===(e.answer||[]).join('')){
+    if(last&&last.number===e.number&&normalizeSectionLabelV58911(last.volume)===normalizeSectionLabelV58911(e.volume)&&normalizeSectionLabelV58911(last.chapter)===normalizeSectionLabelV58911(e.chapter)&&normalizeSectionLabelV58911(last.group)===normalizeSectionLabelV58911(e.group)&&(last.answer||[]).join('')===(e.answer||[]).join('')){
       if(e.analysis&&!last.analysis.includes(e.analysis))last.analysis+=(last.analysis?'\n':'')+e.analysis;
     }else out.push(e);
   });
@@ -3082,21 +3150,77 @@ function answerCompatibleWithQuestionV599(q,answer,options=q?.options||[]){
   }
   return true;
 }
+function answerEntryMatchRankV58911(q,entry,questionIndex,entryIndex,numberMultiplicity){
+  if(String(q?.number)!==String(entry?.number)||!answerCompatibleWithQuestionV599(q,entry?.answer||[],q?.options||[]))return -Infinity;
+  const qp=sectionPartsForQuestionV58911(q),ep=sectionPartsForAnswerEntryV58911(entry);
+  let rank=0,explicitMatches=0;
+  for(const key of ['volume','chapter']){
+    if(qp[key]&&ep[key]){
+      if(qp[key]!==ep[key])return -Infinity;
+      rank+=key==='chapter'?180:140;explicitMatches++;
+    }
+  }
+  if(qp.group&&ep.group){
+    if(qp.group===ep.group){rank+=90;explicitMatches++;}
+    else if(qp.groupType&&ep.groupType&&qp.groupType===ep.groupType){rank+=55;explicitMatches++;}
+    else return -Infinity;
+  }else if(qp.groupType&&ep.groupType){
+    if(qp.groupType!==ep.groupType)return -Infinity;
+    rank+=40;explicitMatches++;
+  }
+  const qHasSection=!!(qp.volume||qp.chapter||qp.group||qp.groupType);
+  const eHasSection=!!(ep.volume||ep.chapter||ep.group||ep.groupType);
+  if(numberMultiplicity>1&&explicitMatches===0&&(qHasSection||eHasSection))return -Infinity;
+  if(numberMultiplicity>1&&explicitMatches===0)return -Infinity;
+  if(numberMultiplicity<=1)rank+=Math.max(0,20-Math.abs(questionIndex-entryIndex));
+  return rank;
+}
 function mergeAnswerEntriesOntoLockedMainlineV599(questions,entries){
   const base=(questions||[]).map((q,i)=>normalizeQuestion(q,i));
-  if(!base.length||!(entries||[]).length)return {questions:base,changed:0,segments:[]};
-  const merged=mergeAnswerAnalysisEntries(base,entries).questions||[];
-  let changed=0;const segments=[];
+  const answerEntries=(entries||[]).map(e=>({...e,answer:[...(e.answer||[])]}));
+  if(!base.length||!answerEntries.length)return {questions:base,changed:0,segments:[]};
+  const entryCountByNumber=new Map(),questionCountByNumber=new Map();
+  answerEntries.forEach(e=>entryCountByNumber.set(String(e.number),(entryCountByNumber.get(String(e.number))||0)+1));
+  base.forEach(q=>questionCountByNumber.set(String(q.number),(questionCountByNumber.get(String(q.number))||0)+1));
+  const used=new Set();let changed=0;const segments=[];
   const out=base.map((q,i)=>{
-    const mq=merged[i];
-    if(!mq||String(q.number)!==String(mq.number)||!answerNeedsLocalRepairV599(q))return q;
+    if(!answerNeedsLocalRepairV599(q))return q;
+    const number=String(q.number),multiplicity=Math.max(entryCountByNumber.get(number)||0,questionCountByNumber.get(number)||0);
+    const qp=sectionPartsForQuestionV58911(q);
+    const sameNumberEntries=answerEntries.filter((entry,ei)=>!used.has(ei)&&String(entry.number)===number);
+    const sameNumberQuestions=base.filter(item=>String(item.number)===number);
+    const strongSections=new Set(sameNumberEntries.map(entry=>{const ep=sectionPartsForAnswerEntryV58911(entry);return [ep.volume,ep.chapter].filter(Boolean).join('|')}).filter(Boolean));
+    if(strongSections.size>1&&!qp.volume&&!qp.chapter)return q;
+    if((questionCountByNumber.get(number)||0)>1){
+      if(qp.volume||qp.chapter){
+        const hasStrongMatch=sameNumberEntries.some(entry=>{const ep=sectionPartsForAnswerEntryV58911(entry);return (!qp.volume||ep.volume===qp.volume)&&(!qp.chapter||ep.chapter===qp.chapter)&&(ep.volume||ep.chapter)});
+        if(!hasStrongMatch)return q;
+      }else{
+        const groupKeys=new Set(sameNumberQuestions.map(item=>{const part=sectionPartsForQuestionV58911(item);return part.group||part.groupType}).filter(Boolean));
+        if(groupKeys.size<=1)return q;
+      }
+    }
+    const ranked=[];
+    answerEntries.forEach((entry,ei)=>{
+      if(used.has(ei))return;
+      const rank=answerEntryMatchRankV58911(q,entry,i,ei,multiplicity);
+      if(Number.isFinite(rank))ranked.push({entry,ei,rank});
+    });
+    ranked.sort((a,b)=>b.rank-a.rank||a.ei-b.ei);
+    if(!ranked.length)return q;
+    if(ranked.length>1&&ranked[0].rank===ranked[1].rank)return q;
+    const hit=ranked[0];
     let options=[...(q.options||[])];
-    if(options.length<2&&(mq.options||[]).length>=2)options=(mq.options||[]).map(o=>({...o}));
-    const answer=normalizeAnswer(mq.answer||[],options,q.type);
+    const imageOptions=extractInlineImageTokensV589((hit.entry.analysis||'')+' '+(hit.entry.raw||''));
+    if(options.length<2&&imageOptions.length>=2)options=imageTokensToChoiceOptionsV589(imageOptions);
+    const answer=normalizeAnswer(hit.entry.answer||[],options,q.type);
     if(!answerCompatibleWithQuestionV599(q,answer,options))return q;
-    changed++;
-    segments.push(`第${i+1}题：仅回填答案${options.length>(q.options||[]).length?'与缺失选项':''}`);
-    return normalizeQuestion({...q,options,answer,analysis:mq.analysis||q.analysis||''},i);
+    used.add(hit.ei);changed++;
+    const section=[hit.entry.volume,hit.entry.chapter,hit.entry.group].filter(Boolean).join(' / ');
+    segments.push(`第${i+1}题：按${section?'分区 + ':''}原始题号回填答案${options.length>(q.options||[]).length?'与缺失选项':''}`);
+    let analysis=hit.entry.analysis||q.analysis||'';
+    if(imageOptions.length>=2)analysis=stripAnswerPrefix(stripInlineImageTokensV589(analysis)).replace(/^[A-G]{1,7}[。．.、，,；;：:\s]*$/i,'').trim();
+    return normalizeQuestion({...q,options,answer,analysis:formatAnswerAnalysisForReview(answer,analysis)},i);
   });
   return {questions:out,changed,segments};
 }
@@ -3270,6 +3394,19 @@ function parseTextQuestions(text,strategy='auto'){
           else if(ev.typeOk&&ev.hardCount<=before.hardCount&&ev.localRisk<=before.localRisk&&!profile.expectedByHeadings&&sourceRepair.repaired>0)mainlineBest={...candidate,eval:ev};
         }
       }catch(e){warnDev('标准主线原文区间局部修复失败。',e)}
+    }
+
+    // v58.9.11：真实题号锚点之间若解析结果数量过多，只在该原文区间合并过度拆分题目。
+    if((mainlineBest.questions||[]).length&&standardSourceDetailedV58910){
+      try{
+        const overSplitRepair=repairOverSplitQuestionsBySourceV58911(original,mainlineBest.questions,profile,standardSourceDetailedV58910);
+        if(overSplitRepair.repaired>0){
+          const candidate={name:'标准主线 + 过度拆题局部合并',questions:overSplitRepair.questions,score:scoreParsedQuestions(overSplitRepair.questions,profile)+Math.min(120,overSplitRepair.repaired*20),warnings:importWarningsForStrategy(overSplitRepair.questions,profile),segments:overSplitRepair.segments};
+          const ev=evaluateCandidate(candidate),before=mainlineBest.eval||evaluateCandidate(mainlineBest);
+          candidates.push(candidate);
+          if(ev.typeOk&&ev.hardCount<=before.hardCount&&ev.localRisk<=before.localRisk)mainlineBest={...candidate,eval:ev};
+        }
+      }catch(e){warnDev('标准主线过度拆题局部合并失败。',e)}
     }
 
     // 答案解析区只对标准主线中缺失或越界的答案做局部映射，不再重建整份题目结构。
@@ -3848,16 +3985,49 @@ function splitSemicolonOptionsFromLine(line,answer=[]){
   return opts.some(o=>o.text)?opts:null;
 }
 
+/* SHIROHA_WEB_V58_9_11_OVERSPLIT_SECTION_AWARE_ANSWER */
+function isChapterHeadingV58911(line){
+  const raw=String(line||'').trim();
+  if(!raw||raw.length>60||isOptionLine(raw)||isAnswerLine(raw)||isAnalysisLine(raw)||hasStrongQuestionNo(raw))return false;
+  const compact=raw.replace(/[\s　]+/g,'');
+  return /^(?:第[一二三四五六七八九十百千万0-9]+(?:章|节|单元|篇)|章节[一二三四五六七八九十百千万0-9]+)[^。？！?!；;]{0,36}$/.test(compact);
+}
+function normalizeSectionLabelV58911(value){
+  return String(value||'').replace(/[\s　]+/g,'').replace(/[【】\[\]()（）:：、，,。．.；;_-]+/g,'').toLowerCase();
+}
+function sectionPartsForQuestionV58911(q){
+  const meta=getSourceMetaV58910(q)||{};
+  return {
+    volume:normalizeSectionLabelV58911(meta.volume||q?.volume||''),
+    chapter:normalizeSectionLabelV58911(meta.chapter||q?.chapter||''),
+    group:normalizeSectionLabelV58911(meta.group||q?.group||q?.category||''),
+    groupType:sectionKeyFromText(meta.group||q?.group||q?.category||'')
+  };
+}
+function sectionPartsForAnswerEntryV58911(entry){
+  return {
+    volume:normalizeSectionLabelV58911(entry?.volume||''),
+    chapter:normalizeSectionLabelV58911(entry?.chapter||''),
+    group:normalizeSectionLabelV58911(entry?.group||''),
+    groupType:sectionKeyFromText(entry?.group||'')
+  };
+}
+function sameSourceSectionV58911(a,b){
+  return normalizeSectionLabelV58911(a?.volume||'')===normalizeSectionLabelV58911(b?.volume||'')
+    && normalizeSectionLabelV58911(a?.chapter||'')===normalizeSectionLabelV58911(b?.chapter||'')
+    && normalizeSectionLabelV58911(a?.group||'')===normalizeSectionLabelV58911(b?.group||'');
+}
 function splitQuestionBlocks(text,inheritedGroup=''){
   let lines=text.split('\n').map(x=>x.trim()).filter(Boolean);
-  const blocks=[];let cur=[];let group=inheritedGroup||'';let curGroup=group;let volume='';let curVolume='';
-  const flush=()=>{if(cur.length){blocks.push({group:curGroup||group,volume:curVolume||volume,lines:[...cur]});cur=[];curGroup=group;curVolume=volume}};
+  const blocks=[];let cur=[];let group=inheritedGroup||'';let curGroup=group;let volume='';let curVolume='';let chapter='';let curChapter='';
+  const flush=()=>{if(cur.length){blocks.push({group:curGroup||group,volume:curVolume||volume,chapter:curChapter||chapter,lines:[...cur]});cur=[];curGroup=group;curVolume=volume;curChapter=chapter}};
   const curHasContent=()=>cur.length>0;
   const curHasRealQuestion=()=>cur.some(l=>!isOptionLine(l)&&!isAnswerLine(l)&&!isAnalysisLine(l)&&!getHeadingType(l));
   const curHasAnsweredStem=()=>cur.some(l=>hasInlineAnswerTag(l)||hasEmbeddedAnswerStem(l,curGroup||group));
   const curHasDocxTable=()=>cur.some(l=>/^【DOCX表格开始】$/.test(String(l||'').trim()))&&!cur.some(l=>isOptionLine(l)||isAnswerLine(l));
   for(const raw of lines){
-    if(isVolumeHeading(raw)){flush();volume=getVolumeLabel(raw);curVolume=volume;continue}
+    if(isVolumeHeading(raw)){flush();volume=getVolumeLabel(raw);curVolume=volume;chapter='';curChapter='';continue}
+    if(isChapterHeadingV58911(raw)){flush();chapter=raw;curChapter=chapter;continue}
     if(isImportNoiseLine(raw))continue
     const headingType=getHeadingType(raw);
     if(headingType){flush();group=headingType;curGroup=group;continue}
@@ -3874,7 +4044,7 @@ function splitQuestionBlocks(text,inheritedGroup=''){
       if(shouldStartNew && curHasDocxTable() && !hasPrevOptions && !hasPrevAnswer && !hasStrongQuestionNo(line))shouldStartNew=false;
       if(shouldStartNew)flush();
     }
-    if(!cur.length){curGroup=group;curVolume=volume}
+    if(!cur.length){curGroup=group;curVolume=volume;curChapter=chapter}
     cur.push(line);
   }
   flush();
