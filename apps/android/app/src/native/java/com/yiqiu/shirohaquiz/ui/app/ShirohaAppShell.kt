@@ -201,8 +201,12 @@ fun ShirohaAppShell() {
         val previous = routeBackStack.lastOrNull()?.let(::decodeRouteSnapshot)
         if (previous != null) {
             routeBackStack = routeBackStack.dropLast(1)
-            detailBankId = previous.bankId
-            detailRecordId = previous.recordId
+            if (previous.tab == MainTab.BankDetail || previous.tab == MainTab.BankReview) {
+                detailBankId = previous.bankId
+            }
+            if (previous.tab == MainTab.RecordDetail) {
+                detailRecordId = previous.recordId
+            }
             currentTab = previous.tab
             return
         }
