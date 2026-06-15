@@ -2,6 +2,7 @@ package com.yiqiu.shirohaquiz.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,9 +20,12 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -67,8 +71,9 @@ fun BankListScreen(
     val practiceScopeType = QuizRepository.practiceScopeType
     val practiceScopeValue = QuizRepository.practiceScopeValue
     var editTarget by remember { mutableStateOf<QuizBank?>(null) }
-    var editGroupText by remember { mutableStateOf(DEFAULT_BANK_GROUP_NAME) }
     var editNameText by remember { mutableStateOf("") }
+    var moveTarget by remember { mutableStateOf<QuizBank?>(null) }
+    var moveGroupText by remember { mutableStateOf(DEFAULT_BANK_GROUP_NAME) }
     var deleteTarget by remember { mutableStateOf<QuizBank?>(null) }
     var collapsedGroups by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
 
@@ -78,13 +83,6 @@ fun BankListScreen(
             title = { Text("编辑题库信息") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        value = editGroupText,
-                        onValueChange = { editGroupText = it },
-                        label = { Text("一级分组") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
                     OutlinedTextField(
                         value = editNameText,
                         onValueChange = { editNameText = it },
@@ -99,10 +97,9 @@ fun BankListScreen(
                     onClick = {
                         val bank = editTarget
                         if (bank != null && editNameText.isNotBlank()) {
-                            QuizRepository.updateBankInfo(
+                            QuizRepository.renameBank(
                                 context = context,
                                 bankId = bank.id,
-                                newGroupName = editGroupText,
                                 newName = editNameText
                             )
                         }
@@ -112,6 +109,41 @@ fun BankListScreen(
             },
             dismissButton = {
                 TextButton(onClick = { editTarget = null }) { Text("取消") }
+            }
+        )
+    }
+
+    if (moveTarget != null) {
+        AlertDialog(
+            onDismissRequest = { moveTarget = null },
+            title = { Text("移动到分组") },
+            text = {
+                OutlinedTextField(
+                    value = moveGroupText,
+                    onValueChange = { moveGroupText = it },
+                    label = { Text("目标一级分组") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val bank = moveTarget
+                        if (bank != null && moveGroupText.isNotBlank()) {
+                            QuizRepository.updateBankInfo(
+                                context = context,
+                                bankId = bank.id,
+                                newGroupName = moveGroupText,
+                                newName = bank.name
+                            )
+                        }
+                        moveTarget = null
+                    }
+                ) { Text("移动") }
+            },
+            dismissButton = {
+                TextButton(onClick = { moveTarget = null }) { Text("取消") }
             }
         )
     }
@@ -207,36 +239,41 @@ fun BankListScreen(
 
             GlassCard {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .shirohaNoRippleClickable {
-                            collapsedGroups = if (isExpanded) {
-                                (collapsedGroups + groupName).distinct()
-                            } else {
-                                collapsedGroups - groupName
-                            }
-                        },
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = if (isExpanded) Icons.Rounded.ExpandMore else Icons.Rounded.ChevronRight,
-                        contentDescription = if (isExpanded) "收起分组" else "展开分组",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = groupName,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .shirohaNoRippleClickable {
+                                collapsedGroups = if (isExpanded) {
+                                    (collapsedGroups + groupName).distinct()
+                                } else {
+                                    collapsedGroups - groupName
+                                }
+                            },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Rounded.ExpandMore else Icons.Rounded.ChevronRight,
+                            contentDescription = if (isExpanded) "收起分组" else "展开分组",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
                         )
-                        Text(
-                            text = "${banksInGroup.size} 个题库 · $totalQuestions 题",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = groupName,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "${banksInGroup.size} 个题库 · $totalQuestions 题",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                     CompactBankStateChip(
                         text = if (practiceScopeType == QuizRepository.PRACTICE_SCOPE_GROUP && practiceScopeValue == groupName) "当前练习范围" else "设为练习范围",
@@ -260,8 +297,11 @@ fun BankListScreen(
                             onSetActive = { QuizRepository.setActiveBank(context, bank.id) },
                             onEdit = {
                                 editTarget = bank
-                                editGroupText = bank.groupName.ifBlank { DEFAULT_BANK_GROUP_NAME }
                                 editNameText = bank.name
+                            },
+                            onMove = {
+                                moveTarget = bank
+                                moveGroupText = bank.groupName.ifBlank { DEFAULT_BANK_GROUP_NAME }
                             },
                             onDelete = {
                                 if (bank.id != "demo-bank") {
@@ -299,12 +339,14 @@ private fun BankCard(
     onOpenBankDetail: (String) -> Unit,
     onSetActive: () -> Unit,
     onEdit: () -> Unit,
+    onMove: () -> Unit,
     onDelete: () -> Unit
 ) {
     val singleCount = bank.questions.count { it.type == QuestionType.SINGLE }
     val multipleCount = bank.questions.count { it.type == QuestionType.MULTIPLE }
     val judgeCount = bank.questions.count { it.type == QuestionType.JUDGE }
     val subjectiveCount = bank.questions.count { it.type == QuestionType.BLANK || it.type == QuestionType.SHORT }
+    var moreMenuExpanded by remember { mutableStateOf(false) }
 
     Surface(
         modifier = Modifier
@@ -366,7 +408,7 @@ private fun BankCard(
                 )
                 ActionPillButton(
                     icon = Icons.Rounded.Edit,
-                    text = "编辑/移动",
+                    text = "编辑",
                     primary = false,
                     modifier = Modifier
                         .weight(1f)
@@ -374,16 +416,39 @@ private fun BankCard(
                     fillWidthContent = true,
                     onClick = onEdit
                 )
-                ActionPillButton(
-                    icon = Icons.Rounded.DeleteOutline,
-                    text = "删除",
-                    primary = false,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(42.dp),
-                    fillWidthContent = true,
-                    onClick = onDelete
-                )
+                Box(modifier = Modifier.weight(1f)) {
+                    ActionPillButton(
+                        icon = Icons.Rounded.MoreVert,
+                        text = "更多",
+                        primary = false,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(42.dp),
+                        fillWidthContent = true,
+                        onClick = { moreMenuExpanded = true }
+                    )
+                    DropdownMenu(
+                        expanded = moreMenuExpanded,
+                        onDismissRequest = { moreMenuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("移动到分组") },
+                            leadingIcon = { Icon(Icons.Rounded.Edit, contentDescription = null) },
+                            onClick = {
+                                moreMenuExpanded = false
+                                onMove()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("删除题库") },
+                            leadingIcon = { Icon(Icons.Rounded.DeleteOutline, contentDescription = null) },
+                            onClick = {
+                                moreMenuExpanded = false
+                                onDelete()
+                            }
+                        )
+                    }
+                }
             }
         }
     }

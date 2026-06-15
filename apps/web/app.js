@@ -1,5 +1,5 @@
 (function(){
-const APP_VERSION='V34：标准解析与局部修复版';
+const APP_VERSION='V35：分组练习与学习体验优化版';
 const RICH_CONTENT_VERSION_V57='shiroha-web-rich-v1';
 const BANK_DEFAULT_GROUP_V58='未分组';
 const CURRENT_SCHEMA_VERSION=1;
