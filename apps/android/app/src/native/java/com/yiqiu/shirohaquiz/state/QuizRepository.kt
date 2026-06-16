@@ -4196,7 +4196,7 @@ object QuizRepository {
                     questionJson.optString("volume")
                 ).firstOrNull { it.isNotBlank() }.orEmpty(),
                 images = images,
-                score = if (questionJson.has("score")) questionJson.optDouble("score") else null,
+                score = parseNullableFiniteDouble(questionJson, "score"),
                 subject = questionJson.optString("subject"),
                 grade = questionJson.optString("grade"),
                 difficulty = questionJson.optString("difficulty"),
@@ -4206,10 +4206,15 @@ object QuizRepository {
                 sourceFileId = questionJson.optString("sourceFileId"),
                 version = questionJson.optInt("version", 1),
                 reviewStatus = questionJson.optString("reviewStatus", "approved"),
-                aiConfidence = if (questionJson.has("aiConfidence")) questionJson.optDouble("aiConfidence") else null,
+                aiConfidence = parseNullableFiniteDouble(questionJson, "aiConfidence"),
                 warnings = parseStringArray(questionJson.optJSONArray("warnings"))
             )
         )
+    }
+
+    private fun parseNullableFiniteDouble(json: JSONObject, key: String): Double? {
+        if (!json.has(key) || json.isNull(key)) return null
+        return json.optDouble(key).takeIf { it.isFinite() }
     }
 
     private fun parseQuestionType(rawType: String?): QuestionType {
@@ -4279,7 +4284,7 @@ object QuizRepository {
         questionJson.put("question", question.question)
         questionJson.put("analysis", question.analysis)
         questionJson.put("category", question.category)
-        if (question.score != null) questionJson.put("score", question.score)
+        question.score?.takeIf { it.isFinite() }?.let { questionJson.put("score", it) }
 
         val optionsArray = JSONArray()
         question.options.forEach { option ->
@@ -4324,7 +4329,7 @@ object QuizRepository {
         if (question.sourceFileId.isNotBlank()) questionJson.put("sourceFileId", question.sourceFileId)
         questionJson.put("version", question.version)
         if (question.reviewStatus != "approved") questionJson.put("reviewStatus", question.reviewStatus)
-        if (question.aiConfidence != null) questionJson.put("aiConfidence", question.aiConfidence!!)
+        question.aiConfidence?.takeIf { it.isFinite() }?.let { questionJson.put("aiConfidence", it) }
         if (question.warnings.isNotEmpty()) questionJson.put("warnings", JSONArray(question.warnings))
         return questionJson
     }
