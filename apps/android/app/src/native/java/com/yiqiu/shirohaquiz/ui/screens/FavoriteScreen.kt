@@ -13,18 +13,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.yiqiu.shirohaquiz.importer.model.MultiBlankSupport
 import com.yiqiu.shirohaquiz.importer.model.QuestionType
 import com.yiqiu.shirohaquiz.state.FavoriteQuestionEntry
 import com.yiqiu.shirohaquiz.state.QuizRepository
@@ -127,13 +127,26 @@ fun FavoriteScreen(
 @Composable
 private fun FavoriteQuestionPreview(entry: FavoriteQuestionEntry) {
     GlassCard {
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top
         ) {
-            StatusChip(typeLabel(entry.question.type))
-            StatusChip(entry.bankName)
-            StatusChip("收藏 ${formatTimestamp(entry.favoritedAt)}")
+            FlowRow(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                StatusChip(typeLabel(entry.question.type))
+                StatusChip(entry.bankName)
+                StatusChip("收藏 ${formatTimestamp(entry.favoritedAt)}")
+            }
+            IconButton(onClick = { QuizRepository.removeFavoriteQuestion(entry) }) {
+                Icon(
+                    imageVector = Icons.Rounded.Star,
+                    contentDescription = "取消收藏",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
         }
         Spacer(Modifier.height(12.dp))
         Text(
@@ -145,11 +158,7 @@ private fun FavoriteQuestionPreview(entry: FavoriteQuestionEntry) {
         )
         Spacer(Modifier.height(10.dp))
         Text(
-            text = if (MultiBlankSupport.hasStructuredAnswers(entry.question)) {
-                "正确答案：\n${MultiBlankSupport.expectedAnswerText(entry.question.blankAnswers)}"
-            } else {
-                "正确答案：${entry.question.answer.joinToString(" / ").ifBlank { "未识别答案" }}"
-            },
+            text = "正确答案：${entry.question.answer.joinToString(" / ").ifBlank { "未识别答案" }}",
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         if (entry.question.analysis.isNotBlank()) {
@@ -157,35 +166,7 @@ private fun FavoriteQuestionPreview(entry: FavoriteQuestionEntry) {
             Text(
                 text = "解析：${entry.question.analysis}",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            ActionPillButton(
-                icon = Icons.Rounded.Star,
-                text = "已收藏",
-                primary = true,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(46.dp),
-                fillWidthContent = true,
-                onClick = {}
-            )
-            ActionPillButton(
-                icon = Icons.Rounded.DeleteOutline,
-                text = "取消收藏",
-                primary = false,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(46.dp),
-                fillWidthContent = true,
-                onClick = { QuizRepository.removeFavoriteQuestion(entry) }
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

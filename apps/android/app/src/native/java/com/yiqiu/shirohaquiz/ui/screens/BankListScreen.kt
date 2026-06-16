@@ -181,7 +181,7 @@ fun BankListScreen(
         GlassCard(contentPadding = 16.dp) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    text = "当前题库：${activeBank?.name ?: "尚未选择"}",
+                    text = "当前题库：${QuizRepository.currentPracticeScopeLabel()}",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold
                 )
