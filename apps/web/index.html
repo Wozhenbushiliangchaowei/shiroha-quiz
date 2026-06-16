@@ -303,10 +303,15 @@ C. 判断题
       <input id="edit-index" type="hidden" />
       <div class="form-grid">
         <label>题型<select id="edit-type"><option value="single">单选题</option><option value="multiple">多选题</option><option value="judge">判断题</option><option value="blank">填空题</option><option value="short">简答题</option></select></label>
-        <label>答案<input id="edit-answer" placeholder="选择题填 D 或 ACD；判断题可填 A/B/正确/错误；填空/简答可填参考答案，多个等价答案用 || 分隔" /></label>
+        <label id="edit-answer-single-wrap-v58914">答案<input id="edit-answer" placeholder="选择题填 D 或 ACD；判断题可填 A/B/正确/错误；填空/简答可填参考答案，多个等价答案用 || 分隔" /></label>
         <label>分类<input id="edit-category" placeholder="例如：基础知识 / 安全规范" /></label>
         <label>分值<input id="edit-score" type="number" min="0" step="0.5" placeholder="可空，考试时按题型默认分值" /></label>
       </div>
+      <div id="edit-multi-blank-wrap-v58914" class="multi-blank-editor-v58914 hidden">
+        <div class="multi-blank-editor-head-v58914"><div><b>逐空答案</b><p id="edit-blank-count-tip-v58914" class="muted"></p></div><div class="row-actions"><button id="edit-add-blank-btn-v58914" class="ghost" type="button">增加题空</button><button id="edit-disable-multi-blank-btn-v58914" class="ghost danger" type="button">退出多空模式</button></div></div>
+        <div id="edit-blank-groups-v58914"></div>
+      </div>
+      <button id="edit-enable-multi-blank-btn-v58914" class="ghost hidden" type="button">启用多空答案</button>
       <label>题干<textarea id="edit-question" class="small-area" placeholder="题干"></textarea></label>
       <label>选项<textarea id="edit-options" class="small-area" placeholder="每行一个选项，例如：&#10;A. 选项一&#10;B. 选项二"></textarea></label>
       <label>解析<textarea id="edit-analysis" class="small-area" placeholder="解析，可空"></textarea></label>

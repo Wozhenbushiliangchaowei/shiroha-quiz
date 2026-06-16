@@ -8,7 +8,7 @@ const LEGACY_KEYS=[];
 const CLEAR_STORAGE_KEYS=['shiroha_quiz_state','uquiz_state_v8_c1'];
 const TYPE_LABEL={single:'单选题',multiple:'多选题',multi:'多选题',judge:'判断题',blank:'填空题',short:'简答题',short_answer:'简答题'};
 const state=loadState();
-let importCache=[];let tableImportResultV49=null;let importWarnings=[];let importReport='';let importDiagnostics=null;let importPreviewFilter='priority';let importSelected=new Set();let bankEditSessionV45=null;let exportBankSelectedV23=new Set();let backupImportModeV23='merge';let practice={items:[],idx:0,answered:0,correct:0,wrong:0,start:0};let exam={items:[],answers:{},start:0,timer:null,deadline:0,submitted:false};
+let importCache=[];let tableImportResultV49=null;let importWarnings=[];let importReport='';let importDiagnostics=null;let importPreviewFilter='priority';let importSelected=new Set();let bankEditSessionV45=null;let exportBankSelectedV23=new Set();let backupImportModeV23='merge';let practice={items:[],idx:0,answered:0,correct:0,wrong:0,start:0};let exam={items:[],answers:{},start:0,timer:null,deadline:0,submitted:false};let editBlankGroupsV58914=[];let editMultiBlankEnabledV58914=false;
 const $=s=>document.querySelector(s);const $$=s=>[...document.querySelectorAll(s)];
 function ensureDefaultBank(){if(!state.banks.length&&!state.settings?.suppressDefaultBank) state.banks.push(defaultBank()); if(!state.activeBankId) state.activeBankId=state.banks[0]?.id||'';}
 function blankState(){return {schemaVersion:CURRENT_SCHEMA_VERSION,banks:[],activeBankId:'',wrongBook:{},favorites:{},records:[],settings:{},crossPlatformMeta:{favoriteQuestions:{}}}}
@@ -97,7 +97,7 @@ function practiceSessionItemsForBanksV8916(banks){
   return out;
 }
 function currentPracticeItemV8916(){return practice&&practice.items&&practice.items[practice.idx]||null}
-function practiceQuestionV8916(item){return item&&item.question||item}
+function practiceQuestionV8916(item){return item&&item.question&&typeof item.question==='object'?item.question:item}
 function practiceItemKeyV8916(item){const q=practiceQuestionV8916(item);return item&&item.sessionKey||`${item&&item.bankId||activeBank().id}#${q&&q.id||''}`}
 function practiceItemBankIdV8916(item){return item&&item.bankId||activeBank().id}
 function practiceItemBankNameV8916(item){return item&&item.bankName||state.banks.find(b=>b.id===practiceItemBankIdV8916(item))?.name||activeBank().name||''}
@@ -389,6 +389,28 @@ function renderBankToolbarV28(){
 function renderBankPreview(){const qs=activeBank().questions.slice(0,300);$('#bank-preview tbody').innerHTML=qs.map((q,i)=>`<tr><td>${i+1}</td><td>${label(q.type)}</td><td>${esc(short(q.question,80))}</td><td>${esc((q.answer||q.answerKeys||[]).join(''))}</td><td>${esc(q.category||q.topic||'')}</td><td>${esc(q.score||'默认')}</td></tr>`).join('')}
 function countTypes(qs){return qs.reduce((a,q)=>{a[q.type]=(a[q.type]||0)+1;return a},{single:0,multiple:0,multi:0,judge:0,blank:0,short:0})}
 function label(t){return TYPE_LABEL[t]||t||'未知'}
+/* SHIROHA_WEB_V58_9_14_MULTI_BLANK_SYNC_START */
+function normalizeBlankAnswersV58914(value){
+  if(!Array.isArray(value))return[];
+  return value.map(group=>{
+    const values=Array.isArray(group)?group:[group];
+    const seen=new Set();
+    return values.map(item=>String(item??'').trim()).filter(item=>item&&!seen.has(item)&&seen.add(item));
+  });
+}
+function isMultiBlankQuestionV58914(question){
+  return normalizeWebQuestionType(question&&question.type)==='blank'&&Array.isArray(question&&question.blankAnswers)&&question.blankAnswers.length>0;
+}
+function normalizeBlankTextV58914(value){
+  let text=String(value??'');
+  try{text=text.normalize('NFKC')}catch(_){}
+  return text.trim().replace(/[\s\u3000]+/g,'').toLowerCase();
+}
+function primaryBlankAnswerV58914(groups){return normalizeBlankAnswersV58914(groups).map(group=>group[0]||'').join('；')}
+function cloneBlankAnswersV58914(groups){return normalizeBlankAnswersV58914(groups).map(group=>[...group])}
+function hasAnswerValueV58914(values){return Array.isArray(values)&&values.some(value=>String(value??'').trim())}
+function explicitBlankCountV58914(value){return (String(value||'').match(/（\s*）|\(\s*\)|_{3,}/g)||[]).length}
+/* SHIROHA_WEB_V58_9_14_MULTI_BLANK_SYNC_END */
 /* SHIROHA_WEB_V58_9_10_SOURCE_INTERVAL_LOCAL_REPAIR */
 // v58.9.10：导入阶段内部原文定位元数据。使用 Symbol 避免写入题库 JSON/备份包。
 const SOURCE_META_V58910=Symbol('shiroha_source_meta_v58_9_10');
@@ -401,6 +423,7 @@ function attachSourceMetaV58910(q,meta){
 function normalizeQuestion(q,i=0){
   let type=normalizeType(q.type||q.questionType||q.kind||'');
   let rawAnswer=q.answer??q.answerKeys??q.correctAnswer??q.correct??q.rightAnswer??q.referenceAnswer??q.standardAnswer??[];
+  const blankAnswersV58914=normalizeBlankAnswersV58914(q.blankAnswers);
   let answer=Array.isArray(rawAnswer)?rawAnswer:(isTextType(type)?splitTextAnswer(rawAnswer):splitAnswer(rawAnswer));
   let options=[];
   const richFieldsV57=q&&q.richContent&&typeof q.richContent==='object'?(q.richContent.fields&&typeof q.richContent.fields==='object'?q.richContent.fields:q.richContent):null;
@@ -453,6 +476,7 @@ function normalizeQuestion(q,i=0){
   }
   if(isTextType(type)){
     answer=splitTextAnswer((Array.isArray(rawAnswer)&&rawAnswer.length)?rawAnswer.join('；'):(rawAnswer||answer.join('；')));
+    if(type==='blank'&&blankAnswersV58914.length)answer=[primaryBlankAnswerV58914(blankAnswersV58914)];
   }else{
     answer=normalizeAnswer(answer,options,type);
   }
@@ -469,6 +493,7 @@ function normalizeQuestion(q,i=0){
     }
   }
   const normalizedQuestion={id:q.id||makeId('q',i),type,number:q.number||i+1,volume:q.volume||'',group:q.group||'',question:questionText,options,answer,analysis:analysisText,category:q.category||q.topic||q.group||'',images:structuredImages,score:Number(q.score||0)||undefined,subject:q.subject||'',grade:q.grade||'',difficulty:q.difficulty||'',knowledgePoints:Array.isArray(q.knowledgePoints)?q.knowledgePoints:[],tags:Array.isArray(q.tags)?q.tags:[],source:q.source||'',sourceFileId:q.sourceFileId||'',version:Number(q.version||1)||1,reviewStatus:q.reviewStatus||'approved',aiConfidence:q.aiConfidence==null?null:Number(q.aiConfidence),warnings:Array.isArray(q.warnings)?q.warnings:[],normalized:normalizeText(questionText)};
+  if(Array.isArray(q.blankAnswers))normalizedQuestion.blankAnswers=cloneBlankAnswersV58914(blankAnswersV58914);
   const sourceMeta=getSourceMetaV58910(q);
   if(sourceMeta)attachSourceMetaV58910(normalizedQuestion,sourceMeta);
   return normalizedQuestion;
@@ -5181,11 +5206,55 @@ function validateQuestion(q){
   if((q.options||[]).some(o=>{const text=visibleOptionTextForRisk(o.text||'');return text.length>240||/【?\s*(?:答案|正确答案)|\b\d{1,3}\s*[、.．:：].+【?\s*答案/.test(text);} ))return'选项疑似粘连';
   return'正常';
 }
+function collectEditBlankGroupsV58914(){
+  const rows=$$('#edit-blank-groups-v58914 [data-blank-group-v58914]');
+  if(!rows.length)return cloneBlankAnswersV58914(editBlankGroupsV58914);
+  return rows.map(row=>{
+    const values=[...row.querySelectorAll('[data-blank-answer-v58914]')].sort((a,b)=>Number(a.dataset.blankAnswerV58914)-Number(b.dataset.blankAnswerV58914)).map(input=>String(input.value||'').trim());
+    const main=values[0]||'';const seen=new Set(main?[main]:[]);const alternatives=values.slice(1).filter(value=>value&&!seen.has(value)&&seen.add(value));
+    return [main,...alternatives];
+  });
+}
+function updateEditBlankCountTipV58914(){
+  const tip=$('#edit-blank-count-tip-v58914');if(!tip)return;
+  const detected=explicitBlankCountV58914($('#edit-question')?.value||'');
+  const configured=editMultiBlankEnabledV58914?editBlankGroupsV58914.length:0;
+  tip.textContent=detected?(detected===configured?`题干检测到 ${detected} 个明确题空。`:`题干检测到 ${detected} 个明确题空，当前配置 ${configured} 个。`):'未检测到明确空括号或连续下划线，仅按当前配置保存。';
+  tip.className='muted '+(detected&&detected!==configured?'multi-blank-count-warn-v58914':'');
+}
+function renderEditBlankGroupsV58914(){
+  const box=$('#edit-blank-groups-v58914');if(!box)return;
+  if(!editBlankGroupsV58914.length)editBlankGroupsV58914=[['']];
+  box.innerHTML=editBlankGroupsV58914.map((group,index)=>{
+    const values=[group[0]||'',group[1]||'',group[2]||''];
+    return `<div class="multi-blank-edit-group-v58914" data-blank-group-v58914="${index}"><div class="multi-blank-edit-head-v58914"><b>第${index+1}空</b><div class="row-actions"><button class="ghost mini-btn" type="button" data-blank-move-v58914="up" ${index===0?'disabled':''}>上移</button><button class="ghost mini-btn" type="button" data-blank-move-v58914="down" ${index===editBlankGroupsV58914.length-1?'disabled':''}>下移</button><button class="ghost danger mini-btn" type="button" data-blank-delete-v58914 ${editBlankGroupsV58914.length===1?'disabled':''}>删除</button></div></div><div class="multi-blank-edit-fields-v58914"><label>主答案<input data-blank-answer-v58914="0" value="${esc(values[0])}" placeholder="必填" /></label><label>备选答案1<input data-blank-answer-v58914="1" value="${esc(values[1])}" placeholder="可空" /></label><label>备选答案2<input data-blank-answer-v58914="2" value="${esc(values[2])}" placeholder="可空" /></label></div></div>`;
+  }).join('');
+  $$('#edit-blank-groups-v58914 [data-blank-answer-v58914]').forEach(input=>input.oninput=()=>{editBlankGroupsV58914=collectEditBlankGroupsV58914();updateEditBlankCountTipV58914()});
+  $$('#edit-blank-groups-v58914 [data-blank-move-v58914]').forEach(button=>button.onclick=()=>{editBlankGroupsV58914=collectEditBlankGroupsV58914();const row=button.closest('[data-blank-group-v58914]');const index=Number(row?.dataset.blankGroupV58914);const target=button.dataset.blankMoveV58914==='up'?index-1:index+1;if(target<0||target>=editBlankGroupsV58914.length)return;[editBlankGroupsV58914[index],editBlankGroupsV58914[target]]=[editBlankGroupsV58914[target],editBlankGroupsV58914[index]];renderEditBlankGroupsV58914()});
+  $$('#edit-blank-groups-v58914 [data-blank-delete-v58914]').forEach(button=>button.onclick=()=>{editBlankGroupsV58914=collectEditBlankGroupsV58914();const index=Number(button.closest('[data-blank-group-v58914]')?.dataset.blankGroupV58914);if(editBlankGroupsV58914.length<=1)return;editBlankGroupsV58914.splice(index,1);renderEditBlankGroupsV58914()});
+  updateEditBlankCountTipV58914();
+}
+function syncEditBlankUiV58914(){
+  const type=$('#edit-type')?.value||'';const blankType=type==='blank';
+  const singleWrap=$('#edit-answer-single-wrap-v58914');const multiWrap=$('#edit-multi-blank-wrap-v58914');const enable=$('#edit-enable-multi-blank-btn-v58914');
+  if(singleWrap)singleWrap.classList.toggle('hidden',blankType&&editMultiBlankEnabledV58914);
+  if(multiWrap)multiWrap.classList.toggle('hidden',!(blankType&&editMultiBlankEnabledV58914));
+  if(enable)enable.classList.toggle('hidden',!blankType||editMultiBlankEnabledV58914);
+  if(blankType&&editMultiBlankEnabledV58914)renderEditBlankGroupsV58914();
+}
+function bindMultiBlankEditorV58914(){
+  const type=$('#edit-type');if(type)type.onchange=()=>{if(type.value!=='blank')editMultiBlankEnabledV58914=false;syncEditBlankUiV58914()};
+  const question=$('#edit-question');if(question)question.addEventListener('input',updateEditBlankCountTipV58914);
+  const add=$('#edit-add-blank-btn-v58914');if(add)add.onclick=()=>{editBlankGroupsV58914=collectEditBlankGroupsV58914();editBlankGroupsV58914.push(['']);renderEditBlankGroupsV58914()};
+  const enable=$('#edit-enable-multi-blank-btn-v58914');if(enable)enable.onclick=()=>{const count=Math.max(1,explicitBlankCountV58914($('#edit-question')?.value||''));const old=String($('#edit-answer')?.value||'').trim();editBlankGroupsV58914=Array.from({length:count},(_,i)=>i===0&&count===1&&old?[old]:['']);editMultiBlankEnabledV58914=true;syncEditBlankUiV58914();$('#edit-status').textContent='已启用逐空答案，请为每个题空填写主答案。';$('#edit-status').className='notice warn'};
+  const disable=$('#edit-disable-multi-blank-btn-v58914');if(disable)disable.onclick=()=>{editBlankGroupsV58914=collectEditBlankGroupsV58914();if(!confirm('退出多空模式？各空主答案会用中文分号合并到普通答案框。'))return;$('#edit-answer').value=primaryBlankAnswerV58914(editBlankGroupsV58914);editMultiBlankEnabledV58914=false;syncEditBlankUiV58914()};
+}
 function openEditQuestion(i){
   const q=importCache[i];if(!q)return;
-  $('#edit-index').value=i;$('#edit-type').value=q.type||'single';$('#edit-question').value=q.question||'';$('#edit-answer').value=(q.answer||[]).join('');$('#edit-analysis').value=q.analysis||'';$('#edit-category').value=q.category||q.group||'';$('#edit-score').value=q.score||'';
+  $('#edit-index').value=i;$('#edit-type').value=q.type||'single';$('#edit-question').value=q.question||'';$('#edit-answer').value=isTextType(q.type)?(q.answer||[]).join(' || '):(q.answer||[]).join('');$('#edit-analysis').value=q.analysis||'';$('#edit-category').value=q.category||q.group||'';$('#edit-score').value=q.score||'';
+  editMultiBlankEnabledV58914=isMultiBlankQuestionV58914(q);editBlankGroupsV58914=editMultiBlankEnabledV58914?cloneBlankAnswersV58914(q.blankAnswers):[];
   $('#edit-options').value=(q.options||[]).map(o=>`${o.key}. ${o.text}`).join('\n');
-  $('#edit-status').textContent='可修改后保存。';$('#edit-status').className='notice';
+  $('#edit-status').textContent='可修改后保存。';$('#edit-status').className='notice';syncEditBlankUiV58914();
   $('#edit-modal').classList.remove('hidden');$('#edit-modal').setAttribute('aria-hidden','false');
 }
 function closeEditModal(){
@@ -5203,8 +5272,13 @@ function parseOptionsText(text){
 }
 function saveEditQuestion(){
   const i=Number($('#edit-index').value);if(!importCache[i])return;
-  const options=parseOptionsText($('#edit-options').value);
-  const raw={...importCache[i],type:$('#edit-type').value,question:$('#edit-question').value.trim(),options,answer:splitAnswer($('#edit-answer').value),analysis:$('#edit-analysis').value.trim(),category:$('#edit-category').value.trim(),score:$('#edit-score').value};
+  const type=$('#edit-type').value;const options=parseOptionsText($('#edit-options').value);
+  const raw={...importCache[i],type,question:$('#edit-question').value.trim(),options,answer:isTextType(type)?splitTextAnswer($('#edit-answer').value):splitAnswer($('#edit-answer').value),analysis:$('#edit-analysis').value.trim(),category:$('#edit-category').value.trim(),score:$('#edit-score').value};
+  if(type==='blank'&&editMultiBlankEnabledV58914){
+    const groups=collectEditBlankGroupsV58914();const missing=groups.findIndex(group=>!String(group[0]||'').trim());
+    if(missing>=0){$('#edit-status').textContent=`第${missing+1}空缺少主答案，暂未保存。`;$('#edit-status').className='notice warn';return}
+    raw.blankAnswers=groups;raw.answer=[primaryBlankAnswerV58914(groups)];editBlankGroupsV58914=cloneBlankAnswersV58914(groups);
+  }else delete raw.blankAnswers;
   const q=normalizeQuestion(raw,i);
   importCache[i]=q;
   const status=validateQuestion(q);
@@ -5624,8 +5698,12 @@ function shouldUseDefaultImageOptions(question,options,answer,type,group=''){
 }
 function questionHtml(q,examMode,idx=0){
   const meta=`<div class="qmeta"><span class="pill">${label(q.type)}</span><span class="pill">${esc(q.category||'未分类')}</span>${examMode?`<span class="pill">${scoreOf(q)}分</span>`:''}</div><div class="question-title">${examMode?idx+'. ':''}${renderQuestionBodyV83(q)}</div>`;
+  if(isMultiBlankQuestionV58914(q)){
+    const inputs=q.blankAnswers.map((_,index)=>`<label class="multi-blank-answer-item-v58914"><span>第${index+1}空</span><input class="text-answer multi-blank-answer-input-v58914" data-qid="${esc(q.id)}" data-blank-index-v58914="${index}" placeholder="请输入第${index+1}空答案" /></label>`).join('');
+    return meta+`<div class="answer-input-wrap multi-blank-answer-list-v58914">${inputs}</div>`;
+  }
   if(isTextType(q.type)){
-    const placeholder=q.type==='short'?'请输入你的简答内容；提交后可对照参考答案。':'请输入答案；多个空可用分号分隔。';
+    const placeholder=q.type==='short'?'请输入你的简答内容；提交后可对照参考答案。':'请输入答案。';
     const input=q.type==='short'?`<textarea class="text-answer" data-qid="${esc(q.id)}" placeholder="${placeholder}"></textarea>`:`<input class="text-answer" data-qid="${esc(q.id)}" placeholder="${placeholder}" />`;
     return meta+`<div class="answer-input-wrap">${input}</div>`;
   }
@@ -5634,17 +5712,27 @@ function questionHtml(q,examMode,idx=0){
 function bindOptionSelect(root,q){$$(root+' .option').forEach(opt=>{opt.onclick=()=>setTimeout(()=>{$$(root+' .option').forEach(o=>o.classList.toggle('selected',o.querySelector('input').checked))},0)})}
 function selectedKeys(root){return $$(root+' input:checked').map(x=>x.value).sort()}
 function textAnswer(root){const el=$(root+' .text-answer');return el&&el.value.trim()?[el.value.trim()]:[]}
-function collectAnswer(root,q){return isTextType(q.type)?textAnswer(root):selectedKeys(root)}
+function multiBlankAnswerV58914(root){return $$(root+' .multi-blank-answer-input-v58914').map(input=>String(input.value||'').trim())}
+function collectTextAnswerFromElementV58914(box,q){if(!box)return[];if(isMultiBlankQuestionV58914(q))return [...box.querySelectorAll('.multi-blank-answer-input-v58914')].map(input=>String(input.value||'').trim());const el=box.querySelector('.text-answer');return el&&el.value.trim()?[el.value.trim()]:[]}
+function collectAnswer(root,q){return isMultiBlankQuestionV58914(q)?multiBlankAnswerV58914(root):(isTextType(q.type)?textAnswer(root):selectedKeys(root))}
 function answerDisplay(ans){return (ans||[]).join(isTextTypeValueList(ans)?'；':'')}
 function isTextTypeValueList(ans){return (ans||[]).some(x=>String(x).length>1&&!/^[A-G1-9]$/.test(String(x)))}
 function same(a,b){return JSON.stringify([...a].sort())===JSON.stringify([...b].sort())}
 function sameAnswerForQuestion(q,chosen,answer){
+  if(isMultiBlankQuestionV58914(q)){
+    const groups=normalizeBlankAnswersV58914(q.blankAnswers);if(!Array.isArray(chosen)||chosen.length!==groups.length)return false;
+    return groups.every((accepted,index)=>{const actual=normalizeBlankTextV58914(chosen[index]);return !!actual&&accepted.some(item=>normalizeBlankTextV58914(item)===actual)});
+  }
   if(isTextType(q.type)){
     const user=normalizeTextAnswerForCompare((chosen||[]).join('；'));
     return !!user&&(answer||[]).some(a=>normalizeTextAnswerForCompare(a)===user);
   }
   return same(chosen,answer);
 }
+function blankAnswersFromDetailV58914(detail){const direct=normalizeBlankAnswersV58914(detail&&detail.blankAnswers);if(direct.length)return direct;return normalizeBlankAnswersV58914(detail&&detail.nativeQuestion&&detail.nativeQuestion.blankAnswers)}
+function blankUserAnswersFromDetailV58914(detail){if(Array.isArray(detail&&detail.userBlankAnswers))return detail.userBlankAnswers.map(value=>String(value??''));if(Array.isArray(detail&&detail.userAnswer)&&blankAnswersFromDetailV58914(detail).length)return detail.userAnswer.map(value=>String(value??''));return Array.isArray(detail&&detail.chosen)?detail.chosen.map(value=>String(value??'')):[]}
+function renderMultiBlankComparisonV58914(groups,userAnswers,showUser=true){return `<div class="multi-blank-comparison-v58914">${normalizeBlankAnswersV58914(groups).map((accepted,index)=>`<div class="multi-blank-comparison-row-v58914"><b>第${index+1}空</b>${showUser?`<span>你的答案：${esc(String((userAnswers||[])[index]||'未填写'))}</span>`:''}<span>标准答案：${esc(accepted.join(' / ')||'未提供')}</span></div>`).join('')}</div>`}
+function feedbackAnswerHtmlV58914(q,chosen){return isMultiBlankQuestionV58914(q)?renderMultiBlankComparisonV58914(q.blankAnswers,chosen,true):`你的答案：${esc((chosen||[]).join('；')||'未作答')}｜参考答案：${esc((q.answer||[]).join('；'))}`}
 function markOptions(root,q,chosen){if(isTextType(q.type))return;$$(root+' .option').forEach(o=>{const k=o.dataset.key;if(q.answer.includes(k))o.classList.add('correct');else if(chosen.includes(k))o.classList.add('wrong')})}
 function getWrongEntries(bid=activeBank().id){const v=state.wrongBook[bid]||[];if(!Array.isArray(v))return[];return v.map(x=>typeof x==='string'?{id:x,wrongCount:1,rightCount:0,reviewRightCount:0,streakCorrectCount:0,lastWrongAt:'',lastCorrectAt:'',lastReviewedAt:'',nextReviewAt:'',reviewLevel:0,lastAnswer:[],source:'web',timestamp:0,status:'未掌握'}:{...x,id:x.id,wrongCount:Number(x.wrongCount||0),rightCount:Number(x.rightCount||0),reviewRightCount:Number(x.reviewRightCount||0),streakCorrectCount:Number(x.streakCorrectCount||0),lastWrongAt:x.lastWrongAt||'',lastCorrectAt:x.lastCorrectAt||'',lastReviewedAt:x.lastReviewedAt||'',nextReviewAt:x.nextReviewAt||'',reviewLevel:Number(x.reviewLevel||0),lastAnswer:Array.isArray(x.lastAnswer)?x.lastAnswer:[],source:x.source||'web',timestamp:Number(x.timestamp||0),status:x.status||'未掌握'}).filter(x=>x.id)}
 function setWrongEntries(entries,bid=activeBank().id){state.wrongBook[bid]=entries}
@@ -5652,7 +5740,7 @@ function nextWrongReviewIsoV24(level,base=Date.now()){const days=[1,1,3,7,14,30,
 function addWrong(id,bid=activeBank().id){const arr=getWrongEntries(bid);let e=arr.find(x=>x.id===id);if(!e){e={id,wrongCount:0,rightCount:0,reviewRightCount:0,streakCorrectCount:0,lastWrongAt:'',lastCorrectAt:'',lastReviewedAt:'',nextReviewAt:'',reviewLevel:0,lastAnswer:[],source:'web',timestamp:0,status:'未掌握'};arr.push(e)}const ts=Date.now();e.wrongCount++;e.rightCount=0;e.reviewRightCount=0;e.streakCorrectCount=0;e.reviewLevel=0;e.lastWrongAt=new Date(ts).toISOString();e.lastReviewedAt=e.lastWrongAt;e.nextReviewAt=nextWrongReviewIsoV24(0,ts);e.timestamp=ts;e.source='web';e.status='未掌握';setWrongEntries(arr,bid)}
 function markRight(id,bid=activeBank().id){const arr=getWrongEntries(bid);let e=arr.find(x=>x.id===id);if(!e)return;const ts=Date.now();e.rightCount++;e.reviewRightCount=Number(e.reviewRightCount||0)+1;e.streakCorrectCount=Number(e.streakCorrectCount||0)+1;const mastered=e.streakCorrectCount>=2;e.reviewLevel=mastered?Math.max(2,Number(e.reviewLevel||0)+1):Math.max(1,Number(e.reviewLevel||0));e.lastCorrectAt=new Date(ts).toISOString();e.lastReviewedAt=e.lastCorrectAt;e.nextReviewAt=nextWrongReviewIsoV24(e.reviewLevel,ts);e.timestamp=ts;e.status=mastered?'已掌握':'复习中';setWrongEntries(arr,bid)}
 function removeWrong(id){const bid=activeBank().id;setWrongEntries(getWrongEntries(bid).filter(x=>x.id!==id),bid)}
-function makeAnswerDetail(item,chosen,ok,score,totalScore){const q=practiceQuestionV8916(item);return {questionId:q.id,question:short(q.question,120),type:q.type,category:q.category||'',chosen:[...chosen],answer:[...q.answer],correct:!!ok,score:ok?score:0,fullScore:score,time:now(),sourceBankId:practiceItemBankIdV8916(item),sourceBankName:practiceItemBankNameV8916(item),nativeQuestion:q}}
+function makeAnswerDetail(item,chosen,ok,score,totalScore){const q=practiceQuestionV8916(item);const values=Array.isArray(chosen)?[...chosen]:[];const detail={questionId:q.id,question:short(q.question,120),type:q.type,category:q.category||'',chosen:values,userAnswer:[...values],answer:[...q.answer],correct:!!ok,score:ok?score:0,fullScore:score,time:now(),sourceBankId:practiceItemBankIdV8916(item),sourceBankName:practiceItemBankNameV8916(item),nativeQuestion:JSON.parse(JSON.stringify(q))};if(isMultiBlankQuestionV58914(q)){detail.blankAnswers=cloneBlankAnswersV58914(q.blankAnswers);detail.userBlankAnswers=[...values]}return detail}
 function finishPractice(exited=false){
   const total=practice.answered;
   const groupMode=practice.scopeType==='GROUP';const rec={id:makeId('rec','practice'),mode:'练习',bankId:groupMode?'':(practice.items[0]?.bankId||activeBank().id),bankName:groupMode?(practice.scopeName||'分组练习'):(practice.items[0]?.bankName||activeBank().name),scopeType:practice.scopeType||'BANK',scopeName:practice.scopeName||practiceItemBankNameV8916(practice.items[0]),total:practice.items.length,answered:total,correct:practice.correct,wrong:practice.wrong,accuracy:total?Math.round(practice.correct/total*100):0,score:null,date:now(),duration:Math.round((Date.now()-practice.start)/1000),details:practice.details||[]};
@@ -5676,9 +5764,16 @@ function finishPractice(exited=false){
 }
 
 function scoreOf(q){if(q.score)return q.score;return Number(q.type==='multiple'?$('#score-multiple').value:q.type==='judge'?$('#score-judge').value:q.type==='blank'?$('#score-blank').value:q.type==='short'?$('#score-short').value:$('#score-single').value)||0}
-function collectExamTextAnswers(){if(!exam.items)return;exam.items.forEach(q=>{if(!isTextType(q.type))return;const box=$(`#exam-card [data-qid="${CSS.escape(q.id)}"]`);const el=box&&box.querySelector('.text-answer');if(el)exam.answers[q.id]=el.value.trim()?[el.value.trim()]:[]})}
+function collectExamTextAnswers(){if(!exam.items)return;exam.items.forEach(q=>{if(!isTextType(q.type))return;const box=$(`#exam-card [data-qid="${CSS.escape(q.id)}"]`);if(box)exam.answers[q.id]=collectTextAnswerFromElementV58914(box,q)})}
 function addWrongOnExam(id,isWrong){if(isWrong)addWrong(id);else markRight(id)}
-function renderRecords(){const list=$('#records-list');let rows=[...state.records];const mode=$('#record-mode-filter')?.value||'all';if(mode!=='all')rows=rows.filter(r=>r.mode===mode);const lim=$('#record-limit')?.value||'30';if(lim!=='all')rows=rows.slice(0,Number(lim));list.innerHTML=rows.length?rows.map((r,idx)=>{const showSource=r.scopeType==='GROUP';const detail=(r.details||[]).slice(0,8).map((d,i)=>`<tr><td>${i+1}</td><td>${esc(short(d.question,42))}${showSource&&d.sourceBankName?`<small class="record-source-v8916">来源：${esc(d.sourceBankName)}</small>`:''}</td><td>${esc((d.chosen||[]).join('')||'未答')}</td><td>${esc((d.answer||[]).join(''))}</td><td>${d.correct?'正确':'错误'}</td></tr>`).join('');const summary=`题数${r.total}｜已答${r.answered}｜正确${r.correct}｜错误${r.wrong}｜正确率${r.accuracy}%${r.score!=null?`｜得分${r.score}/${r.totalScore}${r.passScore!=null?`｜及格线${r.passScore}｜${r.passed?'合格':'未合格'}`:''}`:''}｜用时${r.duration}秒`;return `<div class="record-item"><b>${esc(r.name||r.mode)}｜${esc(r.bankName)}｜${fmt(r.date)}</b><p class="muted">${summary}</p>${detail?`<details><summary>查看作答明细（前8题 / 共${(r.details||[]).length}题）</summary><div class="table-wrap"><table><thead><tr><th>#</th><th>题干</th><th>你的答案</th><th>正确答案</th><th>结果</th></tr></thead><tbody>${detail}</tbody></table></div></details>`:''}</div>`}).join(''):'<p class="muted">暂无练习或考试记录。</p>'}
+function renderRecordAnswerCellV58914(detail,kind){
+  const groups=blankAnswersFromDetailV58914(detail);if(groups.length){const users=blankUserAnswersFromDetailV58914(detail);return kind==='user'?`<div class="multi-blank-record-v58914">${groups.map((_,i)=>`<span><b>第${i+1}空：</b>${esc(users[i]||'未答')}</span>`).join('')}</div>`:`<div class="multi-blank-record-v58914">${groups.map((accepted,i)=>`<span><b>第${i+1}空：</b>${esc(accepted.join(' / ')||'未提供')}</span>`).join('')}</div>`}
+  return esc(kind==='user'?((detail.chosen||[]).join('')||'未答'):((detail.answer||[]).join('')));
+}
+function renderRecords(){
+  const list=$('#records-list');let rows=[...state.records];const mode=$('#record-mode-filter')?.value||'all';if(mode!=='all')rows=rows.filter(r=>r.mode===mode);const lim=$('#record-limit')?.value||'30';if(lim!=='all')rows=rows.slice(0,Number(lim));
+  list.innerHTML=rows.length?rows.map(r=>{const showSource=r.scopeType==='GROUP';const detail=(r.details||[]).slice(0,8).map((d,i)=>`<tr><td>${i+1}</td><td>${esc(short(d.question,42))}${showSource&&d.sourceBankName?`<small class="record-source-v8916">来源：${esc(d.sourceBankName)}</small>`:''}</td><td>${renderRecordAnswerCellV58914(d,'user')}</td><td>${renderRecordAnswerCellV58914(d,'answer')}</td><td>${d.correct?'正确':'错误'}</td></tr>`).join('');const summary=`题数${r.total}｜已答${r.answered}｜正确${r.correct}｜错误${r.wrong}｜正确率${r.accuracy}%${r.score!=null?`｜得分${r.score}/${r.totalScore}${r.passScore!=null?`｜及格线${r.passScore}｜${r.passed?'合格':'未合格'}`:''}`:''}｜用时${r.duration}秒`;return `<div class="record-item"><b>${esc(r.name||r.mode)}｜${esc(r.bankName)}｜${fmt(r.date)}</b><p class="muted">${summary}</p>${detail?`<details><summary>查看作答明细（前8题 / 共${(r.details||[]).length}题）</summary><div class="table-wrap"><table><thead><tr><th>#</th><th>题干</th><th>你的答案</th><th>正确答案</th><th>结果</th></tr></thead><tbody>${detail}</tbody></table></div></details>`:''}</div>`}).join(''):'<p class="muted">暂无练习或考试记录。</p>';
+}
 function exportRecords(){const text=JSON.stringify(state.records||[],null,2);$('#export-output')&&($('#export-output').value=text);download('学习记录.json',text)}
 function fmt(s){return new Date(s).toLocaleString('zh-CN',{hour12:false})}
 function exportCurrentBank(){const text=JSON.stringify(serializeBankForCrossExportV53(activeBank()),null,2);$('#export-output').value=text;download(activeBank().name+'.json',text)}
@@ -5847,7 +5942,7 @@ function syncHomeVersionPromptV586(){
     });
   }catch(e){}
 }
-function init(){upgradeState();ensureDefaultBank();ensureBankGroupUiV58();bindNav();bindEvents();bindV25ToV28Events();ensureV25ToV28Panels();setupSidebarCollapse();renderBankSelect();renderAll();setupEnhancedDataToolsV23();updateShellLayoutByView();syncHomeVersionPromptV586();setTimeout(syncHomeVersionPromptV586,80);setTimeout(syncHomeVersionPromptV586,300);}
+function init(){upgradeState();ensureDefaultBank();ensureBankGroupUiV58();bindNav();bindEvents();bindMultiBlankEditorV58914();bindV25ToV28Events();ensureV25ToV28Panels();setupSidebarCollapse();renderBankSelect();renderAll();setupEnhancedDataToolsV23();updateShellLayoutByView();syncHomeVersionPromptV586();setTimeout(syncHomeVersionPromptV586,80);setTimeout(syncHomeVersionPromptV586,300);}
 function defaultBank(){
   const qb=window.questionBank||{meta:{title:'内置题库（按需加载）'},questions:[]};
   const qs=Array.isArray(qb.questions)?qb.questions:[];
@@ -5976,7 +6071,7 @@ function filteredPracticeItemsV8916(source,type,order,limit,customCount,scopeOve
 }
 
 function startPractice(scopeOverrideV8916){
-  const override=scopeOverrideV8916&&scopeOverrideV8916.type?normalizePracticeScopeV8916(scopeOverrideV8916):null;
+  const overrideType=String(scopeOverrideV8916&&scopeOverrideV8916.type||'').toLowerCase();const override=[PRACTICE_SCOPE_BANK_V8916,PRACTICE_SCOPE_GROUP_V8916].includes(overrideType)?normalizePracticeScopeV8916(scopeOverrideV8916):null;
   const limit=$('#practice-limit')?.value||'custom';const customCount=readCustomCountV60('#practice-custom-count',20);syncLimitControlV60('practice');
   const scope=override||practiceScopeV8916();
   practice={items:filteredPracticeItemsV8916($('#practice-source').value,$('#practice-type').value,$('#practice-order').value,limit,customCount,scope),idx:0,answered:0,correct:0,wrong:0,start:Date.now(),details:[],answerState:{},scopeType:scope.type===PRACTICE_SCOPE_GROUP_V8916?'GROUP':'BANK',scopeName:practiceScopeLabelV8916(scope),scopeValue:scope.value};
@@ -5989,7 +6084,7 @@ function renderPracticeQuestion(done=false){
   if(done||practice.idx>=practice.items.length){finishPractice();return}
   const item=currentPracticeItemV8916();const q=practiceQuestionV8916(item);const key=practiceItemKeyV8916(item);const bid=practiceItemBankIdV8916(item);const st=getPracticeAnswerStateV26(key);const fav=isFavoriteV27(q.id,bid);const groupTitle=practice.scopeType==='GROUP'?`${practice.scopeName} · 分组练习`:'刷题练习';
   $('#practice-card').innerHTML=`<div class="practice-focus-head"><b>${esc(groupTitle)}</b><span>${practice.idx+1} / ${practice.items.length}</span><div class="practice-tools-v26"><button class="ghost mini-btn" id="p-favorite">${fav?'取消收藏':'收藏题目'}</button><button class="ghost mini-btn" id="p-exit">退出练习</button></div></div>${questionHtml(q,false)}<div class="actions practice-actions-v44"><button class="ghost" id="p-prev" ${practice.idx===0?'disabled':''}>上一题</button><button class="ghost" id="p-next">${practice.idx>=practice.items.length-1?'完成练习':'下一题'}</button><button class="primary" id="p-submit" ${st.answered||st.revealed?'disabled':''}>提交答案</button><button class="ghost" id="p-reveal" ${st.answered||st.revealed?'disabled':''}>看答案</button></div><div id="p-feedback"></div>${renderPracticeNavV26()}<aside class="practice-side-v31">${renderPracticeStatsV30()}</aside>`;
-  bindOptionSelect('#practice-card',q);applyAnswerStateV26('#practice-card',q,st.chosen||[]);if(st.answered||st.revealed)showAnsweredStateV26(q,st);
+  bindOptionSelect('#practice-card',q);applyAnswerStateV26('#practice-card',q,st.chosen||[]);bindPracticeBlankDraftV58914(q,key,st);if(st.answered||st.revealed)showAnsweredStateV26(q,st);
   $('#p-exit').onclick=()=>{if(confirm('退出本轮练习？已作答部分会保存为一条记录。'))finishPractice(true)};
   $('#p-favorite').onclick=()=>{toggleFavoriteV27(q.id,bid);renderPracticeQuestion()};
   $('#p-prev').onclick=()=>{if(practice.idx>0){practice.idx--;renderPracticeQuestion()}};
@@ -6006,10 +6101,11 @@ function refreshPracticeStatsV30(){const box=$('#practice-stat-card-v30');if(box
 function bindPracticeNavV30(){$$('#practice-card [data-practice-jump]').forEach(btn=>btn.onclick=()=>{practice.idx=Number(btn.dataset.practiceJump);renderPracticeQuestion()})}
 function getPracticeAnswerStateV26(id){practice.answerState=practice.answerState||{};return practice.answerState[id]||{chosen:[],answered:false,revealed:false,correct:null}}
 function setPracticeAnswerStateV26(id,next){practice.answerState=practice.answerState||{};practice.answerState[id]={...getPracticeAnswerStateV26(id),...next}}
-function applyAnswerStateV26(root,q,chosen){if(isTextType(q.type)){const el=$(root+' .text-answer');if(el)el.value=(chosen||[]).join('；');return}$$(root+' input').forEach(input=>{input.checked=(chosen||[]).includes(input.value)});$$(root+' .option').forEach(o=>o.classList.toggle('selected',o.querySelector('input').checked))}
+function applyAnswerStateV26(root,q,chosen){if(isMultiBlankQuestionV58914(q)){$$(root+' .multi-blank-answer-input-v58914').forEach((input,index)=>{input.value=String((chosen||[])[index]||'')});return}if(isTextType(q.type)){const el=$(root+' .text-answer');if(el)el.value=(chosen||[]).join('；');return}$$(root+' input').forEach(input=>{input.checked=(chosen||[]).includes(input.value)});$$(root+' .option').forEach(o=>o.classList.toggle('selected',o.querySelector('input').checked))}
+function bindPracticeBlankDraftV58914(q,key,stateValue){if(!isMultiBlankQuestionV58914(q)||stateValue.answered||stateValue.revealed)return;$$('#practice-card .multi-blank-answer-input-v58914').forEach(input=>{input.oninput=()=>setPracticeAnswerStateV26(key,{chosen:multiBlankAnswerV58914('#practice-card')})})}
 function renderPracticeNavV26(){const buttons=(practice.items||[]).map((item,i)=>{const q=practiceQuestionV8916(item),st=getPracticeAnswerStateV26(practiceItemKeyV8916(item)),cls=[i===practice.idx?'current':'',st.answered?'done':'',st.correct===true?'ok':st.correct===false?'bad':'',isFavoriteV27(q.id,practiceItemBankIdV8916(item))?'favorite':''].filter(Boolean).join(' ');return `<button type="button" class="${cls}" data-practice-jump="${i}" title="第${i+1}题">${i+1}</button>`}).join('');return `<div id="practice-nav-v26" class="practice-nav-v26"><b>答题卡</b><div class="practice-nav-grid-v26">${buttons}</div></div>`}
-function submitPractice(item,reveal){const q=practiceQuestionV8916(item),key=practiceItemKeyV8916(item);const chosen=collectAnswer('#practice-card',q);if(!chosen.length&&!reveal){$('#p-feedback').innerHTML='<div class="feedback warn">请先作答，再提交。</div>';return}if(q.type==='short'){showSubjectiveFeedback(item,chosen,reveal);return}const ok=!reveal&&sameAnswerForQuestion(q,chosen,q.answer);if(!reveal)recordPracticeAnswer(item,chosen,ok);else setPracticeAnswerStateV26(key,{chosen,revealed:true,correct:null});markOptions('#practice-card',q,chosen);showAnsweredStateV26(q,getPracticeAnswerStateV26(key));refreshPracticeStatsV30();saveSilent();renderStats()}
-function showAnsweredStateV26(q,st){markOptions('#practice-card',q,st.chosen||[]);$('#p-feedback').innerHTML=`<div class="feedback ${st.revealed?'warn':st.correct?'ok':'bad'}">${st.revealed?'已显示参考答案':st.correct?'✓ 回答正确':'✕ 这题要再看一遍'}｜你的答案：${esc((st.chosen||[]).join('；')||'未作答')}｜参考答案：${esc(q.answer.join('；'))}${q.analysis?'<br>解析：'+renderQuestionContent(q.analysis):''}</div>`;const sub=$('#p-submit'),rev=$('#p-reveal');if(sub)sub.disabled=true;if(rev)rev.disabled=true}
+function submitPractice(item,reveal){const q=practiceQuestionV8916(item),key=practiceItemKeyV8916(item);const chosen=collectAnswer('#practice-card',q);if(!hasAnswerValueV58914(chosen)&&!reveal){$('#p-feedback').innerHTML='<div class="feedback warn">请先作答，再提交。</div>';return}if(q.type==='short'){showSubjectiveFeedback(item,chosen,reveal);return}const ok=!reveal&&sameAnswerForQuestion(q,chosen,q.answer);if(!reveal)recordPracticeAnswer(item,chosen,ok);else setPracticeAnswerStateV26(key,{chosen,revealed:true,correct:null});markOptions('#practice-card',q,chosen);showAnsweredStateV26(q,getPracticeAnswerStateV26(key));refreshPracticeStatsV30();saveSilent();renderStats()}
+function showAnsweredStateV26(q,st){markOptions('#practice-card',q,st.chosen||[]);$('#p-feedback').innerHTML=`<div class="feedback ${st.revealed?'warn':st.correct?'ok':'bad'}"><b>${st.revealed?'已显示参考答案':st.correct?'✓ 回答正确':'✕ 这题要再看一遍'}</b>${isMultiBlankQuestionV58914(q)?renderMultiBlankComparisonV58914(q.blankAnswers,st.chosen||[],true):'｜'+feedbackAnswerHtmlV58914(q,st.chosen||[])}${q.analysis?'<br>解析：'+renderQuestionContent(q.analysis):''}</div>`;const sub=$('#p-submit'),rev=$('#p-reveal');if(sub)sub.disabled=true;if(rev)rev.disabled=true}
 function showSubjectiveFeedback(item,chosen,reveal){const q=practiceQuestionV8916(item),key=practiceItemKeyV8916(item),user=chosen.join('；')||'未填写';setPracticeAnswerStateV26(key,{chosen,revealed:!!reveal});$('#p-feedback').innerHTML=`<div class="feedback warn">你的作答：${esc(user)}<br>参考答案：${esc(q.answer.join('；')||'未提供')}${q.analysis?'<br>解析：'+renderQuestionContent(q.analysis):''}<br><div class="actions"><button class="primary" id="p-self-right">判为正确</button><button class="danger" id="p-self-wrong">判为错误</button></div></div>`;$('#p-submit').disabled=true;$('#p-reveal').disabled=true;$('#p-self-right').onclick=()=>{recordPracticeAnswer(item,chosen,true);$('#p-self-right').disabled=true;$('#p-self-wrong').disabled=true;saveSilent();renderStats();renderPracticeQuestion()};$('#p-self-wrong').onclick=()=>{recordPracticeAnswer(item,chosen,false);$('#p-self-right').disabled=true;$('#p-self-wrong').disabled=true;saveSilent();renderStats();renderPracticeQuestion()}}
 function recordPracticeAnswer(item,chosen,ok){const q=practiceQuestionV8916(item),key=practiceItemKeyV8916(item),bid=practiceItemBankIdV8916(item);const current=getPracticeAnswerStateV26(key);if(current.answered)return;practice.answered++;if(ok){practice.correct++;markRight(q.id,bid)}else{practice.wrong++;addWrong(q.id,bid)}setPracticeAnswerStateV26(key,{chosen:[...chosen],answered:true,revealed:false,correct:!!ok,answeredAt:now()});practice.details.push(makeAnswerDetail(item,chosen,ok,scoreOf(q),scoreOf(q)))}
 function getFavoriteIdsV27(bid=activeBank().id){state.favorites=state.favorites||{};return Array.isArray(state.favorites[bid])?state.favorites[bid]:[];}
@@ -6109,7 +6205,7 @@ function buildNativeInteropStateV24(exportedBanks){
       const fallbackQuestion=(d.nativeQuestion&&typeof d.nativeQuestion==='object'?d.nativeQuestion:null)||found||{
         id:qid||makeId('record_q',idx),number:String(idx+1),type:toNativeQuestionType(d.type||'short'),question:d.question||'',options:[],answer:Array.isArray(d.answer)?d.answer:[],analysis:'',category:d.category||'',images:[]
       };
-      return {question:fallbackQuestion,userAnswer:Array.isArray(d.chosen)?d.chosen:[],correct:!!d.correct,answerText:d.nativeAnswerText!=null?String(d.nativeAnswerText):(Array.isArray(d.answer)?d.answer.join(' / '):String(d.answer||'')),earnedScore:d.nativeEarnedScore!==undefined?d.nativeEarnedScore:(d.score??null),maxScore:d.nativeMaxScore!==undefined?d.nativeMaxScore:(d.fullScore??null),autoScored:d.autoScored!==false,sourceBankId:d.sourceBankId||bid||null,sourceBankName:d.sourceBankName||bank?.name||''};
+      const nativeQuestion=serializeQuestionForCrossExportV53(fallbackQuestion);const userAnswer=Array.isArray(d.userAnswer)?d.userAnswer:(Array.isArray(d.chosen)?d.chosen:[]);const userBlankAnswers=Array.isArray(d.userBlankAnswers)?d.userBlankAnswers:(isMultiBlankQuestionV58914(fallbackQuestion)?userAnswer:[]);const result={question:nativeQuestion,userAnswer:[...userAnswer],correct:!!d.correct,answerText:d.nativeAnswerText!=null?String(d.nativeAnswerText):(Array.isArray(d.answer)?d.answer.join(' / '):String(d.answer||'')),earnedScore:d.nativeEarnedScore!==undefined?d.nativeEarnedScore:(d.score??null),maxScore:d.nativeMaxScore!==undefined?d.nativeMaxScore:(d.fullScore??null),autoScored:d.autoScored!==false,sourceBankId:d.sourceBankId||bid||null,sourceBankName:d.sourceBankName||bank?.name||''};if(userBlankAnswers.length||isMultiBlankQuestionV58914(fallbackQuestion))result.userBlankAnswers=[...userBlankAnswers];return result;
     });
     return {id:r.id||makeId('rec'),bankId:bid||null,bankName:r.bankName||bank?.name||'',source:r.nativeSource||'web',title:r.nativeTitle||r.name||r.mode||'练习',scopeType:r.scopeType||null,scopeName:r.scopeName||null,total:Number(r.total||questionResults.length||0),correct:Number(r.correct||0),timestamp:parseCrossPlatformTimeV24(r.date||r.timestamp,Date.now()),durationSeconds:Number(r.duration||0)||null,autoSubmitted:!!r.autoSubmitted,startedAt:r.startedAt?parseCrossPlatformTimeV24(r.startedAt,null):null,earnedScore:r.nativeEarnedScore!==undefined?r.nativeEarnedScore:(r.score??null),totalScore:r.nativeTotalScore!==undefined?r.nativeTotalScore:(r.totalScore??null),questionResults};
   });
@@ -6159,7 +6255,7 @@ function extractNativeFavoriteMetaV24(nativeEntries){const meta={};(Array.isArra
 function splitNativeAnswerTextV24(text){const s=String(text||'').trim();if(!s)return[];return s.split(/\s*(?:\/|；|;)\s*/).map(x=>x.trim()).filter(Boolean)}
 function convertNativeRecordsToWebV24(nativeEntries){
   return (Array.isArray(nativeEntries)?nativeEntries:[]).map(r=>{
-    const details=(r.questionResults||[]).map((qr,idx)=>{const q=qr.question||{};const earned=qr.earnedScore;const max=qr.maxScore;return {questionId:q.id||'',question:q.question||'',type:normalizeWebQuestionType(q.type)||String(q.type||'').toLowerCase(),category:q.category||'',chosen:Array.isArray(qr.userAnswer)?qr.userAnswer:[],answer:Array.isArray(q.answer)&&q.answer.length?q.answer:splitNativeAnswerTextV24(qr.answerText),correct:!!qr.correct,score:earned==null?(qr.correct?1:0):Number(earned),fullScore:max==null?1:Number(max),nativeEarnedScore:earned??null,nativeMaxScore:max??null,nativeAnswerText:qr.answerText??'',autoScored:qr.autoScored!==false,sourceBankId:qr.sourceBankId||r.bankId||'',sourceBankName:qr.sourceBankName||r.bankName||'',time:''}});
+    const details=(r.questionResults||[]).map((qr,idx)=>{const q=qr.question||{};const earned=qr.earnedScore;const max=qr.maxScore;const blankAnswers=normalizeBlankAnswersV58914(q.blankAnswers);const userAnswer=Array.isArray(qr.userAnswer)?qr.userAnswer.map(value=>String(value??'')):[];const userBlankAnswers=Array.isArray(qr.userBlankAnswers)?qr.userBlankAnswers.map(value=>String(value??'')):(blankAnswers.length?[...userAnswer]:[]);const detail={questionId:q.id||'',question:q.question||'',type:normalizeWebQuestionType(q.type)||String(q.type||'').toLowerCase(),category:q.category||'',chosen:userBlankAnswers.length?[...userBlankAnswers]:[...userAnswer],userAnswer:[...userAnswer],answer:Array.isArray(q.answer)&&q.answer.length?q.answer:splitNativeAnswerTextV24(qr.answerText),correct:!!qr.correct,score:earned==null?(qr.correct?1:0):Number(earned),fullScore:max==null?1:Number(max),nativeEarnedScore:earned??null,nativeMaxScore:max??null,nativeAnswerText:qr.answerText??'',autoScored:qr.autoScored!==false,sourceBankId:qr.sourceBankId||r.bankId||'',sourceBankName:qr.sourceBankName||r.bankName||'',time:''};if(blankAnswers.length)detail.blankAnswers=cloneBlankAnswersV58914(blankAnswers);if(userBlankAnswers.length||blankAnswers.length)detail.userBlankAnswers=[...userBlankAnswers];return detail});
     const total=Number(r.total||details.length||0),correct=Number(r.correct||details.filter(d=>d.correct).length||0);
     details.forEach((d,i)=>{const qr=(r.questionResults||[])[i];if(qr&&qr.question)d.nativeQuestion=qr.question});return {id:r.id||makeId('rec'),mode:r.title||r.source||'练习',nativeTitle:r.title||'',nativeSource:r.source||'',bankId:r.bankId||'',bankName:r.bankName||'',scopeType:r.scopeType||null,scopeName:r.scopeName||null,date:crossTimeToIsoV24(r.timestamp)||now(),total,correct,wrong:Math.max(0,total-correct),answered:total,accuracy:total>0?Math.round(correct/total*100):0,duration:Number(r.durationSeconds||0),score:r.earnedScore==null?0:Number(r.earnedScore),totalScore:r.totalScore==null?0:Number(r.totalScore),nativeEarnedScore:r.earnedScore??null,nativeTotalScore:r.totalScore??null,passScore:null,passed:null,details,autoSubmitted:!!r.autoSubmitted,startedAt:r.startedAt?crossTimeToIsoV24(r.startedAt):''};
   });
@@ -6340,14 +6436,14 @@ function renderExamPaper(){
   bindExamAnswerCardV30();
   bindFocusRailToggleV34();
   $$('#exam-card .option').forEach(opt=>{opt.onclick=()=>setTimeout(()=>{const box=opt.closest('.exam-q');const id=box.dataset.qid;exam.answers[id]=selectedKeys(`[data-qid="${CSS.escape(id)}"]`);box.querySelectorAll('.option').forEach(o=>o.classList.toggle('selected',o.querySelector('input').checked));refreshExamAnswerCardV30();},0)});
-  $$('#exam-card .text-answer').forEach(el=>{el.oninput=()=>{const box=el.closest('.exam-q');if(box){exam.answers[box.dataset.qid]=el.value.trim()?[el.value.trim()]:[];refreshExamAnswerCardV30();}}});
+  $$('#exam-card .text-answer').forEach(el=>{el.oninput=()=>{const box=el.closest('.exam-q');if(box){const q=exam.items.find(item=>String(item.id)===String(box.dataset.qid));if(q)exam.answers[box.dataset.qid]=collectTextAnswerFromElementV58914(box,q);refreshExamAnswerCardV30();}}});
 }
-function examAnsweredCountV30(){return (exam.items||[]).filter(q=>((exam.answers||{})[q.id]||[]).length).length;}
+function examAnsweredCountV30(){return (exam.items||[]).filter(q=>hasAnswerValueV58914((exam.answers||{})[q.id]||[])).length;}
 function renderExamAnswerCardV30(){
   const total=(exam.items||[]).length;
   const answered=examAnsweredCountV30();
   const remain=Math.max(0,total-answered);
-  const buttons=(exam.items||[]).map((q,i)=>{const done=((exam.answers||{})[q.id]||[]).length>0;return `<button type="button" class="${done?'answered':''}" data-exam-jump="${i}" title="第${i+1}题">${i+1}</button>`}).join('');
+  const buttons=(exam.items||[]).map((q,i)=>{const done=hasAnswerValueV58914((exam.answers||{})[q.id]||[]);return `<button type="button" class="${done?'answered':''}" data-exam-jump="${i}" title="第${i+1}题">${i+1}</button>`}).join('');
   return `<div id="exam-answer-card-v30" class="exam-answer-card-v30"><div class="exam-answer-card-head-v30"><div><b>答题卡</b><span>已答 ${answered} / ${total}，未答 ${remain}</span></div><div class="exam-answer-mini-stats-v30"><span>进度</span><b>${total?Math.round(answered/total*100):0}%</b></div><button class="rail-hide-btn-v34" data-rail-toggle-v34="exam" type="button" title="隐藏答题卡">隐藏</button></div><div class="exam-nav-grid-v30">${buttons}</div><button class="rail-show-btn-v34" data-rail-toggle-v34="exam" type="button" title="显示答题卡">答题卡</button></div>`;
 }
 function refreshExamAnswerCardV30(){
@@ -6397,13 +6493,13 @@ function submitExam(auto){
   if(exam.submitted)return;
   collectExamTextAnswers();exam.submitted=true;clearInterval(exam.timer);let got=0,total=0,correct=0;const details=[];const byType={};
   exam.items.forEach(q=>{const sc=scoreOf(q);total+=sc;const ans=exam.answers[q.id]||[];const ok=sameAnswerForQuestion(q,ans,q.answer);if(ok){got+=sc;correct++} addWrongOnExam(q.id,!ok);details.push(makeAnswerDetail(q,ans,ok,sc,sc));const k=q.type||'single';byType[k]=byType[k]||{total:0,correct:0,score:0,fullScore:0};byType[k].total++;if(ok)byType[k].correct++;byType[k].score+=ok?sc:0;byType[k].fullScore+=sc;});
-  const acc=Math.round(correct/exam.items.length*100);const rec={id:makeId('rec','exam'),name:exam.name||'模拟考试',mode:'考试',bankId:activeBank().id,bankName:activeBank().name,total:exam.items.length,answered:Object.keys(exam.answers).length,correct,wrong:exam.items.length-correct,accuracy:acc,score:got,totalScore:total,passScore:exam.passScore,passed:got>=Number(exam.passScore||0),autoSubmitted:!!auto,date:now(),duration:Math.round((Date.now()-exam.start)/1000),details,byType};
+  const acc=Math.round(correct/exam.items.length*100);const rec={id:makeId('rec','exam'),name:exam.name||'模拟考试',mode:'考试',bankId:activeBank().id,bankName:activeBank().name,total:exam.items.length,answered:examAnsweredCountV30(),correct,wrong:exam.items.length-correct,accuracy:acc,score:got,totalScore:total,passScore:exam.passScore,passed:got>=Number(exam.passScore||0),autoSubmitted:!!auto,date:now(),duration:Math.round((Date.now()-exam.start)/1000),details,byType};
   state.records.unshift(rec);saveSilent();$('#submit-exam-btn').disabled=true;$('#exam-timer').textContent=auto?'已自动交卷':'已交卷';renderExamResult(rec);renderAll();
 }
 function renderExamResult(rec){
   const typeRows=Object.entries(rec.byType||{}).map(([t,v])=>`<tr><td>${label(t)}</td><td>${v.correct}/${v.total}</td><td>${Number(v.score.toFixed? v.score.toFixed(1):v.score)}/${v.fullScore}</td></tr>`).join('');
   let html=`<div class="exam-focus-head"><div><b>考试结果</b><span>${esc(rec.name||'模拟考试')}</span></div><div class="exam-head-actions"><button class="primary focus-mini-btn" id="exam-back-setup" type="button">返回考试设置</button></div></div><div class="score-card"><div class="metric"><span>得分</span><b>${rec.score}/${rec.totalScore}</b></div><div class="metric"><span>结果</span><b>${rec.passed?'合格':'未合格'}</b></div><div class="metric"><span>正确率</span><b>${rec.accuracy}%</b></div><div class="metric"><span>用时</span><b>${rec.duration}秒</b></div></div><div class="notice ${rec.passed?'ok':'warn'}">${esc(rec.name||'模拟考试')}：及格线 ${rec.passScore} 分，${rec.autoSubmitted?'系统已自动交卷。':'已交卷。'}</div>${typeRows?`<div class="table-wrap"><table><thead><tr><th>题型</th><th>正确</th><th>得分</th></tr></thead><tbody>${typeRows}</tbody></table></div>`:''}`;
-  exam.items.forEach((q,i)=>{const ans=exam.answers[q.id]||[];html+=`<div class="exam-q" data-result-qid="${esc(q.id)}">${questionHtml(q,true,i+1)}<div class="feedback ${sameAnswerForQuestion(q,ans,q.answer)?'ok':'bad'}">你的答案：${esc(ans.join('；')||'未作答')}｜参考答案：${esc(q.answer.join('；'))}${q.analysis?'<br>解析：'+renderQuestionContent(q.analysis):''}</div></div>`});
+  exam.items.forEach((q,i)=>{const ans=exam.answers[q.id]||[];html+=`<div class="exam-q" data-result-qid="${esc(q.id)}">${questionHtml(q,true,i+1)}<div class="feedback ${sameAnswerForQuestion(q,ans,q.answer)?'ok':'bad'}">${feedbackAnswerHtmlV58914(q,ans)}${q.analysis?'<br>解析：'+renderQuestionContent(q.analysis):''}</div></div>`});
   $('#exam-card').innerHTML=html;
   $('#exam-back-setup').onclick=()=>exitExamFocus();
   exam.items.forEach(q=>markOptions(`#exam-card [data-result-qid="${CSS.escape(q.id)}"]`,q,exam.answers[q.id]||[]));
