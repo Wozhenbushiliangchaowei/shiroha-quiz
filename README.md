@@ -381,7 +381,7 @@ apps/android/app/build/outputs/
 
 ## 参与贡献 / 提交反馈
 
-欢迎通过 Issue 提交，仓库提供了 **Bug 报告** 和 **功能建议** 两种模板：
+欢迎通过 [Issue](https://github.com/reiqr/shiroha-quiz/issues/new/choose) 提交，仓库提供了 **Bug 报告** 和 **功能建议** 两种模板：
 
 - Bug 反馈
 - 题库格式兼容问题
