@@ -3089,6 +3089,13 @@ object QuizRepository {
         return studyRecords.firstOrNull { it.id == recordId }
     }
 
+    fun deleteStudyRecord(recordId: String): Boolean {
+        if (recordId.isBlank()) return false
+        val removed = studyRecords.removeAll { record -> record.id == recordId }
+        if (removed) persist()
+        return removed
+    }
+
     fun clearAllLocalData(context: Context) {
         appContext = context.applicationContext
         banks.clear()

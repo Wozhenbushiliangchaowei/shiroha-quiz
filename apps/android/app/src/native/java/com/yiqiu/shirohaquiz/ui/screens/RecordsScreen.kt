@@ -8,12 +8,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Undo
-import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,6 +35,7 @@ import com.yiqiu.shirohaquiz.ui.components.ActionPillButton
 import com.yiqiu.shirohaquiz.ui.components.EmptyStateIllustration
 import com.yiqiu.shirohaquiz.ui.components.GlassCard
 import com.yiqiu.shirohaquiz.ui.components.IllustrationHeroCard
+import com.yiqiu.shirohaquiz.ui.components.ShirohaDangerConfirmDialog
 import com.yiqiu.shirohaquiz.ui.components.ShirohaHeader
 import com.yiqiu.shirohaquiz.ui.components.StatusChip
 import com.yiqiu.shirohaquiz.ui.theme.ShirohaSpacing
@@ -40,23 +43,25 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private enum class RecordListFilter(val label: String) {
-    ALL("全部记录"),
-    WRONG_ONLY("只看错题")
-}
-
 @Composable
 fun RecordsScreen(
     onBack: () -> Unit,
     onOpenRecord: (String) -> Unit = {}
 ) {
     val records = QuizRepository.studyRecords.toList()
-    var filter by remember { mutableStateOf(RecordListFilter.ALL) }
-    val filteredRecords = remember(records, filter) {
-        when (filter) {
-            RecordListFilter.ALL -> records
-            RecordListFilter.WRONG_ONLY -> records.filter { record -> (record.total - record.correct) > 0 }
-        }
+    var pendingDeleteRecord by remember { mutableStateOf<StudyRecord?>(null) }
+
+    pendingDeleteRecord?.let { targetRecord ->
+        ShirohaDangerConfirmDialog(
+            title = "删除这条学习记录？",
+            message = "删除后无法恢复，但不会影响题库、错题本和收藏夹。",
+            confirmText = "删除",
+            onDismiss = { pendingDeleteRecord = null },
+            onConfirm = {
+                QuizRepository.deleteStudyRecord(targetRecord.id)
+                pendingDeleteRecord = null
+            }
+        )
     }
 
     Column(
@@ -96,47 +101,12 @@ fun RecordsScreen(
             imageSize = 88.dp
         )
 
-        GlassCard {
-            Text(
-                text = "记录筛选",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
+        records.forEach { record ->
+            RecordCard(
+                record = record,
+                onClick = { onOpenRecord(record.id) },
+                onDelete = { pendingDeleteRecord = record }
             )
-            Spacer(Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                RecordListFilter.entries.forEach { item ->
-                    ActionPillButton(
-                        icon = if (item == RecordListFilter.WRONG_ONLY) Icons.Rounded.Close else Icons.Rounded.CheckCircle,
-                        text = item.label,
-                        primary = filter == item,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(44.dp),
-                        fillWidthContent = true,
-                        onClick = { filter = item }
-                    )
-                }
-            }
-        }
-
-        if (filteredRecords.isEmpty()) {
-            GlassCard {
-                Text(
-                    text = "当前筛选下没有错题记录。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        } else {
-            filteredRecords.forEach { record ->
-                RecordCard(
-                    record = record,
-                    onClick = { onOpenRecord(record.id) }
-                )
-            }
         }
     }
 }
@@ -144,7 +114,8 @@ fun RecordsScreen(
 @Composable
 private fun RecordCard(
     record: StudyRecord,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onDelete: () -> Unit
 ) {
     val wrong = (record.total - record.correct).coerceAtLeast(0)
     val accuracy = if (record.total == 0) 0 else record.correct * 100 / record.total
@@ -173,12 +144,27 @@ private fun RecordCard(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Text(
-                text = formatRecordTime(finishTime),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = formatRecordTime(finishTime),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.DeleteOutline,
+                        contentDescription = "删除记录",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
 
         if (meaningfulTitle != null) {
@@ -195,15 +181,23 @@ private fun RecordCard(
             Spacer(Modifier.height(10.dp))
         }
 
+        Text(
+            text = "${record.total} 题 · 对 ${record.correct} · 错 $wrong",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(Modifier.height(6.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "${record.total} 题 · 对 ${record.correct} · 错 $wrong",
+                text = footerText,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
@@ -222,14 +216,6 @@ private fun RecordCard(
                 maxLines = 1
             )
         }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = footerText,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
     }
 }
 
