@@ -378,7 +378,7 @@ apps/android/app/build/outputs/
 
 ## 参与贡献
 
-欢迎通过 Issue 提交：
+欢迎通过 Issue 提交，仓库提供了 **Bug 报告** 和 **功能建议** 两种模板：
 
 - Bug 反馈
 - 题库格式兼容问题
@@ -386,6 +386,8 @@ apps/android/app/build/outputs/
 - UI / 交互优化建议
 - Android 适配问题
 - 文档补充建议
+
+> 提交 Issue 时请选择正确的平台（原生 Android App / Web 版），方便快速定位问题。
 
 详见：
 
