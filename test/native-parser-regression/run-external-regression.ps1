@@ -70,7 +70,7 @@ Write-Host "Cleaning generated actual outputs: $ActualDir"
 
 Push-Location (Join-Path $RegressionDir 'runner')
 try {
-    Invoke-CheckedCommand -FilePath $Gradle -Arguments @('--offline', 'run')
+    Invoke-CheckedCommand -FilePath $Gradle -Arguments @('run')
 }
 finally {
     Pop-Location
