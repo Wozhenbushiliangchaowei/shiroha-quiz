@@ -208,6 +208,80 @@
       "sample": "samples/29_inline_multi_blank_guard.txt",
       "expected": "expected/29_inline_multi_blank_guard.json",
       "risk": "版本、型号、参数、简称、单括号及答案冲突不得被强制转换为多空填空题"
+    },
+    {
+      "id": "30_answer_table_format",
+      "mode": "dual",
+      "questionSample": "samples/30_answer_table_questions.txt",
+      "answerSample": "samples/30_answer_table_answers.txt",
+      "expected": "expected/30_answer_table_format.json",
+      "risk": "题号/答案双行表格式应合并到对应题目，不能把答案表当成题目"
+    },
+    {
+      "id": "31_range_answer_format",
+      "mode": "dual",
+      "questionSample": "samples/31_range_answer_questions.txt",
+      "answerSample": "samples/31_range_answer_answers.txt",
+      "expected": "expected/31_range_answer_format.json",
+      "risk": "范围答案格式 1-5: A B C D E 应按题号展开并合并"
+    },
+    {
+      "id": "32_compact_answer_line",
+      "mode": "dual",
+      "questionSample": "samples/32_compact_answer_questions.txt",
+      "answerSample": "samples/32_compact_answer_answers.txt",
+      "expected": "expected/32_compact_answer_line.json",
+      "risk": "紧凑答案行 1A2B3C4D5A 应识别为答案区而不是题干"
+    },
+    {
+      "id": "33_inline_multi_answer",
+      "mode": "dual",
+      "questionSample": "samples/33_inline_multi_answer_questions.txt",
+      "answerSample": "samples/33_inline_multi_answer_answers.txt",
+      "expected": "expected/33_inline_multi_answer.json",
+      "risk": "行内多条目答案 1.A 2.B 3.C 应逐题合并"
+    },
+    {
+      "id": "34_solution_choice_extraction",
+      "mode": "single",
+      "sample": "samples/34_solution_choice_extraction.txt",
+      "expected": "expected/34_solution_choice_extraction.json",
+      "risk": "分析/解析末尾的“选B”应提取为答案，不能只保留为解析文本"
+    },
+    {
+      "id": "36_plain_option_inference",
+      "mode": "single",
+      "sample": "samples/36_plain_option_inference.txt",
+      "expected": "expected/36_plain_option_inference.json",
+      "risk": "无 A/B/C/D 标记但结构明显的短行选项应能推断为选项"
+    },
+    {
+      "id": "37_interview_question_number",
+      "mode": "single",
+      "sample": "samples/37_interview_question_number.txt",
+      "expected": "expected/37_interview_question_number.json",
+      "risk": "问题一/问题二等中文题号应分块为主观题"
+    },
+    {
+      "id": "38_glued_question_number",
+      "mode": "single",
+      "sample": "samples/38_glued_question_number.txt",
+      "expected": "expected/38_glued_question_number.json",
+      "risk": "数字与题干粘连时仍应识别题号边界"
+    },
+    {
+      "id": "39_subjective_answer_continuation",
+      "mode": "single",
+      "sample": "samples/39_subjective_answer_continuation.txt",
+      "expected": "expected/39_subjective_answer_continuation.json",
+      "risk": "主观题参考答案中的 1/2/3 分项不能误切成新题"
+    },
+    {
+      "id": "40_material_intro_skip",
+      "mode": "single",
+      "sample": "samples/40_material_intro_skip.txt",
+      "expected": "expected/40_material_intro_skip.json",
+      "risk": "材料一/材料二导语不能被误判为独立题目"
     }
   ]
 }

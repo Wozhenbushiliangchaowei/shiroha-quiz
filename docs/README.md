@@ -7,7 +7,7 @@
 - [用户文档](README.md#docs-user)
 - [原生 Android](README.md#docs-native)
 - [工程与发布](README.md#docs-engineering)
-- [当前计划](README.md#docs-plan)
+- [计划归档参考](README.md#docs-plan)
 - [归档文档](README.md#docs-archive)
 
 <a name="docs-user"></a>
@@ -43,7 +43,9 @@
 
 <a name="docs-plan"></a>
 
-## 当前计划
+## 计划归档参考
+
+这里收录仍有参考价值的阶段计划，但不代表当前必须按这些旧计划执行。
 
 - [后续功能开发计划 33-34](./archive/native/Shiroha_Quiz_后续功能开发计划33-34.md)
 

@@ -55,7 +55,8 @@ function Invoke-PythonCompare {
 }
 
 if (Test-Path $ActualDir) {
-    Remove-Item -LiteralPath (Join-Path $ActualDir '*.json') -Force -ErrorAction SilentlyContinue
+    Get-ChildItem -LiteralPath $ActualDir -Filter '*.json' -File -ErrorAction SilentlyContinue |
+        Remove-Item -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath (Join-Path $ActualDir 'REGRESSION_REPORT.md') -Force -ErrorAction SilentlyContinue
 }
 else {

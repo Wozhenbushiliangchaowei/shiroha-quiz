@@ -33,10 +33,28 @@ object QuestionBlockSplitter {
         """^\s*(\d{1,2})(?=[\u4e00-\u9fa5A-Za-z])(.*)$"""
     )
     private val answerLineRegex = Regex("""^\s*(?:[\[【]\s*)?(?:本题)?(?:答案|正确答案|参考答案|标准答案|参考要点|参考思路|答题要点|答题思路|作答思路|评分要点|参考作答|答)(?:\s*[\]】])?\s*(?:[:：]|为)?""")
+    private val subjectiveAnswerMarkerWithTailRegex = Regex(
+        """^\s*(?:(?:[\[【]\s*(?:答案|正确答案|参考答案|标准答案|参考要点|参考思路|答题要点|答题思路|作答思路|评分要点|参考作答|答)\s*[\]】]\s*)|(?:(?:本题)?(?:答案|正确答案|参考答案|标准答案|参考要点|参考思路|答题要点|答题思路|作答思路|评分要点|参考作答|答)\s*(?:[:：]|为)\s*))(.*)$"""
+    )
+    private val bareSubjectiveAnswerMarkerRegex = Regex(
+        """^\s*(?:本题)?(?:答案|正确答案|参考答案|标准答案|参考要点|参考思路|答题要点|答题思路|作答思路|评分要点|参考作答|答)\s*$"""
+    )
     private val analysisLineRegex = Regex("""^\s*(?:(?:[\[【]\s*(?:答案解析|解题思路|解析思路|解题分析|参考解析|详解|分析|理由|解答|解析|说明)\s*[\]】]\s*)|(?:(?:答案解析|解题思路|解析思路|解题分析|参考解析|详解|分析|理由|解答|解析|说明)\s*[:：]\s*))""")
     private val embeddedAnswerRegex = Regex("""[\[【]\s*(?:答案|正确答案|参考答案|标准答案|参考要点|参考思路|答题要点|答题思路|作答思路|评分要点|参考作答)\s*(?:[:：]|[\]】])|(?:本题)?(?:答案|正确答案|参考答案|标准答案)\s*为""")
     private val subjectiveQuestionTypeRegex = Regex("""(?:[【\[（(〔〖《]\s*)?(?:简答题|问答题|面试题|结构化面试题|公考面试题|公务员面试题|材料分析题|案例分析题|名词解释|论述题|综合题)(?:\s*[】\]）)〕〗》])?""")
-    private val subjectiveContinuationMarkerRegex = Regex("""^\s*(?:参考要点|参考思路|答题要点|答题思路|作答思路|评分要点|参考作答)\s*[:：]""")
+    private val subjectiveContinuationMarkerRegex = Regex("""^\s*(?:参考答案|标准答案|参考要点|参考思路|答题要点|答题思路|作答思路|评分要点|参考作答)\s*[:：]?\s*$""")
+    private val subjectiveQuestionCueRegex = Regex(
+        """(?:请)?(?:简述|简答|论述|阐述|概括|分析|说明|解释|谈谈|指出|列举|试述|为什么|如何|有何|哪些|什么是|提出.{0,12}(?:措施|建议|对策)|说明.{0,12}(?:原因|意义|作用|原则|内容))"""
+    )
+    private val subjectiveAnswerIntroRegex = Regex(
+        """(?:如下|以下|主要包括|包括以下|可概括为|分为以下|有以下|要点|措施|原则|原因|意义|作用)\s*[:：]?$"""
+    )
+    private val numberedSubjectiveItemRegex = Regex(
+        """^\s*(?:(\d{1,2})\s*[.、．:：)）]|[（(]\s*(\d{1,2})\s*[)）])\s*(.+)$"""
+    )
+    private val chineseSubjectiveItemRegex = Regex(
+        """^\s*(?:[一二三四五六七八九十]+\s*[、.．:：)）]|(?:首先|其次|再次|最后|第一|第二|第三|第四|第五|一是|二是|三是|四是|五是))"""
+    )
     private val materialIntroLineRegex = Regex(
         """^\s*(?:[一二三四五六七八九十0-9]+[、.．:：]\s*)?根据(?:以下|下列|上述|给定)?(?:资料|材料|图表|统计资料).*回答\s*\d{1,4}\s*[~～\-—至到]\s*\d{1,4}\s*题\s*[。.:：]?\s*$"""
     )
@@ -87,21 +105,34 @@ object QuestionBlockSplitter {
             currentForcedType = currentSectionForcedType
         }
 
-        text.lineSequence().forEach { rawLine ->
+        val sourceLines = text.lineSequence().toList()
+        sourceLines.forEachIndexed { lineIndex, rawLine ->
             val line = rawLine.trim()
-            if (line.isBlank()) return@forEach
-            if (currentNumber == null && isPureFrontMatterLine(line)) return@forEach
+            if (line.isBlank()) return@forEachIndexed
+            if (currentNumber == null && isPureFrontMatterLine(line)) return@forEachIndexed
             if (isMaterialIntroLine(line)) {
                 flush()
                 skippingMaterialIntro = true
-                return@forEach
+                return@forEachIndexed
+            }
+            if (
+                currentNumber != null &&
+                shouldAttachSubjectiveAnswerMarkerToCurrentBlock(
+                    currentLines = currentLines,
+                    line = line,
+                    forcedType = currentForcedType
+                )
+            ) {
+                currentLines += line
+                skippingMaterialIntro = false
+                return@forEachIndexed
             }
             SectionTitleParser.parse(line)?.let { section ->
                 if (section.isAnswerSection) {
                     flush()
                     skippingGlobalAnswerSection = true
                     skippingMaterialIntro = false
-                    return@forEach
+                    return@forEachIndexed
                 }
                 flush()
                 currentCategory = section.title.ifBlank { category }
@@ -109,14 +140,25 @@ object QuestionBlockSplitter {
                 currentForcedType = currentSectionForcedType
                 skippingGlobalAnswerSection = false
                 skippingMaterialIntro = false
-                return@forEach
+                return@forEachIndexed
             }
 
-            if (skippingGlobalAnswerSection) return@forEach
+            if (skippingGlobalAnswerSection) return@forEachIndexed
 
-            if (currentNumber != null && shouldKeepAsSubjectiveAnswerContinuation(currentLines, line)) {
+            val activeNumber = currentNumber
+            if (
+                activeNumber != null &&
+                shouldKeepAsSubjectiveAnswerContinuation(
+                    currentLines = currentLines,
+                    line = line,
+                    currentNumber = activeNumber,
+                    forcedType = currentForcedType,
+                    sourceLines = sourceLines,
+                    lineIndex = lineIndex
+                )
+            ) {
                 currentLines += line
-                return@forEach
+                return@forEachIndexed
             }
 
             val explicitStart = parseQuestionStart(line)
@@ -129,11 +171,11 @@ object QuestionBlockSplitter {
                     val remainder = explicitStart.remainder.trim()
                     if (remainder.isNotBlank()) add(remainder)
                 }
-                return@forEach
+                return@forEachIndexed
             }
 
             if (currentNumber == null) {
-                if (skippingMaterialIntro) return@forEach
+                if (skippingMaterialIntro) return@forEachIndexed
                 if (allowUnnumbered && (isLikelyUnnumberedQuestionLine(line) || isLikelyTypedQuestionLine(line, forcedType))) {
                     syntheticNumber += 1
                     currentNumber = syntheticNumber.toString()
@@ -141,7 +183,7 @@ object QuestionBlockSplitter {
                     currentForcedType = typed?.type ?: currentSectionForcedType
                     currentLines += typed?.remainder?.takeIf { it.isNotBlank() } ?: line
                 }
-                return@forEach
+                return@forEachIndexed
             }
 
             if (allowUnnumbered && shouldStartNextSyntheticBlock(currentLines, line)) {
@@ -257,13 +299,135 @@ object QuestionBlockSplitter {
             materialIntroLineRegex.containsMatchIn(line)
     }
 
-    private fun shouldKeepAsSubjectiveAnswerContinuation(currentLines: List<String>, line: String): Boolean {
-        if (!hasSubjectiveContinuationContext(currentLines)) return false
+    private data class NumberedSubjectiveItem(
+        val number: Int,
+        val content: String
+    )
+
+    private fun shouldKeepAsSubjectiveAnswerContinuation(
+        currentLines: List<String>,
+        line: String,
+        currentNumber: String,
+        forcedType: QuestionType?,
+        sourceLines: List<String>,
+        lineIndex: Int
+    ): Boolean {
+        val answerMarkerIndex = findSubjectiveAnswerMarkerIndex(currentLines, forcedType)
+        if (answerMarkerIndex < 0) return false
         if (looksLikeTypedQuestionStart(line)) return false
         if (Regex("""^\s*\d{2,4}\s*[.、．:：)）]""").containsMatchIn(line)) return false
         if (Regex("""^\s*(?:问题|题目|第\s*[一二三四五六七八九十百0-9]+\s*(?:题|问|道题|个问题))""").containsMatchIn(line)) return false
-        return Regex("""^\s*(?:\d{1,2}|[一二三四五六七八九十])\s*[.、．)）]""").containsMatchIn(line) ||
-            Regex("""^\s*(?:首先|其次|再次|最后|第一|第二|第三|第四|一是|二是|三是|四是)""").containsMatchIn(line)
+
+        val numberedItem = parseNumberedSubjectiveItem(line)
+        if (numberedItem == null) {
+            return chineseSubjectiveItemRegex.containsMatchIn(line)
+        }
+
+        val previousItemNumbers = currentLines
+            .drop(answerMarkerIndex + 1)
+            .mapNotNull(::parseNumberedSubjectiveItem)
+            .map { it.number }
+        val lastItemNumber = previousItemNumbers.lastOrNull()
+        val currentQuestionIndex = currentNumber.substringBefore('-').toIntOrNull()
+        val isExpectedOfficialNext = currentQuestionIndex != null && numberedItem.number == currentQuestionIndex + 1
+        val rollsBackFromAnswerItems = lastItemNumber != null && numberedItem.number <= lastItemNumber
+        val breaksAnswerItemSequence = lastItemNumber != null && numberedItem.number != lastItemNumber + 1
+        val hasBlankSeparator = sourceLines
+            .subList((lineIndex - 2).coerceAtLeast(0), lineIndex)
+            .any { it.isBlank() }
+        val looksLikeQuestion = looksLikeSubjectiveQuestionRemainder(numberedItem.content)
+        val hasOwnAnswerMarkerAhead = hasAnswerMarkerAheadBeforeNextQuestion(sourceLines, lineIndex)
+
+        val isHighConfidenceNextQuestion = isExpectedOfficialNext && (
+            hasOwnAnswerMarkerAhead ||
+                (rollsBackFromAnswerItems && looksLikeQuestion) ||
+                (breaksAnswerItemSequence && looksLikeQuestion) ||
+                (lastItemNumber == null && hasBlankSeparator && looksLikeQuestion)
+            )
+        if (isHighConfidenceNextQuestion) return false
+
+        if (lastItemNumber == null) {
+            return numberedItem.number == 1 || !isExpectedOfficialNext
+        }
+        if (numberedItem.number == lastItemNumber + 1) return true
+        if (numberedItem.number > lastItemNumber) return true
+        return !isExpectedOfficialNext
+    }
+
+    private fun shouldAttachSubjectiveAnswerMarkerToCurrentBlock(
+        currentLines: List<String>,
+        line: String,
+        forcedType: QuestionType?
+    ): Boolean {
+        if (currentLines.isEmpty()) return false
+        if (extractSubjectiveAnswerMarkerTail(line) == null) return false
+        if (currentLines.any { CompactQuestionRepair.isStandardOptionLine(it) }) return false
+        if (forcedType == QuestionType.SHORT) return true
+
+        val questionPart = currentLines.joinToString("\n")
+        if (subjectiveQuestionTypeRegex.containsMatchIn(questionPart)) return true
+        return subjectiveQuestionCueRegex.containsMatchIn(questionPart)
+    }
+
+    private fun findSubjectiveAnswerMarkerIndex(
+        currentLines: List<String>,
+        forcedType: QuestionType?
+    ): Int {
+        val markerIndex = currentLines.indexOfLast { extractSubjectiveAnswerMarkerTail(it) != null }
+        if (markerIndex < 0) return -1
+        if (forcedType == QuestionType.SHORT) return markerIndex
+
+        val questionPart = currentLines.take(markerIndex).joinToString("\n")
+        if (subjectiveQuestionTypeRegex.containsMatchIn(questionPart)) return markerIndex
+        if (subjectiveQuestionCueRegex.containsMatchIn(questionPart)) return markerIndex
+
+        val markerLine = currentLines[markerIndex]
+        if (subjectiveContinuationMarkerRegex.containsMatchIn(markerLine)) return markerIndex
+        val markerTail = extractSubjectiveAnswerMarkerTail(markerLine).orEmpty()
+        if (markerTail.isBlank() || subjectiveAnswerIntroRegex.containsMatchIn(markerTail)) return markerIndex
+        return -1
+    }
+
+    private fun extractSubjectiveAnswerMarkerTail(line: String): String? {
+        subjectiveAnswerMarkerWithTailRegex.find(line)?.let { match ->
+            return match.groupValues[1].trim()
+        }
+        if (bareSubjectiveAnswerMarkerRegex.matches(line)) return ""
+        return null
+    }
+
+    private fun parseNumberedSubjectiveItem(line: String): NumberedSubjectiveItem? {
+        val match = numberedSubjectiveItemRegex.find(line) ?: return null
+        val number = match.groupValues[1].ifBlank { match.groupValues[2] }.toIntOrNull() ?: return null
+        val content = match.groupValues[3].trim()
+        if (content.isBlank()) return null
+        return NumberedSubjectiveItem(number = number, content = content)
+    }
+
+    private fun looksLikeSubjectiveQuestionRemainder(content: String): Boolean {
+        val normalized = content.trim()
+        if (normalized.isBlank()) return false
+        if (normalized.endsWith("？") || normalized.endsWith("?")) return true
+        return Regex(
+            """^(?:请|简述|简答|论述|阐述|概括|分析|说明|解释|谈谈|指出|列举|试述|为什么|如何|结合|根据|什么是|有哪些|有何|提出)"""
+        ).containsMatchIn(normalized)
+    }
+
+    private fun hasAnswerMarkerAheadBeforeNextQuestion(
+        sourceLines: List<String>,
+        currentLineIndex: Int
+    ): Boolean {
+        var nonBlankCount = 0
+        for (index in (currentLineIndex + 1) until sourceLines.size) {
+            val nextLine = sourceLines[index].trim()
+            if (nextLine.isBlank()) continue
+            nonBlankCount += 1
+            if (extractSubjectiveAnswerMarkerTail(nextLine) != null) return true
+            if (parseQuestionStart(nextLine) != null) return false
+            if (SectionTitleParser.isSectionHeading(nextLine)) return false
+            if (nonBlankCount >= 12) return false
+        }
+        return false
     }
 
     private fun hasSubjectiveContinuationContext(currentLines: List<String>): Boolean {
