@@ -204,7 +204,7 @@ fun ImportScreen(
         val hardCount = resultWithExtraWarnings.warnings.count { it.level == WarningLevel.ERROR }
         val softCount = resultWithExtraWarnings.warnings.count { it.level == WarningLevel.WARNING }
         statusText = "已完成${if (useDualImport) "双文件" else "原生"}解析：${resultWithExtraWarnings.questions.size} 题，硬错误 $hardCount 条，可确认提示 $softCount 条。"
-        isStatusWarn = hardCount > 0
+        isStatusWarn = hardCount > 0 || softCount > 0
     }
 
     fun syncEditableQuestions(
@@ -704,6 +704,7 @@ fun ImportScreen(
                             useDualImport = false
                             clearParsedResult()
                             statusText = "已切换到标准导入。"
+                            isStatusWarn = false
                         }
                     }
                 )
@@ -719,6 +720,7 @@ fun ImportScreen(
                             useDualImport = true
                             clearParsedResult()
                             statusText = "已切换到双文件导入。先选择题库文件，再选择答案文件。"
+                            isStatusWarn = false
                         }
                     }
                 )
@@ -1948,10 +1950,47 @@ private fun NativeImportSummary(
             if (aiAnalysisAppliedCount > 0) StatusChip("AI已补解析：$aiAnalysisAppliedCount", selected = true)
         }
         if (result.warnings.isNotEmpty()) {
-            Spacer(Modifier.height(14.dp))
-            result.warnings.take(6).forEach { warning ->
-                NoticeCard(importWarningSummaryText(warning, result.questions))
+            val (globalWarnings, questionWarnings) = result.warnings.partition { warning ->
+                result.questions.none { question -> warningBelongsToQuestion(warning, question) }
+            }
+            if (globalWarnings.isNotEmpty()) {
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    text = "全局提示",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
                 Spacer(Modifier.height(8.dp))
+                globalWarnings.forEach { warning ->
+                    NoticeCard(
+                        text = importWarningSummaryText(warning, result.questions),
+                        warning = warning.level != WarningLevel.NORMAL
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
+            if (questionWarnings.isNotEmpty()) {
+                Spacer(Modifier.height(if (globalWarnings.isEmpty()) 14.dp else 6.dp))
+                Text(
+                    text = "题目提示",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.height(8.dp))
+                questionWarnings.take(6).forEach { warning ->
+                    NoticeCard(
+                        text = importWarningSummaryText(warning, result.questions),
+                        warning = warning.level != WarningLevel.NORMAL
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+                if (questionWarnings.size > 6) {
+                    Text(
+                        text = "另有 ${questionWarnings.size - 6} 条题目提示，请在沉浸核对中查看对应题目。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
         if (result.diagnostics.notes.isNotEmpty()) {
@@ -3000,8 +3039,10 @@ private fun importWarningSummaryText(warning: ImportWarning, questions: List<Que
                 append(category)
             }
         }
+    } else if (warning.questionNumber.isNullOrBlank()) {
+        "全局提示"
     } else {
-        "第 ${warning.questionNumber ?: "-"} 题"
+        "第 ${warning.questionNumber} 题"
     }
     return "$prefix：${displayImportWarningMessage(warning.message)}"
 }
