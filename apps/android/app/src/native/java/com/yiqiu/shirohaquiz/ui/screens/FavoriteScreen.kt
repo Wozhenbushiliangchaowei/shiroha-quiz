@@ -365,11 +365,9 @@ private fun FavoriteQuestionPreview(entry: FavoriteQuestionEntry) {
         }
         Spacer(Modifier.height(12.dp))
         Text(
-            text = "${entry.question.number}. ${entry.question.question}",
+            text = favoriteQuestionDisplayTitle(entry),
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 4,
-            overflow = TextOverflow.Ellipsis
+            fontWeight = FontWeight.SemiBold
         )
         Spacer(Modifier.height(10.dp))
         Text(
@@ -387,6 +385,27 @@ private fun FavoriteQuestionPreview(entry: FavoriteQuestionEntry) {
     }
 }
 
+private fun favoriteQuestionDisplayTitle(entry: FavoriteQuestionEntry): String {
+    val number = entry.question.number.trim()
+    val stem = entry.question.question.trim()
+    val safeNumber = number.takeUnless(::isSuspiciousFavoriteQuestionNumber)
+
+    return when {
+        safeNumber.isNullOrBlank() -> stem
+        stem.isBlank() -> safeNumber
+        else -> "$safeNumber. $stem"
+    }
+}
+
+private fun isSuspiciousFavoriteQuestionNumber(number: String): Boolean {
+    if (number.isBlank()) return false
+    val compact = number.replace(Regex("""\s+"""), "")
+    if (compact.length > 24) return true
+
+    val numericParts = Regex("""\d+""").findAll(compact).count()
+    val dashCount = compact.count { it == '-' || it == '－' || it == '—' || it == '–' }
+    return numericParts >= 4 && dashCount >= 3
+}
 private fun typeLabel(type: QuestionType): String = when (type) {
     QuestionType.SINGLE -> "单选题"
     QuestionType.MULTIPLE -> "多选题"

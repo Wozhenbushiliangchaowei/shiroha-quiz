@@ -774,11 +774,9 @@ private fun WrongQuestionPreview(entry: WrongQuestionEntry) {
         }
         Spacer(Modifier.height(12.dp))
         Text(
-            text = "${entry.question.number}. ${entry.question.question}",
+            text = wrongQuestionDisplayTitle(entry),
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 4,
-            overflow = TextOverflow.Ellipsis
+            fontWeight = FontWeight.SemiBold
         )
         Spacer(Modifier.height(10.dp))
         Text(
@@ -832,6 +830,28 @@ private fun WrongQuestionPreview(entry: WrongQuestionEntry) {
             )
         }
     }
+}
+
+private fun wrongQuestionDisplayTitle(entry: WrongQuestionEntry): String {
+    val number = entry.question.number.trim()
+    val stem = entry.question.question.trim()
+    val safeNumber = number.takeUnless(::isSuspiciousWrongQuestionNumber)
+
+    return when {
+        safeNumber.isNullOrBlank() -> stem
+        stem.isBlank() -> safeNumber
+        else -> "$safeNumber. $stem"
+    }
+}
+
+private fun isSuspiciousWrongQuestionNumber(number: String): Boolean {
+    if (number.isBlank()) return false
+    val compact = number.replace(Regex("""\s+"""), "")
+    if (compact.length > 24) return true
+
+    val numericParts = Regex("""\d+""").findAll(compact).count()
+    val dashCount = compact.count { it == '-' || it == '－' || it == '—' || it == '–' }
+    return numericParts >= 4 && dashCount >= 3
 }
 
 private fun List<WrongQuestionEntry>.filterBy(filter: WrongBookFilter): List<WrongQuestionEntry> {
