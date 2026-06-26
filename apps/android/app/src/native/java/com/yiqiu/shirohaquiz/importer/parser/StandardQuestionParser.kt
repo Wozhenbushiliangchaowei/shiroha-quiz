@@ -27,6 +27,9 @@ object StandardQuestionParser {
     private val subjectiveAnswerLineRegex = Regex(
         """^\s*(?:(?:[\[【]\s*(?:$answerLabelPattern)\s*[\]】]\s*)|(?:(?:本题)?(?:$answerLabelPattern)$answerSeparatorPattern))(.*)$"""
     )
+    private val inlineAnswerAnalysisRegex = Regex(
+        """^\s*(?:(?:[\[【]\s*(?:$answerLabelPattern)\s*[\]】]\s*)|(?:(?:本题)?(?:$answerLabelPattern)$answerSeparatorPattern))(.+?)\s*(?:(?:[\[【]\s*(?:$analysisLabelPattern)\s*[\]】]\s*[:：]?\s*)|(?:(?:$analysisLabelPattern)\s*[:：]\s*))(.*)\s*$"""
+    )
 
     private data class OptionMarker(val key: String, val markerStart: Int, val contentStart: Int)
     private data class LineAnswerExtraction(val cleanLine: String, val answerText: String? = null, val analysisText: String? = null)
@@ -75,6 +78,8 @@ object StandardQuestionParser {
             }
             if (extracted.analysisText?.isNotBlank() == true) {
                 analysisLines += extracted.analysisText.trim()
+                inAnalysis = true
+                inSubjectiveAnswer = false
             }
 
             when {
@@ -239,12 +244,20 @@ object StandardQuestionParser {
             clean = clean.removeRange(match.range).trim()
         }
 
-        val answerWithAnalysis = Regex(
-            """^\s*(?:(?:[\[【]\s*(?:$answerLabelPattern)\s*[\]】]\s*)|(?:(?:本题)?(?:$answerLabelPattern)$answerSeparatorPattern))(.+?)(?:\s*(?:$analysisLabelPattern)\s*[:：]\s*(.*))?\s*$"""
-        ).find(clean)
-        if (answerWithAnalysis != null) {
-            answer = answer ?: answerWithAnalysis.groupValues[1].trim()
-            analysis = answerWithAnalysis.groupValues.getOrElse(2) { "" }.trim().ifBlank { null }
+        inlineAnswerAnalysisRegex.find(clean)?.let { match ->
+            answer = answer ?: match.groupValues[1].trim()
+            analysis = match.groupValues.getOrElse(2) { "" }.trim().ifBlank { null }
+            clean = ""
+        }
+
+        if (clean.isNotBlank()) {
+            val answerWithAnalysis = Regex(
+                """^\s*(?:(?:[\[【]\s*(?:$answerLabelPattern)\s*[\]】]\s*)|(?:(?:本题)?(?:$answerLabelPattern)$answerSeparatorPattern))(.+?)(?:\s*(?:$analysisLabelPattern)\s*[:：]\s*(.*))?\s*$"""
+            ).find(clean)
+            if (answerWithAnalysis != null) {
+                answer = answer ?: answerWithAnalysis.groupValues[1].trim()
+                analysis = answerWithAnalysis.groupValues.getOrElse(2) { "" }.trim().ifBlank { null }
+            }
         }
 
         return LineAnswerExtraction(cleanLine = clean, answerText = answer, analysisText = analysis)
