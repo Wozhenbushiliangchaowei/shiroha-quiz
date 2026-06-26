@@ -366,7 +366,7 @@ cd test\native-parser-regression
 
 最新版本请以 [GitHub Releases](https://github.com/reiqr/shiroha-quiz/releases) 为准。当前仓库文档记录的主要版本线为：
 
-- 统一发布版：**v2.6.3-beta**
+- 统一发布版：**v2.6.4-beta**
 - Web 版：**v0.7.6-alpha**
 - 原生 Compose 版：**v0.9.2-native**
 
