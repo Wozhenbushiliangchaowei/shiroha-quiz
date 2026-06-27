@@ -56,6 +56,7 @@ import com.yiqiu.shirohaquiz.ui.components.EmptyStateIllustration
 import com.yiqiu.shirohaquiz.ui.components.GlassCard
 import com.yiqiu.shirohaquiz.ui.components.IllustrationHeroCard
 import com.yiqiu.shirohaquiz.ui.components.NoticeCard
+import com.yiqiu.shirohaquiz.ui.components.QuestionImagesBlock
 import com.yiqiu.shirohaquiz.ui.components.ShirohaDangerConfirmDialog
 import com.yiqiu.shirohaquiz.ui.components.ShirohaHeader
 import com.yiqiu.shirohaquiz.ui.components.StatusChip
@@ -778,6 +779,25 @@ private fun WrongQuestionPreview(entry: WrongQuestionEntry) {
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold
         )
+        if (entry.question.images.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            QuestionImagesBlock(
+                images = entry.question.images,
+                maxPreviewHeight = 260.dp,
+                showMeta = false
+            )
+        }
+        if (entry.question.options.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            entry.question.options.forEach { option ->
+                Text(
+                    text = "${option.key}. ${option.text}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(Modifier.height(4.dp))
+            }
+        }
         Spacer(Modifier.height(10.dp))
         Text(
             text = if (MultiBlankSupport.hasStructuredAnswers(entry.question)) {

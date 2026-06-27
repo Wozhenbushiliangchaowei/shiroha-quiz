@@ -47,6 +47,7 @@ import com.yiqiu.shirohaquiz.state.QuizRepository
 import com.yiqiu.shirohaquiz.ui.components.ActionPillButton
 import com.yiqiu.shirohaquiz.ui.components.GlassCard
 import com.yiqiu.shirohaquiz.ui.components.NoticeCard
+import com.yiqiu.shirohaquiz.ui.components.QuestionImagesBlock
 import com.yiqiu.shirohaquiz.ui.components.ShirohaHeader
 import com.yiqiu.shirohaquiz.ui.components.StatusChip
 import com.yiqiu.shirohaquiz.ui.components.shirohaNoRippleClickable
@@ -369,6 +370,25 @@ private fun FavoriteQuestionPreview(entry: FavoriteQuestionEntry) {
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold
         )
+        if (entry.question.images.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            QuestionImagesBlock(
+                images = entry.question.images,
+                maxPreviewHeight = 260.dp,
+                showMeta = false
+            )
+        }
+        if (entry.question.options.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            entry.question.options.forEach { option ->
+                Text(
+                    text = "${option.key}. ${option.text}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(Modifier.height(4.dp))
+            }
+        }
         Spacer(Modifier.height(10.dp))
         Text(
             text = "正确答案：${entry.question.answer.joinToString(" / ").ifBlank { "未识别答案" }}",
