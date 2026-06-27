@@ -75,6 +75,7 @@ run-regression.ps1
 
 # MathJax temp extraction
 .tmp-mathjax/
+.tmp-ocr-check/
 
 # Private / personal
 docs/copyright/

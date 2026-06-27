@@ -8,7 +8,7 @@ const LEGACY_KEYS=[];
 const CLEAR_STORAGE_KEYS=['shiroha_quiz_state','uquiz_state_v8_c1'];
 const TYPE_LABEL={single:'单选题',multiple:'多选题',multi:'多选题',judge:'判断题',blank:'填空题',short:'简答题',short_answer:'简答题'};
 const state=loadState();
-let importCache=[];let tableImportResultV49=null;let importWarnings=[];let importReport='';let importDiagnostics=null;let importPreviewFilter='priority';let importSelected=new Set();let bankEditSessionV45=null;let exportBankSelectedV23=new Set();let backupImportModeV23='merge';let practice={items:[],idx:0,answered:0,correct:0,wrong:0,start:0};let exam={items:[],answers:{},start:0,timer:null,deadline:0,submitted:false};let editBlankGroupsV58914=[];let editMultiBlankEnabledV58914=false;
+let importCache=[];let tableImportResultV49=null;let importWarnings=[];let importReport='';let importDiagnostics=null;let importPreviewFilter='priority';let importSelected=new Set();let bankEditSessionV45=null;let exportBankSelectedV23=new Set();let backupImportModeV23='merge';let ocrImportState={file:null,text:'',pages:[],running:false};let practice={items:[],idx:0,answered:0,correct:0,wrong:0,start:0};let exam={items:[],answers:{},start:0,timer:null,deadline:0,submitted:false};let editBlankGroupsV58914=[];let editMultiBlankEnabledV58914=false;
 const $=s=>document.querySelector(s);const $$=s=>[...document.querySelectorAll(s)];
 function ensureDefaultBank(){if(!state.banks.length&&!state.settings?.suppressDefaultBank) state.banks.push(defaultBank()); if(!state.activeBankId) state.activeBankId=state.banks[0]?.id||'';}
 function blankState(){return {schemaVersion:CURRENT_SCHEMA_VERSION,banks:[],activeBankId:'',wrongBook:{},favorites:{},records:[],settings:{},crossPlatformMeta:{favoriteQuestions:{}}}}
@@ -144,7 +144,7 @@ function bindNav(){ $$('.nav').forEach(btn=>btn.onclick=()=>{
 });}
 function bindEvents(){
 $('#active-bank-select').onchange=e=>{setPracticeBankScopeV8916(e.target.value,true);saveSilent();renderAll()};const importNameInput=$('#import-bank-name');if(importNameInput)importNameInput.addEventListener('input',()=>{importNameInput.dataset.autoName='0'});$('#save-all-btn').onclick=saveState;
-$('#load-sample-btn').onclick=loadSample;$('#import-file').onchange=readImportFile;$('#parse-import-btn').onclick=parseImport;$('#confirm-import-btn').onclick=confirmImport;const findReplaceBtnV51=$('#find-replace-import-btn');if(findReplaceBtnV51)findReplaceBtnV51.onclick=openImportFindReplaceV51;const dualConfirmBtn=$('#dual-confirm-import-btn');if(dualConfirmBtn)dualConfirmBtn.onclick=confirmImport;const importTextAreaV49=$('#import-text');if(importTextAreaV49)importTextAreaV49.addEventListener('input',()=>{if(importTextAreaV49.dataset.tableImportV49==='1'){tableImportResultV49=null;delete importTextAreaV49.dataset.tableImportV49;}});$('#clear-import-btn').onclick=()=>{$('#import-text').value='';if($('#import-text'))delete $('#import-text').dataset.tableImportV49;tableImportResultV49=null;importCache=[];importSelected.clear();importDiagnostics=null;renderImportPreview([])};
+$('#load-sample-btn').onclick=loadSample;$('#import-file').onchange=readImportFile;$('#parse-import-btn').onclick=parseImport;$('#confirm-import-btn').onclick=confirmImport;const findReplaceBtnV51=$('#find-replace-import-btn');if(findReplaceBtnV51)findReplaceBtnV51.onclick=openImportFindReplaceV51;const dualConfirmBtn=$('#dual-confirm-import-btn');if(dualConfirmBtn)dualConfirmBtn.onclick=confirmImport;const importTextAreaV49=$('#import-text');if(importTextAreaV49)importTextAreaV49.addEventListener('input',()=>{if(importTextAreaV49.dataset.tableImportV49==='1'){tableImportResultV49=null;delete importTextAreaV49.dataset.tableImportV49;}});const ocrStartBtn=$('#ocr-start-btn');if(ocrStartBtn)ocrStartBtn.onclick=startPdfOcrImport;const ocrUseBtn=$('#ocr-use-text-btn');if(ocrUseBtn)ocrUseBtn.onclick=applyOcrTextToImport;const ocrCopyBtn=$('#ocr-copy-btn');if(ocrCopyBtn)ocrCopyBtn.onclick=copyOcrText;const ocrDocxBtn=$('#ocr-download-docx-btn');if(ocrDocxBtn)ocrDocxBtn.onclick=downloadOcrDocx;$('#clear-import-btn').onclick=()=>{$('#import-text').value='';if($('#import-text'))delete $('#import-text').dataset.tableImportV49;tableImportResultV49=null;importCache=[];importSelected.clear();importDiagnostics=null;resetOcrImportState();renderImportPreview([])};
 $('#dual-question-file').onchange=e=>readDualFile(e,'question');$('#dual-answer-file').onchange=e=>readDualFile(e,'answer');$('#parse-dual-import-btn').onclick=parseDualImport;$('#clear-dual-import-btn').onclick=()=>{$('#dual-question-text').value='';$('#dual-answer-text').value='';importCache=[];importSelected.clear();importDiagnostics=null;renderImportPreview([])};$('#dual-load-sample-btn').onclick=loadDualSample;$('#revalidate-import-btn').onclick=()=>renderImportPreview(importCache);
 $('#edit-close-btn').onclick=closeEditModal;$('#edit-save-btn').onclick=saveEditQuestion;$('#edit-delete-btn').onclick=deleteEditQuestion;const pf=$('#import-preview-filter');if(pf)pf.onchange=e=>{importPreviewFilter=e.target.value;renderImportPreview(importCache)};const bid=$('#batch-delete-import-btn');if(bid)bid.onclick=batchDeleteImportSelected;const cis=$('#clear-import-selection-btn');if(cis)cis.onclick=()=>{importSelected.clear();renderImportPreview(importCache)};
 $('#dedupe-btn').onclick=dedupeActiveBank;$('#rename-bank-btn').onclick=renameActiveBank;$('#duplicate-bank-btn').onclick=duplicateActiveBank;$('#new-empty-bank-btn').onclick=newEmptyBank;$('#merge-bank-btn').onclick=mergeBankIntoActive;$('#bank-sort-mode').onchange=renderBankList;$('#start-practice-btn').onclick=startPractice;$('#reset-practice-btn').onclick=()=>{exitPracticeFocus();$('#practice-card').innerHTML='<div class="empty">选择条件后点击“开始练习”。</div>';practice={items:[],idx:0,answered:0,correct:0,wrong:0,start:0};$('#practice-progress').textContent='0 / 0';syncPracticeStartUiV58916(true)};
@@ -835,6 +835,7 @@ async function readImportFile(e){
   const file=e.target.files[0];
   if(!file)return;
   setImportBankNameFromFile(file.name);
+  setOcrImportSource(file);
   try{
     toast('正在读取文件，请稍候……','warn');
     if(isUnsupportedSpreadsheetFileV49(file))throw new Error('暂不支持 .xls / .xlsm，请在 Excel 或 WPS 中另存为 .xlsx 或 .csv 后导入');
@@ -849,6 +850,7 @@ async function readImportFile(e){
     if(textEl){textEl.value=text;delete textEl.dataset.tableImportV49;}
     toast(`文件读取完成：提取到 ${text.split(/\n+/).filter(Boolean).length} 行文本。请点击“开始识别”。`,'ok');
   }catch(err){
+    if(/\.pdf$/i.test(file.name||''))setOcrStatus('文字层提取失败：'+err.message+'。如果这是扫描件/图片型 PDF，可以尝试 OCR。','warn');
     toast('文件读取失败：'+err.message+'。可尝试复制文件内容粘贴到文本框。');
   }
 }
@@ -1592,7 +1594,7 @@ async function extractPdfText(file){
     const pdfjsLib=loaded&&loaded.lib;
     if(pdfjsLib&&pdfjsLib.getDocument){
       if(pdfjsLib.GlobalWorkerOptions)pdfjsLib.GlobalWorkerOptions.workerSrc=loaded.workerSrc;
-      const loadingTask=pdfjsLib.getDocument({data});
+      const loadingTask=pdfjsLib.getDocument(pdfDocumentOptions(data,loaded));
       const pdf=await loadingTask.promise;
       const pages=[];let extractedChars=0;
       for(let pageNo=1;pageNo<=pdf.numPages;pageNo++){
@@ -1620,18 +1622,180 @@ async function loadLocalPdfJs(){
   // v7: 混合 PDF.js 加载策略：本地最小版优先；本地缺失时 CDN；最后才降级轻量提取器。
   if(window.__pdfjsMixed)return window.__pdfjsMixed;
   const candidates=[
-    {mode:'本地 PDF.js',module:'./libs/pdf.min.mjs',worker:'./libs/pdf.worker.min.mjs'},
-    {mode:'CDN PDF.js/jsDelivr',module:'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.7.284/build/pdf.min.mjs',worker:'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.7.284/build/pdf.worker.min.mjs'},
-    {mode:'CDN PDF.js/unpkg',module:'https://unpkg.com/pdfjs-dist@5.7.284/build/pdf.min.mjs',worker:'https://unpkg.com/pdfjs-dist@5.7.284/build/pdf.worker.min.mjs'}
+    {mode:'本地 PDF.js',module:'./libs/pdf.min.mjs',worker:'./libs/pdf.worker.min.mjs',assetBase:'./libs/'},
+    {mode:'CDN PDF.js/jsDelivr',module:'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.7.284/build/pdf.min.mjs',worker:'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.7.284/build/pdf.worker.min.mjs',assetBase:'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.7.284/'},
+    {mode:'CDN PDF.js/unpkg',module:'https://unpkg.com/pdfjs-dist@5.7.284/build/pdf.min.mjs',worker:'https://unpkg.com/pdfjs-dist@5.7.284/build/pdf.worker.min.mjs',assetBase:'https://unpkg.com/pdfjs-dist@5.7.284/'}
   ];
   for(const c of candidates){
     try{
       const mod=await import(c.module);
-      window.__pdfjsMixed={lib:mod,workerSrc:c.worker,mode:c.mode};
+      window.__pdfjsMixed={lib:mod,workerSrc:c.worker,mode:c.mode,assetBase:c.assetBase};
       return window.__pdfjsMixed;
     }catch(e){warnDev('PDF.js 来源加载失败：'+c.mode,e)}
   }
   return null;
+}
+function pdfDocumentOptions(data,loaded){
+  const options={data};
+  if(loaded&&loaded.assetBase){
+    Object.assign(options,{
+      cMapUrl:loaded.assetBase+'cmaps/',
+      cMapPacked:true,
+      standardFontDataUrl:loaded.assetBase+'standard_fonts/',
+      iccUrl:loaded.assetBase+'iccs/',
+      wasmUrl:loaded.assetBase+'wasm/',
+      useWasm:true
+    });
+  }
+  return options;
+}
+function setOcrImportSource(file){
+  const isPdf=/\.pdf$/i.test(file?.name||'');
+  if(!isPdf){resetOcrImportState();return}
+  ocrImportState={file,text:'',pages:[],running:false};
+  const panel=$('#ocr-panel');
+  if(panel)panel.classList.remove('hidden');
+  const result=$('#ocr-result');if(result)result.value='';
+  setOcrButtonsEnabled(false);
+  setOcrStatus('已选择 PDF：'+(file.name||'未命名')+'。如果文字层提取失败，可点击“尝试 OCR 识别”。','warn');
+}
+function resetOcrImportState(){
+  ocrImportState={file:null,text:'',pages:[],running:false};
+  const panel=$('#ocr-panel');if(panel)panel.classList.add('hidden');
+  const result=$('#ocr-result');if(result)result.value='';
+  setOcrButtonsEnabled(false);
+}
+function setOcrStatus(msg,type='warn'){
+  const el=$('#ocr-status');
+  if(el){el.textContent=msg;el.className='notice '+(type==='ok'?'ok':type==='danger'?'danger':'warn')}
+}
+function setOcrButtonsEnabled(hasText){
+  const running=!!ocrImportState.running;
+  const start=$('#ocr-start-btn');if(start)start.disabled=running||!ocrImportState.file;
+  const use=$('#ocr-use-text-btn');if(use)use.disabled=running||!hasText;
+  const copy=$('#ocr-copy-btn');if(copy)copy.disabled=running||!hasText;
+  const docx=$('#ocr-download-docx-btn');if(docx)docx.disabled=running||!hasText;
+}
+async function loadScriptOnce(src,key){
+  const marker='__script_'+key;
+  if(window[marker])return window[marker];
+  window[marker]=new Promise((resolve,reject)=>{
+    const s=document.createElement('script');
+    s.src=src;
+    s.async=true;
+    s.onload=()=>resolve(true);
+    s.onerror=()=>reject(new Error('脚本加载失败：'+src));
+    document.head.appendChild(s);
+  });
+  return window[marker];
+}
+async function createOcrWorker(lang,logger){
+  const candidates=[
+    {name:'本地 Tesseract.js',script:'./libs/ocr/tesseract/tesseract.min.js',workerPath:'./libs/ocr/tesseract/worker.min.js',corePath:'./libs/ocr/core',langPath:'./libs/ocr/lang'},
+    {name:'CDN Tesseract.js/jsDelivr',script:'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js',workerPath:'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js',corePath:'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1',langPath:'https://tessdata.projectnaptha.com/4.0.0'}
+  ];
+  let lastErr=null;
+  for(const c of candidates){
+    try{
+      if(!window.Tesseract||c.name.startsWith('本地'))await loadScriptOnce(c.script,c.name.replace(/\W+/g,'_'));
+      if(!window.Tesseract||typeof window.Tesseract.createWorker!=='function')throw new Error('Tesseract.js 未初始化');
+      const worker=await window.Tesseract.createWorker(lang,1,{workerPath:c.workerPath,corePath:c.corePath,langPath:c.langPath,logger});
+      return {worker,mode:c.name};
+    }catch(err){
+      lastErr=err;
+      warnDev('OCR 来源加载失败：'+c.name,err);
+    }
+  }
+  throw lastErr||new Error('OCR 扩展加载失败');
+}
+async function startPdfOcrImport(){
+  const file=ocrImportState.file;
+  if(!file){setOcrStatus('请先选择一个 PDF 文件。','warn');return}
+  if(ocrImportState.running)return;
+  ocrImportState.running=true;
+  ocrImportState.text='';
+  ocrImportState.pages=[];
+  setOcrButtonsEnabled(false);
+  const resultEl=$('#ocr-result');if(resultEl)resultEl.value='';
+  let worker=null;
+  try{
+    const lang=$('#ocr-language')?.value||'chi_sim+eng';
+    const pageLimit=Math.max(1,Math.min(200,Number($('#ocr-page-limit')?.value||20)||20));
+    setOcrStatus('正在加载 PDF 与 OCR 扩展资源……','warn');
+    const loaded=await loadLocalPdfJs();
+    if(!loaded?.lib?.getDocument)throw new Error('PDF.js 不可用，无法把 PDF 页面渲染给 OCR');
+    const data=new Uint8Array(await file.arrayBuffer());
+    const pdf=await loaded.lib.getDocument(pdfDocumentOptions(data,loaded)).promise;
+    const maxPages=Math.min(pdf.numPages,pageLimit);
+    const created=await createOcrWorker(lang,m=>{
+      if(m&&m.status)setOcrStatus(`OCR ${m.status}${Number.isFinite(m.progress)?' '+Math.round(m.progress*100)+'%':''}`,'warn');
+    });
+    worker=created.worker;
+    const pages=[];
+    for(let pageNo=1;pageNo<=maxPages;pageNo++){
+      setOcrStatus(`正在识别第 ${pageNo} / ${maxPages} 页（${created.mode}）……`,'warn');
+      const canvas=await renderPdfPageToCanvas(pdf,pageNo,2);
+      const res=await worker.recognize(canvas);
+      const text=String(res?.data?.text||'').replace(/\r/g,'').trim();
+      const confidence=Number(res?.data?.confidence||0);
+      pages.push({page:pageNo,text,confidence});
+      canvas.width=1;canvas.height=1;
+      ocrImportState.pages=pages;
+      ocrImportState.text=formatOcrPages(pages);
+      if(resultEl)resultEl.value=ocrImportState.text;
+    }
+    if(pdf.numPages>maxPages)pages.push({page:maxPages+1,text:`已按页数限制停止。原 PDF 共 ${pdf.numPages} 页，如需继续请调高识别页数。`,confidence:0,notice:true});
+    ocrImportState.pages=pages;
+    ocrImportState.text=formatOcrPages(pages);
+    if(resultEl)resultEl.value=ocrImportState.text;
+    setOcrStatus(`OCR 完成：识别 ${maxPages} 页。请先核对文本，再填入导入文本或下载 DOCX。`,'ok');
+    toast('OCR 识别完成，可核对后继续导入或下载 DOCX。','ok','OCR 完成');
+  }catch(err){
+    setOcrStatus('OCR 失败：'+err.message,'danger');
+    toast('OCR 失败：'+err.message,'danger','OCR 失败');
+  }finally{
+    try{if(worker)await worker.terminate()}catch(e){warnDev('OCR worker 关闭失败',e)}
+    ocrImportState.running=false;
+    setOcrButtonsEnabled(!!ocrImportState.text);
+  }
+}
+async function renderPdfPageToCanvas(pdf,pageNo,scale=2){
+  const page=await pdf.getPage(pageNo);
+  const viewport=page.getViewport({scale});
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.ceil(viewport.width);
+  canvas.height=Math.ceil(viewport.height);
+  const ctx=canvas.getContext('2d',{alpha:false});
+  await page.render({canvasContext:ctx,viewport,background:'#ffffff'}).promise;
+  return canvas;
+}
+function formatOcrPages(pages){
+  return (pages||[]).map(p=>`【OCR第${p.page}页${p.confidence?`｜置信度 ${Math.round(p.confidence)}%`:''}】\n${p.text||''}`.trim()).join('\n\n').trim();
+}
+function currentOcrText(){
+  const fromBox=$('#ocr-result')?.value||'';
+  return String(fromBox||ocrImportState.text||'').trim();
+}
+function applyOcrTextToImport(){
+  const text=currentOcrText();
+  if(!text){setOcrStatus('没有可填入的 OCR 文本。','warn');return}
+  const textEl=$('#import-text');
+  if(textEl){textEl.value=text;delete textEl.dataset.tableImportV49;}
+  tableImportResultV49=null;
+  setOcrStatus('已填入导入文本。请检查内容后点击“开始识别”。','ok');
+}
+async function copyOcrText(){
+  const text=currentOcrText();
+  if(!text){setOcrStatus('没有可复制的 OCR 文本。','warn');return}
+  await copyTextV23(text,'已复制 OCR 文本。');
+}
+async function downloadOcrDocx(){
+  const text=currentOcrText();
+  if(!text){setOcrStatus('没有可下载的 OCR 文本。','warn');return}
+  const name=cleanImportBankNameFromFile(ocrImportState.file?.name||'OCR识别结果')+'_OCR.docx';
+  const blob=createOcrDocxBlob(text,ocrImportState.file?.name||'OCR识别结果');
+  downloadBlob(name,blob);
+  setOcrStatus('已生成 DOCX 下载文件。请打开后人工核对 OCR 结果。','ok');
 }
 async function extractPdfTextLite(bytes){
   const raw=latin1(bytes);
@@ -6589,6 +6753,79 @@ function download(name,text){
     try{const ok=window.ShirohaAndroid.saveJsonFile(String(name||'shiroha-quiz.json'),String(text||''));if(ok){toast('已调用系统保存文件。若未看到文件，请检查 Downloads 或使用复制备份文本。','ok');return}}catch(e){warnDev('Android 原生保存接口调用失败',e)}
   }
   const a=document.createElement('a');const url=URL.createObjectURL(new Blob([text],{type:'application/json;charset=utf-8'}));a.href=url;a.download=name;document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function downloadBlob(name,blob){
+  const a=document.createElement('a');
+  const url=URL.createObjectURL(blob);
+  a.href=url;
+  a.download=name||'download.bin';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function createOcrDocxBlob(text,sourceName){
+  const title='Shiroha Quiz OCR 识别结果';
+  const paragraphs=[
+    title,
+    '来源文件：'+(sourceName||'未命名 PDF'),
+    '说明：本文件由 OCR 自动识别生成，可能存在错字、漏字和段落错位，请人工核对后再用于题库整理。',
+    ''
+  ];
+  String(text||'').replace(/\r/g,'').split('\n').forEach(line=>paragraphs.push(line));
+  const body=paragraphs.map(docxParagraphXml).join('');
+  const documentXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+  const files=[
+    {name:'[Content_Types].xml',text:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`},
+    {name:'_rels/.rels',text:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`},
+    {name:'word/document.xml',text:documentXml}
+  ];
+  return new Blob([zipStoreFiles(files)],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+}
+function docxParagraphXml(line){
+  const text=String(line??'');
+  return `<w:p><w:r><w:t xml:space="preserve">${xmlEscape(text)}</w:t></w:r></w:p>`;
+}
+function xmlEscape(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[m]))}
+function zipStoreFiles(files){
+  const enc=new TextEncoder();
+  const localParts=[],centralParts=[];
+  let offset=0;
+  const now=zipDosTimeDate(new Date());
+  for(const f of files){
+    const nameBytes=enc.encode(f.name);
+    const data=f.data instanceof Uint8Array?f.data:enc.encode(String(f.text||''));
+    const crc=crc32(data);
+    const local=new Uint8Array(30+nameBytes.length);
+    const lv=new DataView(local.buffer);
+    lv.setUint32(0,0x04034b50,true);lv.setUint16(4,20,true);lv.setUint16(6,0,true);lv.setUint16(8,0,true);lv.setUint16(10,now.time,true);lv.setUint16(12,now.date,true);lv.setUint32(14,crc,true);lv.setUint32(18,data.length,true);lv.setUint32(22,data.length,true);lv.setUint16(26,nameBytes.length,true);lv.setUint16(28,0,true);
+    local.set(nameBytes,30);
+    localParts.push(local,data);
+    const central=new Uint8Array(46+nameBytes.length);
+    const cv=new DataView(central.buffer);
+    cv.setUint32(0,0x02014b50,true);cv.setUint16(4,20,true);cv.setUint16(6,20,true);cv.setUint16(8,0,true);cv.setUint16(10,0,true);cv.setUint16(12,now.time,true);cv.setUint16(14,now.date,true);cv.setUint32(16,crc,true);cv.setUint32(20,data.length,true);cv.setUint32(24,data.length,true);cv.setUint16(28,nameBytes.length,true);cv.setUint16(30,0,true);cv.setUint16(32,0,true);cv.setUint16(34,0,true);cv.setUint16(36,0,true);cv.setUint32(38,0,true);cv.setUint32(42,offset,true);
+    central.set(nameBytes,46);
+    centralParts.push(central);
+    offset+=local.length+data.length;
+  }
+  const centralSize=centralParts.reduce((n,p)=>n+p.length,0);
+  const eocd=new Uint8Array(22);
+  const ev=new DataView(eocd.buffer);
+  ev.setUint32(0,0x06054b50,true);ev.setUint16(4,0,true);ev.setUint16(6,0,true);ev.setUint16(8,files.length,true);ev.setUint16(10,files.length,true);ev.setUint32(12,centralSize,true);ev.setUint32(16,offset,true);ev.setUint16(20,0,true);
+  return new Blob([...localParts,...centralParts,eocd]);
+}
+function zipDosTimeDate(d){
+  const year=Math.max(1980,d.getFullYear());
+  return {time:(d.getHours()<<11)|(d.getMinutes()<<5)|Math.floor(d.getSeconds()/2),date:((year-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate()};
+}
+function crc32(bytes){
+  if(!crc32.table){
+    crc32.table=Array.from({length:256},(_,n)=>{let c=n;for(let k=0;k<8;k++)c=c&1?0xedb88320^(c>>>1):c>>>1;return c>>>0});
+  }
+  let c=0xffffffff;
+  for(const b of bytes)c=crc32.table[(c^b)&255]^(c>>>8);
+  return (c^0xffffffff)>>>0;
 }
 
 function backupMimeFromPathV24(path){const ext=String(path||'').split('.').pop().toLowerCase();return ({png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp',bmp:'image/bmp'})[ext]||'application/octet-stream'}
