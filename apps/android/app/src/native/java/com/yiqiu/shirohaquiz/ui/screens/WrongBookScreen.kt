@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
@@ -222,12 +224,16 @@ fun WrongBookScreen(
         )
     }
 
-    Column(
+    LazyColumn(
         modifier = Modifier
-            .verticalScroll(rememberScrollState())
             .padding(horizontal = ShirohaSpacing.Xl, vertical = ShirohaSpacing.Sm),
         verticalArrangement = Arrangement.spacedBy(ShirohaSpacing.Lg)
     ) {
+        item {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(ShirohaSpacing.Lg)
+            ) {
         ShirohaHeader(
             kicker = "Wrong Book",
             title = "错题本",
@@ -249,10 +255,10 @@ fun WrongBookScreen(
                     )
                 }
             )
-            return
         }
 
-        IllustrationHeroCard(
+        if (allWrongBook.isNotEmpty()) {
+            IllustrationHeroCard(
             title = "错题需要慢慢消化。",
             subtitle = "筛错题，集中复盘",
             imageRes = R.drawable.illus_wrongbook_hint_webp,
@@ -556,11 +562,20 @@ fun WrongBookScreen(
             }
         }
 
+            }
+            }
+        }
+
         if (wrongBook.isNotEmpty()) {
             if (filteredEntries.isEmpty()) {
-                GlassCard { NoticeCard("当前筛选下没有错题。") }
+                item {
+                    GlassCard { NoticeCard("当前筛选下没有错题。") }
+                }
             } else {
-                filteredEntries.forEach { entry ->
+                items(
+                    items = filteredEntries,
+                    key = { entry -> "${entry.bankId}#${entry.question.id}" }
+                ) { entry ->
                     WrongQuestionPreview(entry)
                 }
             }
@@ -767,7 +782,7 @@ private fun WrongQuestionPreview(entry: WrongQuestionEntry) {
         )
     }
 
-    GlassCard {
+    GlassCard(animated = false) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             StatusChip(displayWrongStatus(entry.status), selected = entry.status != WrongStatus.MASTERED.label)
             StatusChip(typeLabel(entry.question.type))

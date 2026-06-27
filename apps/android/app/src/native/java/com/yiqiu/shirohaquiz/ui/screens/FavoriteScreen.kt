@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -98,12 +100,16 @@ fun FavoriteScreen(
         )
     }
 
-    Column(
+    LazyColumn(
         modifier = Modifier
-            .verticalScroll(rememberScrollState())
             .padding(horizontal = ShirohaSpacing.Xl, vertical = ShirohaSpacing.Sm),
         verticalArrangement = Arrangement.spacedBy(ShirohaSpacing.Lg)
     ) {
+        item {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(ShirohaSpacing.Lg)
+            ) {
         ShirohaHeader(
             kicker = "Favorites",
             title = "收藏夹",
@@ -122,10 +128,10 @@ fun FavoriteScreen(
                     onClick = onBack
                 )
             }
-            return
         }
 
-        GlassCard {
+        if (favorites.isNotEmpty()) {
+            GlassCard {
             Text(
                 text = if (selectedBank == null) {
                     "收藏 ${favorites.size} 题"
@@ -221,13 +227,24 @@ fun FavoriteScreen(
             }
         }
 
-        if (visibleFavorites.isEmpty()) {
-            GlassCard {
-                NoticeCard("当前题库暂无收藏题。可以切换到其他题库或全部题库。")
             }
-        } else {
-            visibleFavorites.forEach { entry ->
-                FavoriteQuestionPreview(entry)
+            }
+        }
+
+        if (favorites.isNotEmpty()) {
+            if (visibleFavorites.isEmpty()) {
+                item {
+                    GlassCard {
+                        NoticeCard("当前题库暂无收藏题。可以切换到其他题库或全部题库。")
+                    }
+                }
+            } else {
+                items(
+                    items = visibleFavorites,
+                    key = { entry -> "${entry.bankId}#${entry.question.id}" }
+                ) { entry ->
+                    FavoriteQuestionPreview(entry)
+                }
             }
         }
     }
@@ -342,7 +359,7 @@ private fun FavoriteScopeOption(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FavoriteQuestionPreview(entry: FavoriteQuestionEntry) {
-    GlassCard {
+    GlassCard(animated = false) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Top

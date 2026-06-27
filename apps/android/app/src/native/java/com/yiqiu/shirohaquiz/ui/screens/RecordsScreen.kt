@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -117,12 +119,16 @@ fun RecordsScreen(
         )
     }
 
-    Column(
+    LazyColumn(
         modifier = Modifier
-            .verticalScroll(rememberScrollState())
             .padding(horizontal = ShirohaSpacing.Xl, vertical = ShirohaSpacing.Sm),
         verticalArrangement = Arrangement.spacedBy(ShirohaSpacing.Lg)
     ) {
+        item {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(ShirohaSpacing.Lg)
+            ) {
         ShirohaHeader(
             kicker = "Records",
             title = "学习记录",
@@ -144,10 +150,10 @@ fun RecordsScreen(
                     onClick = onBack
                 )
             }
-            return
         }
 
-        IllustrationHeroCard(
+        if (records.isNotEmpty()) {
+            IllustrationHeroCard(
             title = "学习记录会在这里慢慢积累",
             subtitle = "练习和考试都会收录到这里。",
             imageRes = R.drawable.illus_rest_state_webp,
@@ -210,17 +216,28 @@ fun RecordsScreen(
             }
         }
 
-        if (visibleRecords.isEmpty()) {
-            GlassCard {
-                NoticeCard("该题库暂无学习记录。可以切换到其他题库或全部记录。")
             }
-        } else {
-            visibleRecords.forEach { record ->
-                RecordCard(
-                    record = record,
-                    onClick = { onOpenRecord(record.id) },
-                    onDelete = { pendingDeleteRecord = record }
-                )
+            }
+        }
+
+        if (records.isNotEmpty()) {
+            if (visibleRecords.isEmpty()) {
+                item {
+                    GlassCard {
+                        NoticeCard("该题库暂无学习记录。可以切换到其他题库或全部记录。")
+                    }
+                }
+            } else {
+                items(
+                    items = visibleRecords,
+                    key = { record -> record.id }
+                ) { record ->
+                    RecordCard(
+                        record = record,
+                        onClick = { onOpenRecord(record.id) },
+                        onDelete = { pendingDeleteRecord = record }
+                    )
+                }
             }
         }
     }
@@ -367,7 +384,10 @@ private fun RecordCard(
     val meaningfulTitle = meaningfulRecordTitle(record)
     val footerText = recordFooterText(record)
 
-    GlassCard(modifier = Modifier.shirohaNoRippleClickable(onClick = onClick)) {
+    GlassCard(
+        modifier = Modifier.shirohaNoRippleClickable(onClick = onClick),
+        animated = false
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,

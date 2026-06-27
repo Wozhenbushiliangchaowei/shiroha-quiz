@@ -1,14 +1,13 @@
 package com.yiqiu.shirohaquiz.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -51,74 +50,109 @@ fun RecordDetailScreen(
     val record = QuizRepository.findStudyRecord(recordId)
     var questionFilter by remember { mutableStateOf(RecordQuestionFilter.ALL) }
 
-    Column(
-        modifier = Modifier
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = ShirohaSpacing.Xl, vertical = ShirohaSpacing.Sm),
+    if (record == null) {
+        LazyColumn(
+            modifier = Modifier.padding(
+                horizontal = ShirohaSpacing.Xl,
+                vertical = ShirohaSpacing.Sm
+            ),
+            verticalArrangement = Arrangement.spacedBy(ShirohaSpacing.Lg)
+        ) {
+            item {
+                ShirohaHeader(
+                    kicker = "Record Detail",
+                    title = "记录详情",
+                    subtitle = ""
+                )
+            }
+            item {
+                GlassCard { NoticeCard("没有找到这条学习记录。", warning = true) }
+            }
+            item {
+                ActionPillButton(
+                    icon = Icons.AutoMirrored.Rounded.ArrowBack,
+                    text = "返回记录",
+                    primary = false,
+                    onClick = onBack
+                )
+            }
+        }
+        return
+    }
+
+    val indexedResults = remember(record.questionResults, questionFilter) {
+        record.questionResults
+            .mapIndexed { index, result -> index + 1 to result }
+            .filter { (_, result) -> questionFilter == RecordQuestionFilter.ALL || !result.correct }
+    }
+
+    LazyColumn(
+        modifier = Modifier.padding(
+            horizontal = ShirohaSpacing.Xl,
+            vertical = ShirohaSpacing.Sm
+        ),
         verticalArrangement = Arrangement.spacedBy(ShirohaSpacing.Lg)
     ) {
-        ShirohaHeader(
-            kicker = "Record Detail",
-            title = "记录详情",
-            subtitle = ""
-        )
-
-        if (record == null) {
-            GlassCard { NoticeCard("没有找到这条学习记录。", warning = true) }
-            ActionPillButton(
-                icon = Icons.AutoMirrored.Rounded.ArrowBack,
-                text = "返回记录",
-                primary = false,
-                onClick = onBack
+        item {
+            ShirohaHeader(
+                kicker = "Record Detail",
+                title = "记录详情",
+                subtitle = ""
             )
-            return
         }
-
-        RecordSummaryCard(record = record, onBack = onBack)
+        item {
+            RecordSummaryCard(record = record, onBack = onBack)
+        }
 
         if (record.questionResults.isEmpty()) {
-            GlassCard {
-                NoticeCard("这是一条旧记录，当时没有保存逐题详情，只能查看摘要。")
-            }
-            return
-        }
-
-        val indexedResults = remember(record.questionResults, questionFilter) {
-            record.questionResults
-                .mapIndexed { index, result -> index + 1 to result }
-                .filter { (_, result) -> questionFilter == RecordQuestionFilter.ALL || !result.correct }
-        }
-
-        Text(
-            text = "逐题结果",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold
-        )
-        GlassCard {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                RecordQuestionFilter.entries.forEach { item ->
-                    ActionPillButton(
-                        icon = if (item == RecordQuestionFilter.WRONG_ONLY) Icons.Rounded.Close else Icons.Rounded.CheckCircle,
-                        text = item.label,
-                        primary = questionFilter == item,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(44.dp),
-                        fillWidthContent = true,
-                        onClick = { questionFilter = item }
-                    )
+            item {
+                GlassCard {
+                    NoticeCard("这是一条旧记录，当时没有保存逐题详情，只能查看摘要。")
                 }
             }
-        }
-
-        if (indexedResults.isEmpty()) {
-            GlassCard { NoticeCard("这条记录里没有错题。") }
         } else {
-            indexedResults.forEach { (index, result) ->
-                QuestionResultCard(index = index, result = result)
+            item {
+                Text(
+                    text = "逐题结果",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            item {
+                GlassCard {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        RecordQuestionFilter.entries.forEach { item ->
+                            ActionPillButton(
+                                icon = if (item == RecordQuestionFilter.WRONG_ONLY) Icons.Rounded.Close else Icons.Rounded.CheckCircle,
+                                text = item.label,
+                                primary = questionFilter == item,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp),
+                                fillWidthContent = true,
+                                onClick = { questionFilter = item }
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (indexedResults.isEmpty()) {
+                item {
+                    GlassCard { NoticeCard("这条记录里没有错题。") }
+                }
+            } else {
+                items(
+                    items = indexedResults,
+                    key = { (index, result) ->
+                        "${result.sourceBankId.orEmpty()}#${result.question.id}#$index"
+                    }
+                ) { (index, result) ->
+                    QuestionResultCard(index = index, result = result)
+                }
             }
         }
     }
@@ -185,7 +219,7 @@ private fun QuestionResultCard(
     result: StudyQuestionResult
 ) {
     val question = result.question
-    GlassCard {
+    GlassCard(animated = false) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
