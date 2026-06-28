@@ -3,8 +3,19 @@ package com.yiqiu.shirohaquiz.importer.parser
 import com.yiqiu.shirohaquiz.importer.model.QuestionType
 
 object AnswerSectionParser {
+    private const val implicitObjectiveAnswerPattern =
+        """[\(（]?\s*(?:[A-Ga-g]{1,7}|对|错|正确|错误|√|×|True|False)\s*[\)）]?"""
+    private const val implicitAnswerLabelPattern =
+        """(?:[【\[]\s*(?:答案|正确答案|参考答案|标准答案)\s*[】\]]\s*[:：]?|(?:本题)?(?:答案|正确答案|参考答案|标准答案)\s*(?:[:：]|为|是))"""
+    private const val implicitAnalysisLabelPattern =
+        """(?:[【\[]\s*(?:答案解析|解题思路|解析思路|解题分析|参考解析|详解|分析|理由|解答|解析|说明)\s*[】\]]\s*[:：]?|(?:答案解析|解题思路|解析思路|解题分析|参考解析|详解|分析|理由|解答|解析|说明)\s*(?:[:：]\s*|\s+))"""
+
+    /**
+     * 无明确“答案区”标题时，只接受完整的独立答案行。
+     * 不能仅凭题号后第一个字符是 A-G、对或错，就把正常题干截成集中答案区。
+     */
     private val answerEntryWithAnalysisRegex = Regex(
-        """^\s*(?:第\s*)?\d{1,4}\s*(?:题)?\s*(?:[.、．:：]?\s*(?:[A-Ga-g]{1,7}|对|错|正确|错误|√|×|True|False)|[.、．:：]?\s*(?:[【\[]\s*(?:答案|正确答案|参考答案|标准答案|解析)\s*[】\]]|(?:答案|正确答案|参考答案|标准答案|解析)\s*[:：])\s*(?:[A-Ga-g]{1,7}|对|错|正确|错误|√|×|True|False))\s*[.。]?\s*(?:\[?\s*解析\s*\]?|【\s*解析\s*】|解析)?""",
+        """^\s*(?:第\s*)?\d{1,4}\s*(?:题)?\s*[.、．:：)）]?\s*(?:$implicitObjectiveAnswerPattern\s*[.。]?|$implicitAnswerLabelPattern\s*$implicitObjectiveAnswerPattern\s*[.。]?(?:\s*$implicitAnalysisLabelPattern\s*.*)?|$implicitObjectiveAnswerPattern\s*[.。]?\s*$implicitAnalysisLabelPattern\s*.+)\s*$""",
         RegexOption.IGNORE_CASE
     )
 

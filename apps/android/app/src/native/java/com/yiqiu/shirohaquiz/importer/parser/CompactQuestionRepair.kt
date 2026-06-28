@@ -263,6 +263,7 @@ object CompactQuestionRepair {
     private fun looksLikeDottedAbbreviation(line: String, marker: OptionMarker): Boolean {
         val markerText = line.substring(marker.markerStart, marker.contentStart)
         if ('.' !in markerText && '．' !in markerText) return false
+        if (looksLikeTechnicalOptionExpression(line, marker)) return false
 
         val next = line.getOrNull(marker.contentStart) ?: return false
         if (!isAsciiLetter(next)) return false
@@ -276,6 +277,12 @@ object CompactQuestionRepair {
             return true
         }
         return false
+    }
+
+    /** A.Q/P、A.Y,yn0 这类以选项标记开头的技术表达式，应继续按正常选项处理。 */
+    private fun looksLikeTechnicalOptionExpression(line: String, marker: OptionMarker): Boolean {
+        val tail = line.substring(marker.contentStart).trim()
+        return Regex("""^[A-Z](?:/|[,，])\s*\S+""").containsMatchIn(tail)
     }
 
     private fun protectImageMarkers(line: String): ProtectedText {

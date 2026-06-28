@@ -424,6 +424,7 @@ object StandardQuestionParser {
     private fun looksLikeDottedEnglishAbbreviation(line: String, marker: OptionMarker): Boolean {
         val markerText = line.substring(marker.markerStart, marker.contentStart)
         if ('.' !in markerText && '．' !in markerText) return false
+        if (looksLikeTechnicalOptionExpression(line, marker)) return false
 
         val next = line.getOrNull(marker.contentStart) ?: return false
         if (next !in 'A'..'Z' && next !in 'a'..'z') return false
@@ -436,6 +437,12 @@ object StandardQuestionParser {
             return true
         }
         return false
+    }
+
+    /** A.Q/P、A.Y,yn0 这类以选项标记开头的技术表达式，不属于 E.U、D.H. 式英文缩写。 */
+    private fun looksLikeTechnicalOptionExpression(line: String, marker: OptionMarker): Boolean {
+        val tail = line.substring(marker.contentStart).trim()
+        return Regex("""^[A-Z](?:/|[,，])\s*\S+""").containsMatchIn(tail)
     }
 
     private fun missingPreviousOptionKey(key: String, options: List<Option>): String? {
