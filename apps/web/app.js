@@ -2353,8 +2353,21 @@ function sourceQuestionNumberFromLineV58910(line){
 }
 function sourceQuestionNumbersInBlockV58910(block){
   const out=[];
-  (block?.lines||[]).forEach(line=>{const n=sourceQuestionNumberFromLineV58910(line);if(n&&!out.includes(n))out.push(n)});
-  const joined=(block?.lines||[]).join('\n');
+  const lines=block?.lines||[];
+  lines.forEach(line=>{const n=sourceQuestionNumberFromLineV58910(line);if(n&&!out.includes(n))out.push(n)});
+  // v58.9.23：简答题答案中的“(1)…(12)…”属于答题要点，不是同一原文块里的新题号。
+  // 真实的新题号仍由上面的逐行题号识别保留，只排除答案区内部的括号序号。
+  let inlineLines=lines;
+  if(mapType(block?.group||'')==='short'){
+    let inAnswerSection=false;
+    inlineLines=lines.filter(line=>{
+      const raw=String(line||'').trim();
+      if(isStandaloneAnswerHeaderV58917(raw)||isAnswerLine(raw)){inAnswerSection=true;return false;}
+      if(inAnswerSection)return false;
+      return true;
+    });
+  }
+  const joined=inlineLines.join('\n');
   const inline=/(?:^|[\n。！？?!；;]\s*|\s{2,})[（(【\[]\s*(\d{1,4})\s*[）)】\]]\s*\S/g;let m;
   while((m=inline.exec(joined))){const n=Number(m[1])||0;if(n&&!out.includes(n))out.push(n)}
   return out;
@@ -2462,7 +2475,10 @@ function localRepairRiskStatus(q,profile){
   if(question.length>260&&!isCivilServiceLongStemAllowed(q,profile))return'题干过长';
   if(['single','multiple'].includes(q.type)){
     if(/[（(]\s*[）)]\s*A\s*(?:[、.．:：]|\s+|(?=[\u4e00-\u9fa5]))/.test(question)||/[。？！?]\s*A\s*(?:[、.．:：]|\s+)(?!级|PI\b|P\b)/i.test(question))return'题干疑似混入A选项';
-    if(q.type==='single'&&options.length===2&&!isJudgeBlock(options,q.answer||[]))return'单选题选项数量偏少';
+    const explicitSingle=mapType(q.group||q.category||'')==='single';
+    const optionKeys=new Set(options.map(o=>String(o.key||'').toUpperCase()));
+    const answerFitsTwoOption=(q.answer||[]).length===1&&optionKeys.has(String(q.answer[0]||'').toUpperCase());
+    if(q.type==='single'&&options.length===2&&!isJudgeBlock(options,q.answer||[])&&!(explicitSingle&&answerFitsTwoOption))return'单选题选项数量偏少';
     if(q.type==='multiple'&&options.length<3)return'多选题选项数量偏少';
   }
   if(q.type==='judge'){
@@ -4092,6 +4108,41 @@ function forceSplitCompactText(text){
   s=s.replace(/([^\n])\s+(?=A\s*[^A-G\n]{1,80}\s*B\s*[、.．:：])/g,'$1\n');
   return preSplitVolumeAndCompactQuestions(s);
 }
+function preferLeadingStandaloneOptionV58923(line,rich){
+  const raw=String(line||'').trim();
+  const leadMatch=raw.match(/^\s*(?:[oOxXuUyYvV√✔✓]\s*)?(?:[（(]\s*([A-Ga-g])\s*[）)]|([A-Ga-g])\s*[、.．:：，,])\s*(.*)$/);
+  if(!leadMatch||!rich||!Array.isArray(rich.options)||rich.options.length<2)return false;
+  const lead=normalizeOptionKey(leadMatch[1]||leadMatch[2]);
+  const keys=rich.options.map(o=>normalizeOptionKey(o.key));
+  if(rich.prefix||keys[0]!==lead)return true;
+  for(let i=0;i<keys.length;i++){
+    if(keys[i]!==String.fromCharCode(lead.charCodeAt(0)+i))return true;
+  }
+  const next=String.fromCharCode(lead.charCodeAt(0)+1);
+  const body=leadMatch[3]||'';
+  const explicitMarker=new RegExp(next+'\\s*[、.．:：]').test(body);
+  const noSeparatorMarker=new RegExp('(?:^|[\\s;；，,、])'+next+'(?=[\\u4e00-\\u9fa5])').test(body);
+  return !explicitMarker&&!noSeparatorMarker;
+}
+function isNumberedNarrativeEnumerationV58923(line,group=''){
+  const type=mapType(group||'');
+  if(!['judge','blank','short'].includes(type))return false;
+  const raw=String(line||'').trim();
+  if(!/^\s*(?:第\s*)?\d{1,4}\s*(?:题)?[、.．:：]/.test(raw))return false;
+  const items=raw.match(/[（(]\s*\d{1,2}\s*[）)]/g)||[];
+  return items.length>=2;
+}
+function isNumberedQuestionRichOptionFalsePositiveV58923(line,rich){
+  const raw=String(line||'').trim();
+  if(!rich||!Array.isArray(rich.options)||rich.options.length<2)return false;
+  const numbered=raw.match(/^\s*(?:第\s*)?\d{1,4}\s*(?:题)?[、.．:：]\s*(.*)$/);
+  if(!numbered)return false;
+  const body=numbered[1]||'';
+  const explicit=(body.match(/(?:^|[\s；;，,、])(?:[A-G])\s*[、.．:：]/g)||[]).length;
+  const noSeparator=(body.match(/(?:^|[\s；;，,、])(?:[A-G])(?=[\u4e00-\u9fa5])/g)||[]).length;
+  return explicit+noSeparator<2;
+}
+
 function parseStructuredExamText(text){
   const s=repairDocxLostQuestionNumberLines(normalizeImportText(text));
   const lines=s.split('\n').map(x=>x.trim()).filter(Boolean);
@@ -4205,7 +4256,10 @@ function parseStructuredExamText(text){
       if(pairs.length)continue;
     }
     const qm=line.match(/^\s*(?:[【\[]\s*(\d{1,4})\s*[】\]]|(?:第\s*)?(\d{1,4})\s*(?:题)?[.、．:：]?)\s*(.*)$/);
-    const optionLike=isOptionLine(line)||!!extractInlineOptionsRich(line)||splitInlineOptions(line).length>=2;
+    const narrativeEnumerationV58923=isNumberedNarrativeEnumerationV58923(line,currentType);
+    const boundaryRichV58923=extractInlineOptionsRich(line);
+    const numberedStemRichFalsePositiveV58923=isNumberedQuestionRichOptionFalsePositiveV58923(line,boundaryRichV58923);
+    const optionLike=narrativeEnumerationV58923?false:(isOptionLine(line)||(!numberedStemRichFalsePositiveV58923&&!!boundaryRichV58923)||splitInlineOptions(line).length>=2);
     if(qm && !optionLike){
       beginQuestion(Number(qm[1]||qm[2]), stripLeadingQuestionTypeLabelV592(qm[3]||''));
       if(forcedLineTypeV592&&current){current.type=forcedLineTypeV592;current.explicitType=true;}
@@ -4226,7 +4280,8 @@ function parseStructuredExamText(text){
       continue;
     }
     if(isAnalysisLine(line)){current.analysisLines.push(line.replace(/^(?:【|\[)?\s*(?:解析|答案解析|试题解析|说明|考点)\s*(?:】|\])?\s*[:：]?\s*/i,'').trim());collectingAnalysis=true;continue;}
-    const rich=extractInlineOptionsRich(line);
+    let rich=extractInlineOptionsRich(line);
+    if(preferLeadingStandaloneOptionV58923(line,rich))rich=null;
     if(rich && rich.options.length>=2){
       if(rich.prefix)current.questionLines.push(rich.prefix);
       rich.options.forEach(it=>{
@@ -4237,7 +4292,7 @@ function parseStructuredExamText(text){
       });
       continue;
     }
-    const inline=splitInlineOptions(line);
+    const inline=narrativeEnumerationV58923?[]:splitInlineOptions(line);
     if(inline.length>=2){
       inline.forEach(it=>{
         let key=normalizeOptionKey(it.key), txt=(it.text||'').trim();
@@ -5066,7 +5121,9 @@ function parseBlock(block,idx){
       continue;
     }
 
-    const richInline=extractInlineOptionsRich(line);
+    const narrativeEnumerationV58923=isNumberedNarrativeEnumerationV58923(line,group);
+    let richInline=narrativeEnumerationV58923?null:extractInlineOptionsRich(line);
+    if(isNumberedQuestionRichOptionFalsePositiveV58923(line,richInline)||preferLeadingStandaloneOptionV58923(line,richInline))richInline=null;
     if(richInline && richInline.options.length>=2){
       collectingAnalysis=false;unkeyedMode=false;pendingOptionKey='';
       if(richInline.prefix && !options.length){qlines.push(richInline.prefix);seenQuestion=true;}
@@ -5086,7 +5143,7 @@ function parseBlock(block,idx){
       continue;
     }
 
-    const inlineOpts=splitInlineOptions(line);
+    const inlineOpts=narrativeEnumerationV58923?[]:splitInlineOptions(line);
     if(inlineOpts.length>=2 || (inlineOpts.length===1 && (options.length||seenQuestion))){
       collectingAnalysis=false;unkeyedMode=false;
       for(const it of inlineOpts){
@@ -5203,11 +5260,14 @@ function repairEmbeddedOptions(options){
       if(keyCode(key)<=base)continue;
       const prev=txt[i-1]||'';
       const next=txt[i+1]||'';
-      const nextOk=/[、.．:：，,；;\s]/.test(next)||/[\u4e00-\u9fa5]/.test(next);
-      if(!nextOk)continue;
+      const explicitAfter=/[、.．:：，,；;\s]/.test(next);
+      const noSeparatorAfter=/[\u4e00-\u9fa5]/.test(next);
+      if(!explicitAfter&&!noSeparatorAfter)continue;
       // v58.9.7：标准英文选项内容中大量出现 a/b/c/d/e/f/g，不能拆成新选项。
-      // 只有大写 A-G 且处在独立标号边界时，才作为嵌入选项拆分。
+      // v58.9.23：无标点的 B/C/D 只有位于空白或标点边界时才是嵌入选项；
+      // “A和B均”“A相/B相/C相”等普通题干、选项正文不能被二次拆分。
       if(prev && /[A-Za-z0-9]/.test(prev))continue;
+      if(noSeparatorAfter&&prev&&!/[\s；;，,、。！？?!]/.test(prev))continue;
       let len=1;
       while(i+len<txt.length && /[、.．:：，,；;\s]/.test(txt[i+len]))len++;
       hits.push({idx:i,len,key});
@@ -5263,8 +5323,18 @@ function guessType(question,options,answer,group=''){
   }
   return'single';
 }
-function hasCorrectMark(s){return /(?:正确答案|答案正确|参考答案|标准答案|√|✔|✓)/.test(String(s||''))}
-function removeCorrectMark(s){return String(s||'').replace(/[（(【\[]\s*(?:正确答案|答案正确|参考答案|标准答案)\s*[）)】\]]/g,'').replace(/(?:正确答案|答案正确|参考答案|标准答案)/g,'').replace(/[√✔✓]/g,'').replace(/\s+/g,' ').trim()}
+function hasCorrectMark(s){
+  const text=String(s||'');
+  return /(?:正确答案|答案正确|参考答案|标准答案|✔|✓)/.test(text)||/(?:^|[\s（(【\[])√(?=\s|$|[）)】\]])/.test(text);
+}
+function removeCorrectMark(s){
+  return String(s||'')
+    .replace(/[（(【\[]\s*(?:正确答案|答案正确|参考答案|标准答案)\s*[）)】\]]/g,'')
+    .replace(/(?:正确答案|答案正确|参考答案|标准答案)/g,'')
+    .replace(/[✔✓]/g,'')
+    .replace(/(^|[\s（(【\[])√(?=\s|$|[）)】\]])/g,'$1')
+    .replace(/\s+/g,' ').trim();
+}
 function splitAnswer(s){
   if(Array.isArray(s))return s.flatMap(x=>splitAnswer(x));
   s=String(s??'').trim();
@@ -5718,7 +5788,7 @@ function validateQuestion(q){
   if(q.type==='multiple'&&q.answer.length===1)return'多选题只有一个答案';
   if(['single','multiple','judge'].includes(q.type)&&/(?:^|[\s。？！?])A\s*[^\s]{1,40}$/.test(q.question||'')&&q.options.some(o=>o.key==='B')&&!q.options.some(o=>o.key==='A'))return'题干疑似混入A选项';
   if(/【?\s*(?:答案|正确答案|参考答案)|(?:答案|正确答案|参考答案)\s*(?:\:|：)/.test(q.question||''))return'题干残留答案标记';
-  if((q.options||[]).some(o=>{const text=visibleOptionTextForRisk(o.text||'');return text.length>240||/【?\s*(?:答案|正确答案)|\b\d{1,3}\s*[、.．:：].+【?\s*答案/.test(text);} ))return'选项疑似粘连';
+  if((q.options||[]).some(o=>{const text=visibleOptionTextForRisk(o.text||'');return text.length>240||/(?:【\s*(?:答案|正确答案|参考答案)|(?:^|[\s；;，,。])(?:答案|正确答案|参考答案)\s*[:：])|\b\d{1,3}\s*[、.．:：].+【\s*答案/.test(text);} ))return'选项疑似粘连';
   return'正常';
 }
 function collectEditBlankGroupsV58914(){
