@@ -2301,6 +2301,7 @@ object QuizRepository {
             kind = "shiroha_quiz_selected_banks",
             selectedBanks = selectedBanks,
             includeWrongBook = false,
+            includeSlashedQuestions = false,
             includeFavorites = false,
             includeStudyRecords = false,
             assetMapping = null
@@ -2312,6 +2313,7 @@ object QuizRepository {
             kind = "shiroha_quiz_full_backup",
             selectedBanks = banks,
             includeWrongBook = true,
+            includeSlashedQuestions = true,
             includeFavorites = true,
             includeStudyRecords = true,
             assetMapping = null
@@ -2324,6 +2326,7 @@ object QuizRepository {
             kind = "shiroha_quiz_selected_banks",
             selectedBanks = selectedBanks,
             includeWrongBook = false,
+            includeSlashedQuestions = false,
             includeFavorites = false,
             includeStudyRecords = false
         )
@@ -2334,6 +2337,7 @@ object QuizRepository {
             kind = "shiroha_quiz_full_backup",
             selectedBanks = banks,
             includeWrongBook = true,
+            includeSlashedQuestions = true,
             includeFavorites = true,
             includeStudyRecords = true
         )
@@ -2488,6 +2492,7 @@ object QuizRepository {
         kind: String,
         selectedBanks: List<QuizBank>,
         includeWrongBook: Boolean,
+        includeSlashedQuestions: Boolean,
         includeFavorites: Boolean,
         includeStudyRecords: Boolean
     ): ByteArray {
@@ -2496,6 +2501,7 @@ object QuizRepository {
             kind = kind,
             selectedBanks = selectedBanks,
             includeWrongBook = includeWrongBook,
+            includeSlashedQuestions = includeSlashedQuestions,
             includeFavorites = includeFavorites,
             includeStudyRecords = includeStudyRecords,
             assetMapping = assetMapping
@@ -2523,6 +2529,7 @@ object QuizRepository {
         kind: String,
         selectedBanks: List<QuizBank>,
         includeWrongBook: Boolean,
+        includeSlashedQuestions: Boolean,
         includeFavorites: Boolean,
         includeStudyRecords: Boolean,
         assetMapping: MutableMap<String, BackupAsset>?
@@ -2538,6 +2545,7 @@ object QuizRepository {
         root.put("activeBankId", activeBankId)
         root.put("banks", JSONArray(banksToJson(selectedBanks, assetMapping)))
         if (includeWrongBook) root.put("wrongBook", JSONArray(wrongBookToJson(wrongBook, assetMapping)))
+        if (includeSlashedQuestions) root.put("slashedQuestions", JSONArray(slashedQuestionsToJson(slashedQuestions)))
         if (includeFavorites) root.put("favoriteQuestions", JSONArray(favoriteQuestionsToJson(favoriteQuestions, assetMapping)))
         if (includeStudyRecords) root.put("studyRecords", JSONArray(studyRecordsToJson(studyRecords, assetMapping)))
         return root
@@ -2863,6 +2871,19 @@ object QuizRepository {
         }
         wrongBook.addAll(0, mappedWrongBook)
 
+        val importedSlashedQuestions = canonicalStateRoot.optJSONArray("slashedQuestions")?.let { array ->
+            runCatching { parseSlashedQuestionsJson(array.toString()) }.getOrDefault(emptyList())
+        }.orEmpty()
+        val mappedSlashedQuestions = importedSlashedQuestions.mapNotNull { entry ->
+            val mappedBankId = idMap[entry.bankId] ?: return@mapNotNull null
+            val mappedBank = addedBanks.firstOrNull { it.id == mappedBankId } ?: return@mapNotNull null
+            val repair = importedRepairByBankId[entry.bankId]
+            val repairedQuestionKey = resolveRepairedQuestionByLegacyId(entry.questionKey, repair)?.id ?: entry.questionKey
+            if (mappedBank.questions.none { question -> questionKey(question) == repairedQuestionKey }) return@mapNotNull null
+            entry.copy(bankId = mappedBankId, questionKey = repairedQuestionKey)
+        }.let { sanitizeSlashedEntries(it, addedBanks) }
+        slashedQuestions.addAll(0, mappedSlashedQuestions)
+
         val importedFavorites = canonicalStateRoot.optJSONArray("favoriteQuestions")?.let { array ->
             runCatching { parseFavoriteQuestionsJson(array.toString()) }.getOrDefault(emptyList())
         }.orEmpty()
@@ -2920,7 +2941,11 @@ object QuizRepository {
         resetExam()
         persist()
         return "已导入 ${addedBanks.size} 个题库" +
-            if (mappedWrongBook.isNotEmpty() || mappedFavorites.isNotEmpty() || mappedRecords.isNotEmpty()) "，同时恢复 ${mappedWrongBook.size} 条错题、${mappedFavorites.size} 条收藏、${mappedRecords.size} 条记录。" else "。"
+            if (mappedWrongBook.isNotEmpty() || mappedSlashedQuestions.isNotEmpty() || mappedFavorites.isNotEmpty() || mappedRecords.isNotEmpty()) {
+                "，同时恢复 ${mappedWrongBook.size} 条错题、${mappedSlashedQuestions.size} 条斩题、${mappedFavorites.size} 条收藏、${mappedRecords.size} 条记录。"
+            } else {
+                "。"
+            }
     }
 
     private fun remapBankAssets(bank: QuizBank, zipAssets: Map<String, ByteArray>, assetDir: File): QuizBank {
@@ -4667,7 +4692,7 @@ object QuizRepository {
         question.images.forEach { image ->
             val imageJson = JSONObject()
             imageJson.put("id", image.id)
-            val exportPath = registerBackupAsset(image, assetMapping)
+            val exportPath = registerBackupAsset(image, assetMapping, question.id)
             imageJson.put("localPath", exportPath ?: image.localPath)
             imageJson.put("sourceName", image.sourceName)
             imageJson.put("order", image.order)
@@ -4690,16 +4715,21 @@ object QuizRepository {
         if (question.warnings.isNotEmpty()) questionJson.put("warnings", JSONArray(question.warnings))
         return questionJson
     }
-    private fun registerBackupAsset(image: QuestionImage, assetMapping: MutableMap<String, BackupAsset>?): String? {
+    private fun registerBackupAsset(image: QuestionImage, assetMapping: MutableMap<String, BackupAsset>?, questionId: String): String? {
         if (assetMapping == null || image.localPath.isBlank()) return null
         val file = File(image.localPath)
         if (!file.exists() || !file.isFile) return null
         val ext = file.extension.ifBlank { File(image.sourceName).extension.ifBlank { "bin" } }
+        val safeQuestionId = questionId.ifBlank { "question" }
+            .replace(Regex("[^A-Za-z0-9_.-]"), "_")
+            .take(80)
+            .ifBlank { "question" }
         val safeId = image.id.ifBlank { file.nameWithoutExtension }
             .replace(Regex("[^A-Za-z0-9_.-]"), "_")
             .take(80)
             .ifBlank { "asset" }
-        val backupPath = "assets/${safeId}.${ext}"
+        val pathHash = java.lang.Integer.toUnsignedString(image.localPath.hashCode(), 36)
+        val backupPath = "assets/${safeQuestionId}_${image.order.coerceAtLeast(1)}_${safeId}_${pathHash}.${ext}"
         assetMapping[image.localPath] = BackupAsset(backupPath = backupPath, file = file)
         return backupPath
     }
